@@ -13,49 +13,36 @@ def test_helpers():
 
 def test_dynamic_regular():
     mgr = BDD() 
-    x = DynamicInterval('x', mgr, -2, 2)
-    assert x.num_bits == 0 
-    x = x.withbits(3)
-    assert x.num_bits == 3
-    assert x.pt2bv(-2) == [False] * 3 
-    assert x.pt2bv(2) == [True] * 3
-    assert x.pt2box(-.1) == (approx(-.5), approx(0))
-    assert x.pt2box(.6) == (approx(.5), approx(1.0))
+    x = DynamicInterval(-2, 2)
+    assert x.pt2bv(-2,3) == [False] * 3 
+    assert x.pt2bv(2,3) == [True] * 3
+    assert x.pt2box(-.1, 3) == (approx(-.5), approx(0))
+    assert x.pt2box(.6, 3) == (approx(.5), approx(1.0))
     assert x.pt2box(.6, nbits = 4) == (approx(.5), approx(.75))
     assert x.pt2box(.6, nbits = 2) == (approx(0), approx(1.0))
     assert x.pt2box(.6, nbits = 1) == (approx(0), approx(2.0))
 
+    # No bits yields the entire interval 
+    assert x.pt2box(1, 0) == (approx(-2), approx(2))
+
     with raises(AssertionError):
-        x.pt2bv(3)
-        
-    # Identical names 
-    xcopy = DynamicInterval('x', mgr, -3, 3, num_bits=3)
-    assert list(xcopy.bits.keys()) == ['x_0', 'x_1', 'x_2']
-    assert len(mgr.vars) == 3
+        x.pt2bv(3, 1)
+        x.pt2bv(-1, 1)
 
-    # Coarsening maintains the manager variables
-    x = x.withbits(1)
-    xcopy = xcopy.withbits(1)
-    assert (xcopy.bits.keys() == x.bits.keys())
-    assert (xcopy == x) is False
-    assert len(mgr.vars) == 3
 
-    # Manager keeps finer variables 
-    x.withbits(8)
-    assert len(x.bits) == 1
-    assert len(mgr.vars) == 8 
+    # BDD creation
+    x.box2pred(mgr, "x", (.4,.6), 3)
+
+    # TODO: Inner and outer approximation tests
 
 def test_dynamic_periodic():
-    mgr = BDD()
-    x = DynamicInterval('x', mgr, 0, 20, periodic = True)
-    x = x.withbits(4) 
-    assert x.pt2bv(11) == [True, True, False, False]
-    assert x.pt2bv(19+20) == [True, False, False, False]
+    x = DynamicInterval(0, 20, periodic = True)
+    assert x.pt2bv(11,4) == [True, True, False, False]
+    assert x.pt2bv(19+20,4) == [True, False, False, False]
+
 
 def test_fixed_regular():
-    mgr = BDD()
-    x = FixedInterval('x', mgr, -3, 7, 13)
-    assert x.num_bits == 4
+    x = FixedInterval( -3, 7, 13)
     assert x.pt2index(-3) == 0
     assert x.pt2index(7) == 12
 
@@ -69,26 +56,29 @@ def test_fixed_regular():
     assert len(bv_box) == len(bv_innerbox) + 2
 
 def test_fixed_periodic():
-    assert True
+    pass 
 
 def test_discrete():
-    assert True
+    pass
+
+def test_utils():
+    pass
 
 # def conc(x):
 #     return list(mgr.pick_iter(x))
 
-# print(conc(x.box2bdd((-.5,.5), False)))
-# print(conc(x.box2bdd((-.5,.5), True)))
+# print(conc(x.box2pred((-.5,.5), False)))
+# print(conc(x.box2pred((-.5,.5), True)))
 
-# print(conc(x.box2bdd((-.6,.1), False)))
-# print(conc(x.box2bdd((-.6,.1), True)))
+# print(conc(x.box2pred((-.6,.1), False)))
+# print(conc(x.box2pred((-.6,.1), True)))
 
 
 
 # y = SymbolicInterval.DynamicInterval('y', mgr, -2, 2,periodic=True)
 # y.add_bits(3)
-# print(conc(y.box2bdd((-.5,.5), False)))
-# print(conc(y.box2bdd((-.5,.5), True)))
+# print(conc(y.box2pred((-.5,.5), False)))
+# print(conc(y.box2pred((-.5,.5), True)))
 
-# print(conc(y.box2bdd((-.6,.1), False)))
-# print(conc(y.box2bdd((-.6,.1), True)))
+# print(conc(y.box2pred((-.6,.1), False)))
+# print(conc(y.box2pred((-.6,.1), True)))

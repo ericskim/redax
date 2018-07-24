@@ -6,298 +6,230 @@ from collections import OrderedDict, namedtuple
 
 import vpax.symbolicinterval as SymbolicInterval
 
-"""
-# TODO: Declare for multiple input/outputs at a time 
-# TODO: Support for positional arguments
-# TODO: Change input/output decorators to kwargs and give a good docstring for the options 
-# TODO: Figure out the best way to do parallel and serial composition...
-# TODO: Learning with compositional data
-    Support parallel composition first!
-"""
-
-# class Signature(namedtuple('Signature', ['Positions', 'Types', 'Names'])):
-     
-
-#     def __call__(self):
-#         """
-#         Accepts both numeric and string access 
-#         """
-#         pass 
-
-
-def input(mgr, 
-          index,
-          bounds, 
-          dynamic : bool = True, 
-          periodic : bool = False, 
-          discrete : bool = False,
-          precision: int = 0):
-    """
-    Function decorator for symbolic module inputs
-    """
-    assert type(index) in [str, int]
-    if not dynamic:
-        assert precision > 0, "Fixed intervals must have at least one bin. Set precision >= 1."
-    return ModuleAnnotator(mgr, True, index, bounds, discrete, dynamic, periodic, precision)
-
-def output(mgr,
-          index,
-          bounds, 
-          dynamic : bool = True,
-          periodic : bool = False, 
-          discrete : bool = False,
-          precision: int = 0): 
-    """
-    Function decorator for symbolic module outputs
-    """
-    assert isinstance(index[0], int) and isinstance(index[1], str) 
-    return ModuleAnnotator(mgr, False, index, bounds, discrete, dynamic, periodic, precision)
-
-class ModuleAnnotator(object):
-    """
-    Class to reason about annotations to a function module 
-    """
-
-    def __init__(self, mgr, isinput, index, bounds, discrete, dynamic, periodic, precision):
-        # Collect new annotations. Determine type of SymbolicInterval to instantiate 
-        self.isinput    = isinput
-        self.index      = index
-        self.bounds     = bounds
-        self.discrete   = discrete
-        self.periodic   = periodic 
-        self.dynamic    = dynamic
-        self.precision  = precision
-        self.mgr        = mgr
-
-        if self.discrete:
-            # raise NotImplementedError
-            self.porttype = SymbolicInterval.DiscreteInterval
-        else:
-            if self.dynamic:
-                self.porttype = SymbolicInterval.DynamicInterval
-            else:
-                self.porttype = SymbolicInterval.FixedInterval
-
-    def __call__(self, mod):
-        # aggregate previous annotations from previous modules
-        idx = self.index
-
-        if isinstance(mod, AbstractModule):
-            args = mod.args
-            inputs = mod.inputs
-            outputs = mod.outputs
-            assert self.mgr == mod.mgr, "BDD managers don't match"
-            name = mod.__name__
-            func = mod.concrete_func # FIXME: Should nest modules actually... 
-
-        else: # function type. Base case of recursive module construction
-            # assert hasattr(mod, '__call__'), "Must have callable object"
-            funcsig = inspect.signature(mod)
-            args = funcsig.parameters.keys()
-            inputs = OrderedDict({i: None for i in args})
-            name = mod.__name__
-            if isinstance(funcsig.return_annotation, tuple):
-                outputs = [None] * len(funcsig.return_annotation)
-            elif type(funcsig.return_annotation) == type:
-                outputs = [None]
-            else:
-                raise ValueError("Type annotation must be either a tuple or type")
-            func = mod
-
-        if self.isinput:
-            nargs = len(args)
-            if isinstance(idx, str):
-                assert idx in args, "Index " + str(idx) + " not in arguments " + str(args)
-            elif isinstance(idx, int): 
-                assert idx < nargs 
-                idx = args[idx]
-            else:
-                raise TypeError("Index {0} needs to be a string or int".format(idx))
-
-            if self.discrete:
-                assert isinstance(self.bounds, int)
-                inputs[idx] = self.porttype(idx, self.mgr, self.bounds)
-            else:
-                inputs[idx] = self.porttype(idx, self.mgr, self.bounds[0], self.bounds[1], self.precision, self.periodic)                
-        else:
-            varname = idx[1]
-            if self.discrete:
-                assert isinstance(self.bounds, int)
-                outputs[idx[0]] = self.porttype(varname, self.mgr, self.bounds)
-            else:
-                outputs[idx[0]] = self.porttype(varname, self.mgr, self.bounds[0], self.bounds[1], self.precision, self.periodic)
-
-
-        return AbstractModule(self.mgr, inputs, outputs, func = func, name = name)
-
 class AbstractModule(object):
     """
     Function wrapper for translating between concrete and discrete I/O values
     """
 
-    def __init__(self, mgr, inputs, outputs, 
-                 func = None, inhook = None, outhook = None, name= None, pred = None):
+    def __init__(self, mgr, inputs, outputs, pred = None):
         """
         func : Executable python function 
         inhook, outhook: Transforms variable names for concrete function evaluation 
         """
 
-        # TODO: Need to remember argument order, just for sanity?
-        # Crosscheck inputs and outputs 
-        self.__name__ = name
-        self.inputs  = inputs 
-        self.outputs = outputs
+        self._in  = inputs 
+        self._out = outputs
 
-        # For calling a concrete executable function
-        self.concrete_func = func
-        if inhook is None:
-            self.inhook   = None # FIXME: 
-        else:
-            self.inhook = inhook
-            # TODO: Assert consistency with inputs
-        if outhook is None:
-            self.outhook  = None # FIXME: 
-        else:
-            self.outhook = outhook
+        if not set(self._in).isdisjoint(self._out):
+            raise ValueError("A variable cannot be both an input and output")
+        
+        if any(var.isalnum() is False for var in self.vars):
+            raise ValueError("Only alphanumeric strings are accepted as variable names")
 
         self.mgr = mgr
-        if pred is None:
-            self.pred = self.mgr.true
-        else:
-            self.pred = pred
+        self.pred = self.mgr.true if pred is None else pred
 
     def __repr__(self):
-        # s = "Abstract Module: {0}\n".format(self.__name__)
-        s = "Number of Arguments: " + str(len(self.args)) + "\n"
-        s += "Input Wrappers:\n"
-        s += "\n".join([str(k) + " -- " + v.__repr__() for k,v in self.inputs.items()]) + "\n"
-        s += "Output Wrappers:\n"
-        s += "\n".join(["Out" + str(i) + " -- " + self.outputs[i].__repr__() for i in range(self.numout)]) + "\n"
+        s = "Input Grids:\n"
+        s += "\n".join([str(k) + " -- " + v.__repr__() for k,v in self._in.items()]) + "\n"
+        s += "Output Grids:\n"
+        s += "\n".join([str(k) + " -- " + v.__repr__() for k,v in self._out.items()]) + "\n"
         return s
-    
-    @property
-    def args(self):
-        return self.inputs.keys() 
-
-    # @property
-    # def argorder(self):
-    #     return bidict({i : list(self.args)[i] for i in range(len(self.args))})
 
     @property
-    def binaryvars(self):
-        local = set([])
-        for i in self.inputs:
-            local.update(self.inputs[i].bits.keys())
-        for o in range(self.numout):
-            local.update(self.outputs[o].bits.keys())
-        return local 
-
-    @property
-    def discreteinputs(self):
-        return {k for k,v in self.inputs.items() if type(v) == SymbolicInterval.DiscreteInterval}        
-
-    @property
-    def numout(self):
-        return len(self.outputs)
+    def vars(self):
+        return set(self._in).union(self._out)
 
     @property
     def input_bounds(self):
-        return {k: v.bounds for k,v in self.inputs.items()}
+        return {k: v.bounds for k,v in self._in.items()}
 
-    def __getitem__(self, portname):
-        return self.inputs[portname]
+    @property
+    def output_bounds(self):
+        return {k: v.bounds for k,v in self._out.items()}
 
-    def __call__(self, *args, **kwargs):
-        # TODO: Variable renaming and stuff...
-        if self.concrete_func is None:
-            raise RuntimeError("Executable concrete function is not initialized") 
-        return self.concrete_func(*args, **kwargs)
+    @property
+    def inputs(self):
+        return self._in
+    
+    @property
+    def outputs(self):
+        return self._out
 
-    def reset_abstraction(self):
-        self.pred = self.mgr.true 
+    @property
+    def pred_bitvars(self):
+        s = self.pred.support
+        allocbits = {v: [] for v in self.vars}
+        for bitvar in s:
+            prefix, index = bitvar.split("_")
+            allocbits[prefix].append(bitvar)
+        return allocbits
 
-    def input_to_bdd(self,  **kwargs):
+    @property
+    def nonblock(self):
+        elim_bits = []
+        for k in self._out:
+            elim_bits += self.pred_bitvars[k]
+        return self.mgr.exist(elim_bits, self.pred)
+
+    def ioimplies2pred(self, hyperbox, **kwargs):
         """
-        Takes an input and returns the BDD that corresponds with that input
-        """
+        Returns the implication (input box => output box) 
 
-        assert kwargs.keys() == self.args, "Keyword arguments do not match"
-        
-        inbdd = self.mgr.true
-        for k in self.args:
-            inbdd &= self.inputs[k].pt2bdd(kwargs[k])
-        return inbdd
-
-    def input_box_to_bdd(self, inputboxes, granularity = None, verbose = False):
-        """
-        Input boxes must have an innerapproximation 
-        """
-        assert (inputboxes.keys() == self.args) # TODO: Shouldn't have this. Constraints reflect the dependencies
-
-        input_bdd = self.mgr.true # FIXME: Errors if using fixed intervals with non-power of two 
-        for k in self.args:
-            if isinstance(self.inputs[k], SymbolicInterval.DiscreteInterval):
-                input_bdd &= self.inputs[k].pt2bdd(inputboxes[k])
-            else:
-                input_bdd &= self.inputs[k].box2bdd(inputboxes[k],
-                                                    innerapprox = True)
-        return input_bdd
-
-    def output_box_to_bdd(self, outputboxes, granulaity = None, verbose = False):
-        """
-        Output boxes should have an overapproximation 
-        """
-        assert len(outputboxes) == len(self.outputs) # TODO: Shouldn't need this. Outputs are uniquely defined. 
-
-        output_bdd = self.mgr.true # FIXME: Errors if using fixed intervals with non-power of two 
-        for k in range(self.numout):
-            if isinstance(self.outputs[k], SymbolicInterval.DiscreteInterval):
-                output_bdd &= self.outputs[k].pt2bdd(outputboxes[k])
-            else:
-                output_bdd &= self.outputs[k].box2bdd(outputboxes[k], 
-                                                      innerapprox = False)
-        return output_bdd
-
-    def io_boxes_to_bdd(self, inputboxes, outputboxes, granularity = None, verbose = False):
-        """
-        Applies the implication (input box => output box) 
+        Splits the hypberbox into input, output variables
         If the input/output boxes don't align with the grid then:
             - The input box is contracted 
             - The output box is expanded
+
+        If the hyperbox is underspecified, then it generates a hyperinterval embedded in a lower dimension 
         """
-        return (~self.input_box_to_bdd(inputboxes) | self.output_box_to_bdd(outputboxes))
+        
+        in_bdd = self.mgr.true # FIXME: Errors if using fixed intervals with non-power of two 
+        out_bdd = self.mgr.true 
+        for var in hyperbox.keys():
+            if isinstance(self[var], SymbolicInterval.DynamicInterval):
+                nbits = kwargs['precision'][var]
+                assert isinstance(nbits, int) 
+                if var in self._in:
+                    in_bdd  &= self[var].box2pred(self.mgr, var, hyperbox[var],
+                                                 nbits, innerapprox = True)
+                else:
+                    out_bdd &= self[var].box2pred(self.mgr, var, hyperbox[var],
+                                                 nbits, innerapprox = False)
+            else:
+                raise NotImplementedError
 
-    def apply_io_constraint(self, transition):
-        # TODO: Add functionality for a desired granularity, perhaps higher than the existing one? 
-        inbox, outbox = transition
-        self.pred &= self.io_boxes_to_bdd(inbox, outbox)
+        return (~in_bdd | out_bdd)
 
-    def check(self):
-        if None in self.inputs.values():
+    def iopair2pred(self, hyperbox, **kwargs):
+        """
+        Returns the pair (input box AND output box) 
+
+        Splits the hypberbox into input, output variables
+        If the input/output boxes don't align with the grid then:
+            - The input box is contracted 
+            - The output box is expanded
+
+        If the hyperbox is underspecified, then it generates a hyperinterval embedded in a lower dimension
+        """
+        
+        io_bdd = self.mgr.true # FIXME: Errors if using fixed intervals with non-power of two 
+        for var in hyperbox.keys():
+            if isinstance(self[var], SymbolicInterval.DynamicInterval):
+                nbits = kwargs['precision'][var]
+                assert type(nbits) == int 
+                if var in self._in:
+                    io_bdd  &= self[var].box2pred(self.mgr, var, hyperbox[var],
+                                                 nbits, innerapprox = True)
+                else:
+                    io_bdd &= self[var].box2pred(self.mgr, var, hyperbox[var],
+                                                 nbits, innerapprox = False)
+            else:
+                raise NotImplementedError
+
+        return io_bdd
+
+    def count_io(self, bits):
+        return self.mgr.count(self.pred, bits)
+
+    def __getitem__(self, var):
+        """
+        Access an input or output variable from its name 
+        """
+        if var in self._in:
+            return self._in[var]
+        elif var in self._out:
+            return self._out[var]
+        else:
+            raise ValueError("Variable does not exist")
+
+    def __eq__(self,other):
+        if not isinstance(other, AbstractModule): 
+            return False 
+        if self.mgr != other.mgr:
             return False
-        if None in self.outputs:
+        if self._in != other.inputs: 
             return False
-        return True
+        if self._out != other.outputs:
+            return False
+        if self.pred != other.pred:
+            return False 
+        return True 
 
-    def count_io(self):
-        return self.mgr.count(self.pred, len(self.localvars))
+    def hide(self, vars):
+        """
+        Hides an output variable and returns another module 
+        """
 
-    def hide(self, var):
-        """
-        Hides a variable and returns another module 
-        """
+        if any(var not in self._out for var in vars):
+            raise ValueError("Can only hide output variables")
+
+        elim_bits = []
+        for k in self._out:
+            elim_bits += self.pred_bitvars[k]
+        
         raise NotImplementedError
+        return self.mgr.exist(elim_bits, self.pred)
+
 
     def __rshift__(self, other):
         """
-        Serial composition by feeding self output into other input
+        Serial composition self >> other by feeding self's output into other's input
         """
-        raise NotImplementedError
         if isinstance(other, tuple):
-            # Renaming an output
-            raise NotImplementedError
+            # Renaming an output  
+            oldname, newname  = other
+            if oldname not in self._out:
+                raise ValueError("Cannot rename non-existent output")
+            if newname in self.vars:
+                raise ValueError("Don't currently support renaming to an existing variable")
+
+            newoutputs = self._out.copy() 
+            newoutputs[newname] = newoutputs.pop(oldname)
+
+            newbits = [newname + '_' + i.split('_')[1] for i in self.pred_bitvars[oldname]]
+            self.mgr.declare(*newbits)
+            newvars = {i:j for i,j in zip(self.pred_bitvars[oldname], newbits)}
+            
+            newpred = self.pred if newvars == {} else self.mgr.let(newvars, self.pred)
+
+            return AbstractModule(self.mgr, self._in, newoutputs, newpred)
+
         elif isinstance(other, AbstractModule):
-            raise NotImplementedError
+            if self.mgr != other.mgr:
+                raise ValueError("Module managers do not match")
+            if not set(self._out).isdisjoint(other.outputs):
+                raise ValueError("Outputs are not disjoint")
+            if not set(other._out).isdisjoint(self._in):
+                raise ValueError("Downstream outputs feedback composed with upstream inputs")
+
+            newoutputs = self._out.copy()
+            newoutputs.update(other.outputs)
+
+            # Compute inputs = (self.inputs | other.inputs) \ ()
+            # Checks for type differences 
+            newinputs = self._in.copy()
+            for k in other.inputs:
+                # Common existing inputs must have same grid type
+                if k in newinputs and newinputs[k] != other.inputs[k]:
+                    raise TypeError("Mismatch between input grids {0} and {1}".format(newinputs[k], other.inputs[k]))
+                newinputs[k] = other.inputs[k]
+            overlapping_vars = set(self._out) & set(other._in)
+            for k in overlapping_vars:
+                newinputs.pop(k)
+
+            # Flattens list of lists to a single list
+            flatten = lambda l: [item for sublist in l for item in sublist]
+
+            # Compute forall outputvars . (self.pred => other.nonblock)
+            nonblocking = ~self.pred | other.nonblock 
+            elim_bits   = set(flatten([self.pred_bitvars[k] for k in self._out]))
+            elim_bits  |= set(flatten([other.pred_bitvars[k] for k in other._out]))
+            elim_bits  &= nonblocking.support
+            nonblocking = self.mgr.forall(list(elim_bits), nonblocking)
+            return AbstractModule(self.mgr, newinputs, newoutputs, 
+                                  self.pred & other.pred & nonblocking) 
+
         else:
             raise TypeError 
 
@@ -309,26 +241,27 @@ class AbstractModule(object):
         if isinstance(other, tuple):
             # Renaming an input 
             newname, oldname = other
-            assert oldname in self.inputs, "Cannot rename non-existent input"
-            newinputs = OrderedDict()
-            for k,v in self.inputs.items():
-                if k == oldname:
-                    newinputs[newname] = v.renamed(newname)
-                    newvars = {i:j for i,j in zip(v.bitorder, newinputs[newname].bitorder)}
-                else: 
-                    newinputs[k]=v
+            if oldname not in self._in:
+                raise ValueError("Cannot rename non-existent input")
+            if newname in self.vars:
+                raise ValueError("Don't currently support renaming to an existing variable")
 
-            # TODO: 1) Change input hooks
-            return AbstractModule(self.mgr, newinputs, self.outputs, 
-                                  self.concrete_func, self.inhook, self.outhook,
-                                  self.__name__, 
-                                  self.mgr.let(newvars, self.pred))
+            newinputs = self._in.copy() 
+            newinputs[newname] = newinputs.pop(oldname)
+
+
+            newbits = [newname + '_' + i.split('_')[1] for i in self.pred_bitvars[oldname]]
+            self.mgr.declare(*newbits)
+            newvars = {i:j for i,j in zip(self.pred_bitvars[oldname], newbits)}
+
+            newpred = self.pred if newvars == {} else self.mgr.let(newvars, self.pred) 
+
+            return AbstractModule(self.mgr, newinputs, self._out, newpred)
 
         elif isinstance(other, AbstractModule):
             raise RuntimeError("__rshift__ should be called instead of __rrshift__")
         else:
             raise TypeError
-
 
     # Parallel composition
     def __or__(self, other):
@@ -336,30 +269,136 @@ class AbstractModule(object):
         Returns the parallel composition of modules 
         """
 
-        raise NotImplementedError
-
         if self.mgr != other.mgr:
             raise ValueError("Module managers do not match")
-        
-        # Take union of inputs. More granular input is precedent
 
+        # Check for disjointness 
+        if not set(self._out).isdisjoint(other.outputs):
+            raise ValueError("Outputs are not disjoint") 
+        if not set(self._out).isdisjoint(other.inputs):
+            raise ValueError("Module output feeds into other module input") 
+        if not set(self._in).isdisjoint(other.outputs):
+            raise ValueError("Module output feeds into other module input")
+
+        # Take union of inputs and check for type differences 
+        newinputs = self._in.copy()
+        for k in other.inputs:
+            # Common existing inputs must have same grid type
+            if k in newinputs and newinputs[k] != other.inputs[k]:
+                raise TypeError("Mismatch between input grids {0} and {1}".format(newinputs[k], other.inputs[k]))
+            newinputs[k] = other.inputs[k]
 
         # Take union of disjoint output sets. 
+        newoutputs = self._out.copy()
+        newoutputs.update(other.outputs)
 
-
-        return AbstractModule(self.mgr, newinputs, self.outputs, 
-                                self.concrete_func, self.inhook, self.outhook,
-                                self.__name__, 
+        return AbstractModule(self.mgr, newinputs, newoutputs,
                                 self.pred & other.pred)
 
-    #bidict(enumerate(system.inputs.keys()))? 
+# def input(mgr, 
+#           index,
+#           bounds, 
+#           dynamic : bool = True, 
+#           periodic : bool = False, 
+#           discrete : bool = False,
+#           precision: int = 0):
+#     """
+#     Function decorator for symbolic module inputs
+#     """
+#     assert type(index) in [str, int]
+#     if not dynamic:
+#         assert precision > 0, "Fixed intervals must have at least one bin. Set precision >= 1."
+#     return ModuleAnnotator(mgr, True, index, bounds, discrete, dynamic, periodic, precision)
 
-class ModuleCompostion():
-    """
-    Composite modules 
+# def output(mgr,
+#           index,
+#           bounds, 
+#           dynamic : bool = True,
+#           periodic : bool = False, 
+#           discrete : bool = False,
+#           precision: int = 0): 
+#     """
+#     Function decorator for symbolic module outputs
+#     """
+#     assert isinstance(index[0], int) and isinstance(index[1], str) 
+#     return ModuleAnnotator(mgr, False, index, bounds, discrete, dynamic, periodic, precision)
 
-    Common variable names? 
-    """
-    def __init__(self):
-        raise NotImplementedError
+# class ModuleAnnotator(object):
+#     """
+#     Class to reason about annotations to a function module 
+#     """
+
+#     def __init__(self, mgr, isinput, index, bounds, discrete, dynamic, periodic, precision):
+#         # Collect new annotations. Determine type of SymbolicInterval to instantiate 
+#         self.isinput    = isinput
+#         self.index      = index
+#         self.bounds     = bounds
+#         self.discrete   = discrete
+#         self.periodic   = periodic 
+#         self.dynamic    = dynamic
+#         self.precision  = precision
+#         self.mgr        = mgr
+
+#         if self.discrete:
+#             # raise NotImplementedError
+#             self.porttype = SymbolicInterval.DiscreteInterval
+#         else:
+#             if self.dynamic:
+#                 self.porttype = SymbolicInterval.DynamicInterval
+#             else:
+#                 self.porttype = SymbolicInterval.FixedInterval
+
+#     def __call__(self, mod):
+#         # aggregate previous annotations from previous modules
+#         idx = self.index
+
+#         if isinstance(mod, AbstractModule):
+#             args = mod.args
+#             inputs = mod.inputs
+#             outputs = mod.outputs
+#             assert self.mgr == mod.mgr, "BDD managers don't match"
+#             name = mod.__name__
+#             func = mod.concrete_func
+
+#         else: # function type. Base case of recursive module construction
+#             # assert hasattr(mod, '__call__'), "Must have callable object"
+#             funcsig = inspect.signature(mod)
+#             args = funcsig.parameters.keys()
+#             inputs = OrderedDict({i: None for i in args})
+#             name = mod.__name__
+#             if isinstance(funcsig.return_annotation, tuple):
+#                 outputs = [None] * len(funcsig.return_annotation)
+#             elif type(funcsig.return_annotation) == type:
+#                 outputs = [None]
+#             else:
+#                 raise ValueError("Type annotation must be either a tuple or type")
+#             func = mod
+
+#         if self.isinput:
+#             nargs = len(args)
+#             if isinstance(idx, str):
+#                 assert idx in args, "Index " + str(idx) + " not in arguments " + str(args)
+#             elif isinstance(idx, int): 
+#                 assert idx < nargs 
+#                 idx = args[idx]
+#             else:
+#                 raise TypeError("Index {0} needs to be a string or int".format(idx))
+
+#             if self.discrete:
+#                 assert isinstance(self.bounds, int)
+#                 inputs[idx] = self.porttype(idx, self.mgr, self.bounds)
+#             else:
+#                 inputs[idx] = self.porttype(idx, self.mgr, self.bounds[0], self.bounds[1], self.precision, self.periodic)                
+#         else:
+#             varname = idx[1]
+#             if self.discrete:
+#                 assert isinstance(self.bounds, int)
+#                 outputs[idx[0]] = self.porttype(varname, self.mgr, self.bounds)
+#             else:
+#                 outputs[idx[0]] = self.porttype(varname, self.mgr, self.bounds[0], self.bounds[1], self.precision, self.periodic)
+
+
+#         return AbstractModule(self.mgr, inputs, outputs, func = func, name = name)
+
+
 
