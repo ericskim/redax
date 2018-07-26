@@ -127,7 +127,7 @@ def bv2pred(mgr, name, bv):
         else:
             mgr.declare(name + "_" + str(i))
             b = b & ~mgr.var(name + "_" + str(i))
-    return b
+    return b   
 
 # SymbolicInstance?
 class SymbolicInterval(object):
@@ -144,7 +144,7 @@ class SymbolicInterval(object):
     def pt2bv(self, point):
         raise NotImplementedError 
     
-
+    
 
 class DiscreteInterval(SymbolicInterval):
     """
@@ -182,6 +182,9 @@ class ContinuousInterval(SymbolicInterval):
     @property
     def bounds(self):
         return (self.lb, self.ub)
+
+    def space_pred(self, mgr):
+        return mgr.true
 
     def _wrap(self, point):
         """
@@ -285,7 +288,7 @@ class DynamicInterval(ContinuousInterval):
         @param tol - tolerance for numerical errors as a fraction of the grid size. 
                      Must lie within [0,1]
         """
-
+        
         left, right = box
 
         assert tol >= 0 and tol <= 1, "Tolerance is not 0 <= tol <= 1"
@@ -324,6 +327,12 @@ class DynamicInterval(ContinuousInterval):
         if self.lb != other.lb or self.ub != other.ub:
             return False
         return True 
+
+    def conc_iter(self, prec):
+        i = 0
+        while(i < 2**prec):
+            yield self.bv2box(_int2bv(i, prec))
+            i += 1
 
 class FixedInterval(ContinuousInterval):
     """

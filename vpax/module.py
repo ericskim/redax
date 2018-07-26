@@ -1,10 +1,6 @@
+import itertools
 
-import inspect 
-
-from bidict import bidict
-from collections import OrderedDict, namedtuple
-
-import vpax.symbolicinterval as SymbolicInterval
+import vpax.symbolicinterval as si
 
 class AbstractModule(object):
     """
@@ -13,8 +9,7 @@ class AbstractModule(object):
 
     def __init__(self, mgr, inputs, outputs, pred = None):
         """
-        func : Executable python function 
-        inhook, outhook: Transforms variable names for concrete function evaluation 
+
         """
 
         self._in  = inputs 
@@ -27,7 +22,7 @@ class AbstractModule(object):
             raise ValueError("Only alphanumeric strings are accepted as variable names")
 
         self.mgr = mgr
-        self.pred = self.mgr.true if pred is None else pred
+        self.pred = self.mgr.true if pred is None else pred # FIXME: Change this to inspace => outspace 
 
     def __repr__(self):
         s = "Input Grids:\n"
@@ -36,17 +31,28 @@ class AbstractModule(object):
         s += "\n".join([str(k) + " -- " + v.__repr__() for k,v in self._out.items()]) + "\n"
         return s
 
+    def __getitem__(self, var):
+        """
+        Access an input or output variable from its name 
+        """
+        if var not in self.vars:
+            raise ValueError("Variable does not exist")
+        return self._in[var] if var in self._in else self._out[var]
+
+    def __eq__(self,other):
+        if not isinstance(other, AbstractModule): 
+            return False 
+        if self.mgr != other.mgr:
+            return False
+        if self._in != other.inputs or self._out != other.outputs:
+            return False
+        if self.pred != other.pred:
+            return False 
+        return True 
+
     @property
     def vars(self):
         return set(self._in).union(self._out)
-
-    @property
-    def input_bounds(self):
-        return {k: v.bounds for k,v in self._in.items()}
-
-    @property
-    def output_bounds(self):
-        return {k: v.bounds for k,v in self._out.items()}
 
     @property
     def inputs(self):
@@ -67,10 +73,11 @@ class AbstractModule(object):
 
     @property
     def nonblock(self):
+        # TODO: Change so that it outputs a module and uses the output hiding operator instead. 
         elim_bits = []
         for k in self._out:
             elim_bits += self.pred_bitvars[k]
-        return self.mgr.exist(elim_bits, self.pred)
+        return self.mgr.exist(elim_bits, self.pred) 
 
     def ioimplies2pred(self, hyperbox, **kwargs):
         """
@@ -87,7 +94,7 @@ class AbstractModule(object):
         in_bdd = self.mgr.true # FIXME: Errors if using fixed intervals with non-power of two 
         out_bdd = self.mgr.true 
         for var in hyperbox.keys():
-            if isinstance(self[var], SymbolicInterval.DynamicInterval):
+            if isinstance(self[var], si.DynamicInterval):
                 nbits = kwargs['precision'][var]
                 assert isinstance(nbits, int) 
                 if var in self._in:
@@ -115,7 +122,7 @@ class AbstractModule(object):
         
         io_bdd = self.mgr.true # FIXME: Errors if using fixed intervals with non-power of two 
         for var in hyperbox.keys():
-            if isinstance(self[var], SymbolicInterval.DynamicInterval):
+            if isinstance(self[var], si.DynamicInterval):
                 nbits = kwargs['precision'][var]
                 assert type(nbits) == int 
                 if var in self._in:
@@ -129,49 +136,57 @@ class AbstractModule(object):
 
         return io_bdd
 
+    def input_iter(self, precision):
+        """
+        Exhaustively searches over the input grid
+
+        Args:
+            precision 
+
+        Implementation assumes dictionary ordering is stable
+        """
+        numin = len(self.inputs)
+        names = tuple(self.inputs.keys())
+        iters = [v.conc_iter(precision[k]) for k,v in self.inputs.values()]
+        for i in itertools.product(*iters):
+            yield {names[j]: i[j] for j in range(numin)}
+        
+    def input_space_pred(self):
+        raise NotImplementedError
+    
+    def output_space_pred(self):
+        raise NotImplementedError 
+
     def count_io(self, bits):
         return self.mgr.count(self.pred, bits)
 
-    def __getitem__(self, var):
-        """
-        Access an input or output variable from its name 
-        """
-        if var in self._in:
-            return self._in[var]
-        elif var in self._out:
-            return self._out[var]
-        else:
-            raise ValueError("Variable does not exist")
-
-    def __eq__(self,other):
-        if not isinstance(other, AbstractModule): 
-            return False 
-        if self.mgr != other.mgr:
-            return False
-        if self._in != other.inputs: 
-            return False
-        if self._out != other.outputs:
-            return False
-        if self.pred != other.pred:
-            return False 
-        return True 
-
-    def hide(self, vars):
+    def hide(self, elim_vars):
         """
         Hides an output variable and returns another module 
         """
 
-        if any(var not in self._out for var in vars):
+        if any(var not in self._out for var in elim_vars):
             raise ValueError("Can only hide output variables")
 
         elim_bits = []
-        for k in self._out:
+        for k in elim_vars:
             elim_bits += self.pred_bitvars[k]
-        
+
+        newoutputs = {k:v for k,v in self.outputs.items() if k not in elim_vars}
+
+        elim_bits = set(elim_bits) & self.pred.support
+        return AbstractModule(self.mgr, 
+                              self.inputs.copy(),
+                              newoutputs,
+                              self.mgr.exist(elim_bits, self.pred))
+    
+    def __le__(self,other):
+        """
+        Checks for a feedback refinement relation between two modules
+        """
         raise NotImplementedError
-        return self.mgr.exist(elim_bits, self.pred)
 
-
+    
     def __rshift__(self, other):
         """
         Serial composition self >> other by feeding self's output into other's input
@@ -226,7 +241,7 @@ class AbstractModule(object):
             elim_bits   = set(flatten([self.pred_bitvars[k] for k in self._out]))
             elim_bits  |= set(flatten([other.pred_bitvars[k] for k in other._out]))
             elim_bits  &= nonblocking.support
-            nonblocking = self.mgr.forall(list(elim_bits), nonblocking)
+            nonblocking = self.mgr.forall(elim_bits, nonblocking)
             return AbstractModule(self.mgr, newinputs, newoutputs, 
                                   self.pred & other.pred & nonblocking) 
 
@@ -294,111 +309,4 @@ class AbstractModule(object):
 
         return AbstractModule(self.mgr, newinputs, newoutputs,
                                 self.pred & other.pred)
-
-# def input(mgr, 
-#           index,
-#           bounds, 
-#           dynamic : bool = True, 
-#           periodic : bool = False, 
-#           discrete : bool = False,
-#           precision: int = 0):
-#     """
-#     Function decorator for symbolic module inputs
-#     """
-#     assert type(index) in [str, int]
-#     if not dynamic:
-#         assert precision > 0, "Fixed intervals must have at least one bin. Set precision >= 1."
-#     return ModuleAnnotator(mgr, True, index, bounds, discrete, dynamic, periodic, precision)
-
-# def output(mgr,
-#           index,
-#           bounds, 
-#           dynamic : bool = True,
-#           periodic : bool = False, 
-#           discrete : bool = False,
-#           precision: int = 0): 
-#     """
-#     Function decorator for symbolic module outputs
-#     """
-#     assert isinstance(index[0], int) and isinstance(index[1], str) 
-#     return ModuleAnnotator(mgr, False, index, bounds, discrete, dynamic, periodic, precision)
-
-# class ModuleAnnotator(object):
-#     """
-#     Class to reason about annotations to a function module 
-#     """
-
-#     def __init__(self, mgr, isinput, index, bounds, discrete, dynamic, periodic, precision):
-#         # Collect new annotations. Determine type of SymbolicInterval to instantiate 
-#         self.isinput    = isinput
-#         self.index      = index
-#         self.bounds     = bounds
-#         self.discrete   = discrete
-#         self.periodic   = periodic 
-#         self.dynamic    = dynamic
-#         self.precision  = precision
-#         self.mgr        = mgr
-
-#         if self.discrete:
-#             # raise NotImplementedError
-#             self.porttype = SymbolicInterval.DiscreteInterval
-#         else:
-#             if self.dynamic:
-#                 self.porttype = SymbolicInterval.DynamicInterval
-#             else:
-#                 self.porttype = SymbolicInterval.FixedInterval
-
-#     def __call__(self, mod):
-#         # aggregate previous annotations from previous modules
-#         idx = self.index
-
-#         if isinstance(mod, AbstractModule):
-#             args = mod.args
-#             inputs = mod.inputs
-#             outputs = mod.outputs
-#             assert self.mgr == mod.mgr, "BDD managers don't match"
-#             name = mod.__name__
-#             func = mod.concrete_func
-
-#         else: # function type. Base case of recursive module construction
-#             # assert hasattr(mod, '__call__'), "Must have callable object"
-#             funcsig = inspect.signature(mod)
-#             args = funcsig.parameters.keys()
-#             inputs = OrderedDict({i: None for i in args})
-#             name = mod.__name__
-#             if isinstance(funcsig.return_annotation, tuple):
-#                 outputs = [None] * len(funcsig.return_annotation)
-#             elif type(funcsig.return_annotation) == type:
-#                 outputs = [None]
-#             else:
-#                 raise ValueError("Type annotation must be either a tuple or type")
-#             func = mod
-
-#         if self.isinput:
-#             nargs = len(args)
-#             if isinstance(idx, str):
-#                 assert idx in args, "Index " + str(idx) + " not in arguments " + str(args)
-#             elif isinstance(idx, int): 
-#                 assert idx < nargs 
-#                 idx = args[idx]
-#             else:
-#                 raise TypeError("Index {0} needs to be a string or int".format(idx))
-
-#             if self.discrete:
-#                 assert isinstance(self.bounds, int)
-#                 inputs[idx] = self.porttype(idx, self.mgr, self.bounds)
-#             else:
-#                 inputs[idx] = self.porttype(idx, self.mgr, self.bounds[0], self.bounds[1], self.precision, self.periodic)                
-#         else:
-#             varname = idx[1]
-#             if self.discrete:
-#                 assert isinstance(self.bounds, int)
-#                 outputs[idx[0]] = self.porttype(varname, self.mgr, self.bounds)
-#             else:
-#                 outputs[idx[0]] = self.porttype(varname, self.mgr, self.bounds[0], self.bounds[1], self.precision, self.periodic)
-
-
-#         return AbstractModule(self.mgr, inputs, outputs, func = func, name = name)
-
-
 

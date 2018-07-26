@@ -2,7 +2,12 @@ from dd.cudd import BDD
 
 import numpy as np 
 
-from vpax.module import input, output
+from vpax.module import AbstractModule
+from vpax.symbolicinterval import DynamicInterval
+from vpax.synthesizer import ControlPre, SafetyGame
+from vpax.visualizer import plot2D
+
+from vpax.controlmodule import *
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -13,111 +18,132 @@ g = 9.8
 
 mgr = BDD()
 
-@input(mgr, 'p', (-10,10), precision = 6)
-@input(mgr, 'a', (-20,20), precision = 6)
-@input(mgr, 'v', (-20,20), precision = 6)
-@output(mgr, (0, 'p_next'), (-10,10), precision = 6)
-@output(mgr, (1, 'v_next'), (-20,20), precision = 6)
-def system(p, v, a) -> (float, float):
+def dynamics(p,v,a):
     vsign = 1 if v > 0 else -1 
-    return p + v*ts, v + a*ts - vsign*k*(v**2)*ts - g*ts
+    return p + v*ts , v + a*ts - vsign*k*(v**2)*ts - g*ts
 
-"""
-inputs = {'p': DynamicInterval(-10,10),
-          'v': DynamicInterval(-20,20),
-          'a': DynamicInterval(-20,20)}
-outputs = {'pnext': DynamicInterval(-10,10),
-           'vnext': DynamicInterval(-20,20)}
+pspace = DynamicInterval(-10,10)
+vspace = DynamicInterval(-16,16)
+aspace = DynamicInterval(0,20)
 
-system = AbstractModule(mgr, inputs, outputs)
-grid_iterator = system.inputiterator(precision = {'p': 2, 'v': 3, 'a': 3})
-for i in grid_iterator: 
-    out_OA = OA(i) 
-    system.apply_io_constraint(i,out_OA, precision)
+# Monolithic module
+system = AbstractModule(mgr, 
+                        {'p': pspace,
+                         'v': vspace,
+                         'a': aspace},
+                        {'pnext': pspace,
+                         'vnext': vspace}
+        )
 
-# Hides an output 
-system.hide('pnext') 
+# Smaller component modules 
+pcomp = AbstractModule(mgr, 
+                        {'p': pspace,
+                         'v': vspace},
+                        {'pnext': pspace}
+        )
+vcomp = AbstractModule(mgr, 
+                        {'v': vspace,
+                         'a': aspace},
+                        {'vnext': vspace}
+        )
+        
+bounds = {'p': [-10,10], 'v': [-16,16]}
 
 
-
-#pupdate.register_concrete(func, hooks)?
-
-"""
-
-@input(mgr, 'p', (-10,10), precision = 6)
-@input(mgr, 'v', (-20,20), precision = 6)
-@output(mgr, (0, 'p_next'), (-10,10), precision = 6)
-def pupdate(p,v) -> (float):
-    return p + v*ts 
-
-@input(mgr, 'v', (-20,20), precision = 6)
-@input(mgr, 'a', (-20,20), precision = 6)
-@output(mgr, (0, 'v_next'), (-20,20), precision = 6)
-def vupdate(v,a) -> (float):
-    vsign = 1 if v > 0 else -1 
-    return v + a*ts - vsign*k*(v**2)*ts - g*ts
-
-# sys = pupdate | vupdate
-
-bounds = {'p': [-10,10], 'v': [-20,20]}
 
 fig = plt.figure()
 ax = fig.gca(projection='3d') 
+voxelcolors = '#7A88CC' + '10' # color  + opacity 
 
-# Sample generator
+# Declare grid precision 
+precision = {'p': 6, 'v':6, 'a': 6, 'pnext': 6, 'vnext': 6}
+bittotal = sum(precision.values()) 
+outorder = {0: 'pnext', 1: 'vnext'}
+
+# Sample generator 
 numapplied = 0
-print(system.count_io())
-while(numapplied < 200): 
-    # Generate random windows 
-    f_width = {'p': np.random.rand()*12,
-            'v':np.random.rand()*12,
-            'a':np.random.rand()*12}
-    f_left = {'p': -10 +  np.random.rand() * (20 - f_width['p']), 
-            'v': -20 + np.random.rand() * (40 - f_width['v']), 
-            'a': -20 + np.random.rand() * (40 - f_width['a'])}
-    f_right = {k: f_width[k] + f_left[k] for k in f_width}
-    inbox = {k: (f_left[k], f_right[k]) for k in f_width}
+out_of_domain_violations = 0
+while(numapplied < 10000): 
 
+    # Shrink window widths over time 
+    width = 18 * 1/np.log10(2*numapplied+10)
+
+    # Generate random input windows 
+    f_width = {'p': np.random.rand()*.5*width,
+            'v':np.random.rand()*width,
+            'a':np.random.rand()*.5*width} 
+    f_left = {'p': -10 +  np.random.rand() * (20 - f_width['p']), 
+            'v': -16 + np.random.rand() * (32 - f_width['v']), 
+            'a': 0 + np.random.rand() * (20 - f_width['a'])}
+    f_right = {k: f_width[k] + f_left[k] for k in f_width}
+    iobox = {k: (f_left[k], f_right[k]) for k in f_width} 
 
     # Generate output overapproximation 
-    ll = system(**f_left)
-    ur = system(**f_right)
+    ll = dynamics(**f_left)
+    ur = dynamics(**f_right)
+    outbox = {outorder[i]: (ll[i], ur[i]) for i in range(2)}
+    iobox.update(outbox)
 
-    # # Detect output domain violation 
-    # if ll[0] < bounds['p'][0] or ll[1] < boundss['v'][0]:
-    #     continue
-    # if ur[0] > bounds['p'][1] or ur[1] > bounds['v'][1]:
-    #     continue
-
-    # Constrain 
-    # TODO: Constrain along slices of the I/O space for lower dim objects 
-    outbox = {i: (ll[i], ur[i]) for i in range(2)}
-    try:
-        system.apply_io_constraint((inbox, outbox))
-    except:
+    # Detect output domain violation 
+    if ll[0] < bounds['p'][0] or ll[1] < bounds['v'][0]:
+        out_of_domain_violations += 1
         continue
-    numapplied += 1
+    if ur[0] > bounds['p'][1] or ur[1] > bounds['v'][1]:
+        out_of_domain_violations += 1 
+        continue
     
-    p,v,a = np.indices(((2,2,2)))/1.0
-    p[0,:,:] += inbox['p'][0] 
-    p[1,:,:] *= inbox['p'][1]
-    v[:,0,:] += inbox['v'][0]
-    v[:,1,:] *= inbox['v'][1]
-    a[:,:,0] += inbox['a'][0]
-    a[:,:,1] *= inbox['a'][1]
+    # Apply 3d constraint 
+    # system.pred &= system.ioimplies2pred(iobox, precision = precision)
 
-    color = '#7A88CC' + '03' # color  + opacity 
+    # Apply 2d constraint to slices. Identical to parallel update. 
+    system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
+    system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+    
+    # Apply constraint to parallel updates 
+    # pcomp.pred &= pcomp.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
+    # vcomp.pred &= vcomp.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+    
+    numapplied += 1
+
+    # Visualization 
+    p,v,a = np.indices(((2,2,2)))/1.0
+    p[0,:,:] += iobox['p'][0] 
+    p[1,:,:] *= iobox['p'][1]
+    v[:,0,:] += iobox['v'][0]
+    v[:,1,:] *= iobox['v'][1]
+    a[:,:,0] += iobox['a'][0]
+    a[:,:,1] *= iobox['a'][1]
     ax.voxels(p,v,a, 
               np.array([[[True]]]), 
-              facecolors =  np.array([[[color]]])
+              facecolors =  np.array([[[voxelcolors]]])
               )
 
-    if numapplied % 500 == 0:
-        print(system.count_io())
+    if numapplied % 400 == 0:
+        # system = pcomp | vcomp 
+        print("# samples", numapplied, " --- # I/O transitions", system.count_io(bittotal))
+        # assert (pcomp | vcomp) == system
+
+# system = pcomp | vcomp
 
 ax.set_xlim(-10,10)
-ax.set_ylim(-20,20)
-ax.set_zlim(-20,20)
+ax.set_ylim(-16,16)
+ax.set_zlim(0,20)
 plt.show()
+print("# I/O Transitions: ", system.count_io(bittotal))
+print("# Out of Domain errors:", out_of_domain_violations) 
 
-print("Final: ", system.count_io())
+# Control system declaration 
+csys = to_control_module(system, (('p', 'pnext'), ('v','vnext'))) 
+cpre = ControlPre(csys)
+
+# Declare safe set 
+safe = pspace.box2pred(mgr, 'p', [-8,8], 6, innerapprox = True)
+
+# inv = cpre(safe)
+game = SafetyGame(cpre, safe)
+inv, steps = game()
+
+print("Safe Size:", system.mgr.count(safe, 12))
+print("Invariant Size:", system.mgr.count( inv, 12))
+
+plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
