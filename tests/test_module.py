@@ -7,43 +7,14 @@ import numpy as np
 from vpax.module import AbstractModule
 from vpax.symbolicinterval import *
  
-"""
-pstate = DynamicInterval(-10, 10)
-vstate = DynamicInterval(-20,20)
-inputs = {'p': pstate,
-          'v': vstate,
-          'a': DynamicInterval(-20,20)}
-outputs = {'pnext': pstate,
-           'vnext': vstate}
 
-system = AbstractModule(mgr, inputs, outputs)
-grid_iterator = system.inputiterator(precision = {'p': 3, 'v': 3, 'a': 3})
-system.set_precision(precision) <--- assigns a default precision to be remembered for the dynamic intervals 
-for i in grid_iterator:
-    out_OA = OA(i) 
-    system.apply_io_constraint(i,out_OA, precision)
-
-for i in system.inputiterator(precision = {'p': 4, 'v': 2, 'a': 3}):
-    out_OA = OA(i) 
-    system.apply_io_constraint(i,out_OA, precision)
-
-# Hides an output 
-system.hide('pnext') 
-
-compositesys = sys1 | sys2
-compsys = sys1 >> ('x', 'y') >> sys2
-
-#pupdate.register_concrete(func, hooks)?
-
-"""
-
-def test_module():
+def test_dynamic_module():
     mgr = BDD() 
     
-    inputs = {'x': DynamicInterval(0, 16),
-              'y': DynamicInterval(0, 4),
+    inputs = {'x': DynamicPartition(0, 16),
+              'y': DynamicPartition(0, 4),
               }
-    output = {'z': DynamicInterval(0, 4)
+    output = {'z': DynamicPartition(0, 4)
              }
 
     h = AbstractModule(mgr, inputs, output)
@@ -87,5 +58,32 @@ def test_module():
 
     # Series composition with disjoint I/O yields parallel composition 
     assert (g >> h) == (g | h) 
+
+
+def test_mixed_module():
+
+    from dd.cudd import BDD
+
+    import numpy as np 
+
+    from vpax.module import AbstractModule
+    from vpax.symbolicinterval import DynamicPartition, FixedPartition
+
+    mgr = BDD() 
+    inputs = {'x': DynamicPartition(0, 16),
+              'y': FixedPartition(-10,10,10),
+              'theta': DynamicPartition(-np.pi, np.pi, periodic=True),
+              'v': FixedPartition(0,5, 5),
+              'omega': FixedPartition(-2,2,4)
+              }
+    outputs = {'xnext': DynamicPartition(0, 4),
+             'ynext': FixedPartition(-10,10,10),
+             'thetanext': DynamicPartition(-np.pi, np.pi, periodic=True)
+             }
+
+    dubins = AbstractModule(mgr, inputs, outputs) 
+
+    dubins.ioimplies2pred( {'v': (3.6,3.7), 'theta': (6,-6), 'y': (2,3), 'ynext': (2.1,3.1)}, 
+                            precision = {'theta': 3}) 
 
     

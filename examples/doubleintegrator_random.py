@@ -1,9 +1,13 @@
+"""
+Double integrator example where the abstraction is constructed via random sampling of boxes.
+"""
+
 from dd.cudd import BDD
 
 import numpy as np 
 
 from vpax.module import AbstractModule
-from vpax.symbolicinterval import DynamicInterval
+from vpax.symbolicinterval import DynamicPartition
 from vpax.synthesizer import ControlPre, SafetyGame
 from vpax.visualizer import plot2D
 
@@ -22,9 +26,9 @@ def dynamics(p,v,a):
     vsign = 1 if v > 0 else -1 
     return p + v*ts , v + a*ts - vsign*k*(v**2)*ts - g*ts
 
-pspace = DynamicInterval(-10,10)
-vspace = DynamicInterval(-16,16)
-aspace = DynamicInterval(0,20)
+pspace = DynamicPartition(-10,10)
+vspace = DynamicPartition(-16,16)
+aspace = DynamicPartition(0,20)
 
 # Monolithic module
 system = AbstractModule(mgr, 
@@ -63,7 +67,7 @@ outorder = {0: 'pnext', 1: 'vnext'}
 # Sample generator 
 numapplied = 0
 out_of_domain_violations = 0
-while(numapplied < 10000): 
+while(numapplied < 4000): 
 
     # Shrink window widths over time 
     width = 18 * 1/np.log10(2*numapplied+10)
@@ -93,11 +97,11 @@ while(numapplied < 10000):
         continue
     
     # Apply 3d constraint 
-    # system.pred &= system.ioimplies2pred(iobox, precision = precision)
+    system.pred &= system.ioimplies2pred(iobox, precision = precision)
 
     # Apply 2d constraint to slices. Identical to parallel update. 
-    system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
-    system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+    # system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
+    # system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
     
     # Apply constraint to parallel updates 
     # pcomp.pred &= pcomp.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
@@ -117,8 +121,8 @@ while(numapplied < 10000):
               np.array([[[True]]]), 
               facecolors =  np.array([[[voxelcolors]]])
               )
-
-    if numapplied % 400 == 0:
+    
+    if numapplied % 500 == 0:
         # system = pcomp | vcomp 
         print("# samples", numapplied, " --- # I/O transitions", system.count_io(bittotal))
         # assert (pcomp | vcomp) == system
@@ -141,7 +145,7 @@ safe = pspace.box2pred(mgr, 'p', [-8,8], 6, innerapprox = True)
 
 # inv = cpre(safe)
 game = SafetyGame(cpre, safe)
-inv, steps = game()
+inv, steps = game.step()
 
 print("Safe Size:", system.mgr.count(safe, 12))
 print("Invariant Size:", system.mgr.count( inv, 12))

@@ -13,9 +13,9 @@ def test_helpers():
 
 def test_dynamic_regular():
     mgr = BDD() 
-    x = DynamicInterval(-2, 2)
-    assert x.pt2bv(-2,3) == [False] * 3 
-    assert x.pt2bv(2,3) == [True] * 3
+    x = DynamicPartition(-2.0, 2.0)
+    assert x.pt2bv(-2.0,3) == (False, False, False)
+    assert x.pt2bv(2.0,3) == (True, True, True)
     assert x.pt2box(-.1, 3) == (approx(-.5), approx(0))
     assert x.pt2box(.6, 3) == (approx(.5), approx(1.0))
     assert x.pt2box(.6, nbits = 4) == (approx(.5), approx(.75))
@@ -27,58 +27,91 @@ def test_dynamic_regular():
 
     with raises(AssertionError):
         x.pt2bv(3, 1)
-        x.pt2bv(-1, 1)
+        x.pt2bv(-1, 1) 
 
+    # Inner approximation tests
+    assert set(x.box2bvs((.4,.6), 2, innerapprox=True)) == set([])
+    assert set(x.box2bvs((-.4,1.6), 2, innerapprox=True)) == {(True, False)}
+    assert set(x.box2bvs((-.3,.3), 2, innerapprox=True)) == set([])
+
+    # Outer approximations tests 
+    assert set(x.box2bvs((.4,.6), 2, innerapprox=False)) == {(True,False)}
+    assert set(x.box2bvs((.4,.6), 2, innerapprox=False)) == {(True,False)}
+    assert set(x.box2bvs((.99,1.01), 2, innerapprox=False)) == {(True,False), (True,True)}
 
     # BDD creation
-    x.box2pred(mgr, "x", (.4,.6), 3)
-
-    # TODO: Inner and outer approximation tests
+    assert x.box2pred(mgr, "x", (.4,.6), 1, True) == mgr.false
+    # assert x.pt2bv(-2.000000000000001, 3) == (False, False, False)
 
 def test_dynamic_periodic():
-    x = DynamicInterval(0, 20, periodic = True)
-    assert x.pt2bv(11,4) == [True, True, False, False]
-    assert x.pt2bv(19+20,4) == [True, False, False, False]
+    mgr = BDD()
+    x = DynamicPartition(0, 20, periodic = True)
+    assert x.pt2bv(11,4) == (True, True, False, False)
+    assert x.pt2bv(19+20,4) == (True, False, False, False)
 
+
+
+    # Wrap around
+    assert set(x.box2bvs((17, 7), 2, innerapprox=True)) == {(False,False)}
+    assert set(x.box2bvs((17, 7), 2, innerapprox=False)) == {(True, False), 
+                                                              (False,False), 
+                                                              (False, True)} 
+
+    assert x.box2pred(mgr, 'x', (1,19), 3) == mgr.true
+    assert x.box2pred(mgr, 'x', (19,1), 3, True) == mgr.false
 
 def test_fixed_regular():
-    x = FixedInterval( -3, 7, 13)
+    x = FixedPartition( -3, 7, 13)
     assert x.pt2index(-3) == 0
     assert x.pt2index(7) == 12
 
-    bv_box = list(x.box2bvs((.1, 3.7)))
-    bv_innerbox = list(x.box2bvs((.1,3.7), innerapprox=True))
-    assert bv_box == [[False, True, False, False], 
-                        [False, True, False, True],
-                        [False, True, True, False],
-                        [False, True, True, True],
-                        [True, False, False, False]]
+    bv_box = set(x.box2bvs((.1, 3.7)))
+    bv_innerbox = set(x.box2bvs((.1,3.7), innerapprox=True))
+    assert bv_box == {(False, True, False, False), 
+                        (False, True, False, True),
+                        (False, True, True, False),
+                        (False, True, True, True),
+                        (True, False, False, False)}
     assert len(bv_box) == len(bv_innerbox) + 2
 
+    y = FixedPartition(0,10,5)
+    assert set(y.box2bvs((3,7),False)) == {(False, False, True),
+                                            (False, True, False),
+                                            (False, True, True)}
+    assert set(y.box2bvs((3,7),True)) == {(False, True, False)}
+
+    # Inner-outer tests
+    assert set(y.box2bvs((3,3.5), True)) ==  set([]) 
+    assert set(y.box2bvs((3,3.5), False)) == {(False, False, True)}
+    assert set(y.box2bvs((3,5), True)) ==  set([]) 
+
 def test_fixed_periodic():
-    pass 
+    y = FixedPartition(0,10,5,periodic=True) # 5 bins 
+    assert set(y.box2bvs((3,7),False)) == {(False, False, True),
+                                            (False, True, False),
+                                            (False, True, True)}
+    assert set(y.box2bvs((3,7),True)) == {(False, True, False)}
+
+    # Inner-outer tests
+    assert set(y.box2bvs((3,3.5), True)) ==  set([]) 
+    assert set(y.box2bvs((3,3.5), False)) == {(False, False, True)}
+    assert set(y.box2bvs((3,5), True)) ==  set([]) 
+
+    # Wrap around tests 
+    assert set(y.box2bvs((9,1), True)) == set([]) 
+    assert set(y.box2bvs((9,2.1), True)) == {(False, False, False)}
+    assert set(y.box2bvs((9,2.1), False)) == {(True, False, False),
+                                              (False, False, False),
+                                              (False, False, True)}
 
 def test_discrete():
     pass
 
 def test_utils():
-    pass
-
-# def conc(x):
-#     return list(mgr.pick_iter(x))
-
-# print(conc(x.box2pred((-.5,.5), False)))
-# print(conc(x.box2pred((-.5,.5), True)))
-
-# print(conc(x.box2pred((-.6,.1), False)))
-# print(conc(x.box2pred((-.6,.1), True)))
+    # Regular intervals 
+    assert set(bv_interval([False, True], [True, True]))  == {(False, True), 
+                                                        (True, False), 
+                                                        (True, True)}
+    assert set(bv_interval([True, True], [False, True]))  ==  set([])                                                    
 
 
-
-# y = SymbolicInterval.DynamicInterval('y', mgr, -2, 2,periodic=True)
-# y.add_bits(3)
-# print(conc(y.box2pred((-.5,.5), False)))
-# print(conc(y.box2pred((-.5,.5), True)))
-
-# print(conc(y.box2pred((-.6,.1), False)))
-# print(conc(y.box2pred((-.6,.1), True)))

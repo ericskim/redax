@@ -37,10 +37,25 @@ class ControlPre():
             return self.nonblock & self.elimpost(postbits, Z)
 
 class SafetyGame():
+    """
+    Attributes: 
+        cpre: 
+        safe: 
+    """
     def __init__(self, cpre, safeset):
         self.cpre = cpre
         self.safe = safeset # TODO: Check if a subset of the state space 
-    def __call__(self, steps = None):
+    def step(self, steps = None):
+        """
+        Runs a safety game until reaching a fixed point or a maximum number of steps
+
+        Args: 
+            steps (int): Maximum number of game steps 
+
+        Returns:
+            dd BDD: Safe invariant region
+            int   : Number of game steps run 
+        """
         if steps: 
             assert steps >= 0 
 
@@ -57,15 +72,39 @@ class SafetyGame():
         
         return z, i 
 
-class ReachAvoidGame():
-    def __init__(self):
-        pass 
-
-    def __call__(self):
-        pass
-
-
 class ReachGame():
+    def __init__(self, cpre, target):
+        self.cpre = cpre
+        self.target = target # TODO: Check if a subset of the state space 
+
+    def __call__(self, steps = None):
+       """
+        Runs a safety game until reaching a fixed point or a maximum number of steps
+
+        Args: 
+            steps (int): Maximum number of game steps 
+
+        Returns:
+            dd BDD: Backward reachable set 
+            int   : Number of game steps run 
+        """
+        if steps: 
+            assert steps >= 0 
+
+        z = self.cpre.sys.mgr.false
+        zz = self.cpre.sys.mgr.true 
+
+        i = 0
+        while (z != zz):
+            if steps and i == steps:
+                break
+            zz = z
+            z = zz | self.cpre(zz, no_inputs = True) | self.target
+            i += 1
+        
+        return z, i 
+
+class ReachAvoidGame():
     def __init__(self):
         pass 
 

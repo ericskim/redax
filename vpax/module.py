@@ -4,7 +4,14 @@ import vpax.symbolicinterval as si
 
 class AbstractModule(object):
     """
-    Function wrapper for translating between concrete and discrete I/O values
+    Wrapper for translating between concrete and discrete I/O values
+       
+    Attributes:
+        mgr: dd manager
+        pred: Predicate encoding the module I/O relation 
+        inputs: Dictionary {str: symbolicintervals}
+        outputs:
+    
     """
 
     def __init__(self, mgr, inputs, outputs, pred = None):
@@ -94,17 +101,24 @@ class AbstractModule(object):
         in_bdd = self.mgr.true # FIXME: Errors if using fixed intervals with non-power of two 
         out_bdd = self.mgr.true 
         for var in hyperbox.keys():
-            if isinstance(self[var], si.DynamicInterval):
+            if isinstance(self[var], si.DynamicPartition):
                 nbits = kwargs['precision'][var]
-                assert isinstance(nbits, int) 
+                assert nbits >= 0 
                 if var in self._in:
                     in_bdd  &= self[var].box2pred(self.mgr, var, hyperbox[var],
                                                  nbits, innerapprox = True)
                 else:
                     out_bdd &= self[var].box2pred(self.mgr, var, hyperbox[var],
                                                  nbits, innerapprox = False)
+            elif isinstance(self[var], si.FixedPartition):
+                if var in self._in:
+                    in_bdd  &= self[var].box2pred(self.mgr, var, hyperbox[var],
+                                                    innerapprox = True)
+                else:
+                    out_bdd &= self[var].box2pred(self.mgr, var, hyperbox[var],
+                                                    innerapprox = False)
             else:
-                raise NotImplementedError
+                raise NotImplementedError 
 
         return (~in_bdd | out_bdd)
 
@@ -122,7 +136,7 @@ class AbstractModule(object):
         
         io_bdd = self.mgr.true # FIXME: Errors if using fixed intervals with non-power of two 
         for var in hyperbox.keys():
-            if isinstance(self[var], si.DynamicInterval):
+            if isinstance(self[var], si.DynamicPartition):
                 nbits = kwargs['precision'][var]
                 assert type(nbits) == int 
                 if var in self._in:
@@ -141,13 +155,16 @@ class AbstractModule(object):
         Exhaustively searches over the input grid
 
         Args:
-            precision 
+            precision: A dictionary 
+
+        Returns:
+
 
         Implementation assumes dictionary ordering is stable
         """
         numin = len(self.inputs)
         names = tuple(self.inputs.keys())
-        iters = [v.conc_iter(precision[k]) for k,v in self.inputs.values()]
+        iters = [v.conc_iter(precision[k]) for k,v in self.inputs.items()]
         for i in itertools.product(*iters):
             yield {names[j]: i[j] for j in range(numin)}
         

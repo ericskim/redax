@@ -17,6 +17,7 @@ Nomenclature:
 """
 
 import math 
+import itertools
 from abc import abstractmethod
 
 def _bintogray(x:int):
@@ -35,15 +36,20 @@ def _int2bv(index:int, nbits:int):
     """
     A really high nbits just right pads the bitvector with "False"
     """
-    bv = [False] * nbits
-    for i in range(nbits):
-        if ((index >> i) % 2 == 1):
-            bv[nbits-1-i] = True
-        # else:
-        #     bv[]
-    return bv
+    # bv = [False] * nbits
+    # for i in range(nbits):
+    #     if ((index >> i) % 2 == 1):
+    #         bv[nbits-1-i] = True
+    #     # else:
+    #     #     bv[]
+    # return bv 
+
+    return tuple(True if ((index >> i) % 2 == 1) else False for i in range(nbits-1,-1,-1))
 
 def _bv2int(bv):
+    """
+    Converts bitvector (list or tuple) into an integer 
+    """
     nbits = len(bv)
     index = 0
     for i in range(nbits):
@@ -54,7 +60,7 @@ def _bv2int(bv):
 
 def increment_bv(bv, increment, graycode = False, saturate = False):
     """
-    increment a bitvector's value +1 or -1. 
+    Increment a bitvector's value +1 or -1. 
     """
     assert increment == 1 or increment == -1
     nbits = len(bv)
@@ -63,11 +69,11 @@ def increment_bv(bv, increment, graycode = False, saturate = False):
         index = (index+increment) % 2**nbits
         return _int2bv( _bintogray(index), nbits)
     else:
-        if bv == [True] * nbits and increment > 0:
+        if bv == tuple(True for i in range(nbits)) and increment > 0: #FIXME: 
             if saturate:
                 return bv
             raise ValueError("Bitvector overflow for nonperiodic domain.")
-        if bv == [False] * nbits and increment < 0:
+        if bv == tuple(False for i in range(nbits)) and increment < 0:
             if saturate:
                 return bv
             raise ValueError("Bitvector overflow for nonperiodic domain.")
@@ -119,22 +125,21 @@ def bv2pred(mgr, name, bv):
     """
     If bv's size is smaller than the bits allocated, then it takes the most significant ones
     """
+
+    for i in range(len(bv)):
+        mgr.declare(name + "_" + str(i))
     b = mgr.true 
     for i in range(len(bv)):
         if bv[i]:
-            mgr.declare(name + "_" + str(i))
             b = b &  mgr.var(name + "_" + str(i))
         else:
-            mgr.declare(name + "_" + str(i))
             b = b & ~mgr.var(name + "_" + str(i))
-    return b   
+    return b
 
-# SymbolicInstance?
-class SymbolicInterval(object):
+class SymbolicSet(object):
     """
-    Class to handle translation from symbolic BDD encoding to the underlying space
+    Abstract class for representing a concrete underlying space and handling translation to symbolic encodings
 
-    Instance of an interval
     """
 
     def __init__(self):
@@ -144,16 +149,15 @@ class SymbolicInterval(object):
     def pt2bv(self, point):
         raise NotImplementedError 
     
-    
 
-class DiscreteInterval(SymbolicInterval):
+class DiscreteSet(SymbolicSet):
     """
     Discrete Interval 
     """
     def __init__(self, num_vals):
         self.num_vals = num_vals
         self.num_bits = math.ceil(math.log2(num_vals))
-        SymbolicInterval.__init__(self)
+        SymbolicSet.__init__(self)
 
     def pt2bv(self, point):
         assert point < self.num_vals
@@ -168,13 +172,20 @@ class DiscreteInterval(SymbolicInterval):
         s += "Bounds: [0,...,{0}], ".format(str(self.num_vals-1))
         return s
 
-class ContinuousInterval(SymbolicInterval):
+class EmbeddedGrid(DiscreteSet):
+    """
+    A grid of points embedded in continuous space 
+    """
+    def __init__(self, left, right, num):
+        pass 
+
+class ContinuousPartition(SymbolicSet):
     """
     Continuous Interval
     """
     def __init__(self, lb, ub, periodic = False):
         assert ub - lb >= 0.0, "Upper bound is smaller than lower bound"
-        SymbolicInterval.__init__(self)
+        SymbolicSet.__init__(self)
         self.periodic = periodic
         self.lb = float(lb)
         self.ub = float(ub)
@@ -183,9 +194,6 @@ class ContinuousInterval(SymbolicInterval):
     def bounds(self):
         return (self.lb, self.ub)
 
-    def space_pred(self, mgr):
-        return mgr.true
-
     def _wrap(self, point):
         """
         Helper function for periodic intervals
@@ -193,7 +201,6 @@ class ContinuousInterval(SymbolicInterval):
 
         if point == self.ub:
             return point
-        
         width = self.ub - self.lb
         point =  (point - self.lb) % width
         return point + self.lb
@@ -209,15 +216,21 @@ class ContinuousInterval(SymbolicInterval):
             return False
         if self.ub != other.ub:
             return False
-        return True 
+        return True
 
-class DynamicInterval(ContinuousInterval):
+    def conc_space(self):
+        """
+        Returns the concrete space 
+        """
+        return self.bounds
+
+class DynamicPartition(ContinuousPartition):
     """
     Unlike Fixed, all bits assignments are considered valid and correspond to a quad/oct-ant of the space
 
     """
     def __init__(self, lb, ub, periodic = False):
-        ContinuousInterval.__init__(self, lb, ub, periodic)
+        ContinuousPartition.__init__(self, lb, ub, periodic)
 
     def __repr__(self):
         s = "Dynamic, "
@@ -226,11 +239,11 @@ class DynamicInterval(ContinuousInterval):
             s += ", Periodic"
         return s
 
-    def get_sub_interval(self, left, right, nbits = None):
-        raise NotImplementedError
-
-    def dividers(self, nbits):
-        raise NotImplementedError
+    def abs_space(self, mgr, name = None):
+        """
+        Returns the predicate of the abstract space
+        """
+        return mgr.true 
 
     def pt2bv(self, point, nbits, tol = 0.0): 
         """
@@ -243,7 +256,8 @@ class DynamicInterval(ContinuousInterval):
 
         assert point <= self.ub + tol, "Point {0} exceeds upper bound {1}".format(point, self.ub + tol)
         assert point >= self.lb - tol, "Point {0} exceeds lower bound {1}".format(point, self.lb - tol)
-
+        
+        # FIXME: Use a binary search and queries for membership in intervals instead. 
         index = int((point - self.lb) / (self.ub - self.lb) * 2**nbits)
 
         # Catch numerical errors when point == self.ub 
@@ -253,8 +267,7 @@ class DynamicInterval(ContinuousInterval):
         if self.periodic:
             index = _bintogray(index)
 
-        # pdb.set_trace()
-        return _int2bv(index,nbits)#[0:nbits]
+        return _int2bv(index,nbits)
 
     def bv2box(self, bv):
         nbits = len(bv)
@@ -276,48 +289,62 @@ class DynamicInterval(ContinuousInterval):
     def pt2box(self, point, nbits):
         return self.bv2box(self.pt2bv(point, nbits = nbits))
 
-    def box2bvs(self, box, innerapprox = False, tol = .0000001, nbits = None):
-        raise NotImplementedError
-
-    def box2pred(self, mgr, name, box, nbits, innerapprox = False, tol = .0000001):
+    def box2bvs(self, box, nbits, innerapprox = False, tol = .0000001):
         """
-        Overapproximation of a concrete box with its BDD
+        Returns a list of bitvectors corresponding to a box
 
-        @param box 
-        @param innerapprox - 
-        @param tol - tolerance for numerical errors as a fraction of the grid size. 
-                     Must lie within [0,1]
+        Args:
+            box (2-tuple): Left and right floating points
+            nbits (int): Number of bits 
+            innerapprox: 
+            tol:         Numerical tolerance 
         """
-        
         left, right = box
 
         assert tol >= 0 and tol <= 1, "Tolerance is not 0 <= tol <= 1"
         eps = (self.ub - self.lb) / (2**nbits)
         abs_tol = eps * tol
 
-        if not innerapprox:
-            left_bv  = self.pt2bv(left - abs_tol, nbits = nbits)
-            right_bv = self.pt2bv(right + abs_tol, nbits = nbits)
-        else:
+        # TODO: Check for out of bounds error here!
+        # TODO: Variable declarations here!
+
+        if innerapprox:
             # Inner approximations move in the box
             left_bv  = self.pt2bv(left - abs_tol, nbits, tol = abs_tol)
-            left_bv = increment_bv(left_bv, 1, self.periodic, saturate= True)
             right_bv = self.pt2bv(right + abs_tol, nbits, tol = abs_tol)
+            if left_bv == right_bv: # In same box e.g. [.4,.6] <= [0,1]
+                return [] 
+            left_bv = increment_bv(left_bv, 1, self.periodic, saturate= True)
+            if left_bv == right_bv: # Adjacent boxes [.4,.6] overlaps [0,.5] and [.5,1]
+                return []
             right_bv = increment_bv(right_bv, -1, self.periodic, saturate= True)
+        else:
+            left_bv  = self.pt2bv(left - abs_tol, nbits = nbits, tol = abs_tol)
+            right_bv = self.pt2bv(right + abs_tol, nbits = nbits, tol = abs_tol)
 
-        if self.periodic: #TODO: Implement 
-            raise NotImplementedError
-
-        box = mgr.false
         if not self.periodic and (left_bv > right_bv):
-            return box
+            raise ValueError("{0}: {1}\n{2}: {3}".format(left, left_bv,right, right_bv))
 
-        b = bv_interval(left_bv, right_bv, self.periodic)
-        for i in map(lambda x: bv2pred(mgr, name, x), b):
-            box |= i
+        return bv_interval(left_bv, right_bv, self.periodic)
 
-        assert len(box.support) <= nbits, "Support " + str(box.support) + "exceeds " + nbits + " bits"
-        return box
+    def box2pred(self, mgr, name, box, nbits, innerapprox = False, tol = .00001):
+        """
+        Overapproximation of a concrete box with its BDD
+
+        Args: 
+            name
+            box 
+            innerapprox - 
+            tol - tolerance for numerical errors as a fraction of the grid size. 
+                     Must lie within [0,1]
+        """ 
+
+        predbox = mgr.false
+        for bv in self.box2bvs(box, nbits, innerapprox, tol): 
+            predbox |= bv2pred(mgr, name, bv)
+
+        assert len(predbox.support) <= nbits, "Support " + str(predbox.support) + "exceeds " + nbits + " bits"
+        return predbox
 
     def __eq__(self, other):
         if type(self) != type(other):
@@ -334,24 +361,24 @@ class DynamicInterval(ContinuousInterval):
             yield self.bv2box(_int2bv(i, prec))
             i += 1
 
-class FixedInterval(ContinuousInterval):
+class FixedPartition(ContinuousPartition):
     """
     There are some assignments to bits that are not valid for this set
     Fixed number of "bins"
 
     Example:
-        FixedInterval(2, 10, 4) corresponds to the four bins
+        FixedPartition(2, 10, 4) corresponds to the four bins
             [2, 4] [4,6] [6,8] [8,10] 
     """
-    def __init__(self, lb, ub, bins: int, periodic = False):
+    def __init__(self, lb: float, ub:float, bins: int, periodic = False):
         # Interval spacing 
         assert bins > 0, "Cannot have negative grid spacing"
         self.bins = bins
         
-        ContinuousInterval.__init__(self, lb, ub, periodic)
+        ContinuousPartition.__init__(self, lb, ub, periodic)
 
     def __eq__(self, other):
-        if ContinuousInterval.__eq__(self, other):
+        if ContinuousPartition.__eq__(self, other):
             if self.bins == other.bins:
                 return True
         return False
@@ -366,6 +393,18 @@ class FixedInterval(ContinuousInterval):
         if self.periodic:
             s += ", Periodic"
         return s
+
+    def abs_space(self, mgr, name = None):
+        """
+        Returns the predicate of the abstract space
+        """
+        left_bv = _int2bv(0, self.num_bits)
+        right_bv = _int2bv(0,self.num_bits)
+        bvs = bv_interval(left_bv, right_bv)
+        boxbdd = mgr.false
+        for i in map(lambda x: bv2pred(mgr, name, x), bvs):
+            boxbdd |= i
+        return boxbdd 
 
     @property
     def binwidth(self):
@@ -413,23 +452,31 @@ class FixedInterval(ContinuousInterval):
         eps = self.binwidth
         abs_tol = eps * tol
 
-        assert left <= right
-        
-        if not innerapprox:
-            left  = self.pt2index(left - abs_tol)
-            right = self.pt2index(right + abs_tol)
-        else:
-            # Inner approximations move in the box
-            left  = self.pt2index(left - abs_tol, abs_tol) + 1 
-            right = self.pt2index(right + abs_tol, abs_tol) - 1
+        # assert left <= right
 
-        if self.periodic:
-            raise NotImplementedError
+        left  = self.pt2index(left - abs_tol)
+        right = self.pt2index(right + abs_tol)        
+        if innerapprox:
+            # Inner approximations move in the box
+            if left == right or left == right - 1:
+                return []
+            
+            if self.periodic and left == self.bins-1 and right == 0:
+                return []
+            else: 
+                left  = (left + 1) % self.bins
+                right = (right - 1) % self.bins 
 
         left_bv  = _int2bv( left, self.num_bits)
         right_bv = _int2bv(right, self.num_bits)
 
-        return bv_interval(left_bv, right_bv)
+        if self.periodic and left > right:
+            zero_bv = _int2bv(0, self.num_bits)
+            max_bv = _int2bv(self.bins-1, self.num_bits)
+            return itertools.chain(bv_interval(zero_bv, right_bv), 
+                                   bv_interval(left_bv, max_bv))
+        else: 
+            return bv_interval(left_bv, right_bv)
 
     def box2pred(self, mgr, name, box, innerapprox = False, tol = .0000001):
 
@@ -440,5 +487,5 @@ class FixedInterval(ContinuousInterval):
         for i in map(lambda x: bv2pred(mgr, name, x), b):
             boxbdd |= i
 
-        return boxbdd
+        return boxbdd 
 
