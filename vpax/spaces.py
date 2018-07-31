@@ -1,9 +1,6 @@
 """
 Symbolic Intervals
 
-#TODO: Think about combining the fixed and dynamic precision grids 
-# to have bits that represent fixed and dynamic aspects to them. 
-
 # Discrete vs continuous, fixed vs dynamic, linear vs periodic
 
 # discrete => fixed, linear
@@ -18,7 +15,16 @@ Nomenclature:
 
 import math 
 import itertools
+
+import numpy as np
 from abc import abstractmethod
+
+def find_nearest(array,value):
+    idx = np.searchsorted(array, value, side="left")
+    if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):
+        return idx-1
+    else:
+        return idx
 
 def _bintogray(x:int):
     assert x >= 0 
@@ -55,7 +61,6 @@ def _bv2int(bv):
     for i in range(nbits):
         if bv[i]:
             index += 2**(nbits - i - 1)
-
     return index 
 
 def increment_bv(bv, increment, graycode = False, saturate = False):
@@ -69,7 +74,7 @@ def increment_bv(bv, increment, graycode = False, saturate = False):
         index = (index+increment) % 2**nbits
         return _int2bv( _bintogray(index), nbits)
     else:
-        if bv == tuple(True for i in range(nbits)) and increment > 0: #FIXME: 
+        if bv == tuple(True for i in range(nbits)) and increment > 0: 
             if saturate:
                 return bv
             raise ValueError("Bitvector overflow for nonperiodic domain.")
@@ -149,15 +154,15 @@ class SymbolicSet(object):
     def pt2bv(self, point):
         raise NotImplementedError 
     
-
+    
 class DiscreteSet(SymbolicSet):
     """
     Discrete Interval 
     """
     def __init__(self, num_vals):
+        SymbolicSet.__init__(self)
         self.num_vals = num_vals
         self.num_bits = math.ceil(math.log2(num_vals))
-        SymbolicSet.__init__(self)
 
     def pt2bv(self, point):
         assert point < self.num_vals
@@ -172,12 +177,87 @@ class DiscreteSet(SymbolicSet):
         s += "Bounds: [0,...,{0}], ".format(str(self.num_vals-1))
         return s
 
+    def abs_space(self, mgr, name):
+        """
+        Returns the predicate of the discrete set abstract space
+
+        Args:
+            mgr: bdd manager
+            name: BDD variable name, e.g. "x" for names "x_1", "x_2", etc. 
+        """
+        left_bv =  _int2bv(0, self.num_bits)
+        right_bv = _int2bv(self.num_vals-1,self.num_bits)
+        bvs = bv_interval(left_bv, right_bv)
+        boxbdd = mgr.false
+        for i in map(lambda x: bv2pred(mgr, name, x), bvs):
+            boxbdd |= i
+        return boxbdd 
+
+
 class EmbeddedGrid(DiscreteSet):
     """
-    A grid of points embedded in continuous space 
+    A discrete grid of points embedded in continuous space
     """
     def __init__(self, left, right, num):
-        pass 
+        """
+        Args:
+            left:
+            right:
+            num:
+        """
+        if num <= 0:
+            raise ValueError("Grid must have at least one point")
+        if left > right:
+            raise ValueError("Left point is greater than right")
+        if num == 1 and left != right:
+            raise ValueError("Single point but left and right are not equal")
+
+        DiscreteSet.__init__(self, num)
+        self.left = left
+        self.right = right
+        self.pts = np.linspace(self.left, self.right, self.num_vals)
+
+
+    def pt2index(self, pt, snap = False):
+        """
+        Args:
+            pt  (float): Continuous point to be converted into a bitvector
+            snap (bool): Snaps pt to the nearest discrete point with preference towards greater point.
+                         Otherwise requires exact equality.
+
+        Returns:
+            int 
+        """
+        if snap:
+            return find_nearest(self.pts, pt)
+        elif pt in self.pts:
+            return np.searchsorted(self.pts, pt)
+        else:
+            raise ValueError("Cannot find an exact match without snapping")
+
+
+    def conc2pred(self, mgr, name, concrete, snap = True):
+        """
+        Translates from a concrete value to a the associated predicate
+
+        Args: 
+            mgr (dd mgr):
+            name:
+            concrete:
+            snap:
+        Returns:
+            bdd: 
+
+        """
+        bv = _int2bv(self.pt2index(concrete, snap), self.num_bits)
+        return bv2pred(mgr, name, bv)
+
+    def conc_iter(self):
+        """
+        Iterable of points 
+        """
+        raise NotImplementedError
+    
 
 class ContinuousPartition(SymbolicSet):
     """
@@ -224,6 +304,13 @@ class ContinuousPartition(SymbolicSet):
         """
         return self.bounds
 
+    @abstractmethod
+    def abs_space(self):
+        """
+        Abstract space predicate 
+        """
+        raise NotImplementedError 
+
 class DynamicPartition(ContinuousPartition):
     """
     Unlike Fixed, all bits assignments are considered valid and correspond to a quad/oct-ant of the space
@@ -268,6 +355,9 @@ class DynamicPartition(ContinuousPartition):
             index = _bintogray(index)
 
         return _int2bv(index,nbits)
+
+    def pt2bdd(self, mgr, name, pt, nbits, innerapprox = False, tol = .00001):
+        return bv2pred(mgr, name, self.pt2bv(pt, nbits))
 
     def bv2box(self, bv):
         nbits = len(bv)
@@ -327,7 +417,7 @@ class DynamicPartition(ContinuousPartition):
 
         return bv_interval(left_bv, right_bv, self.periodic)
 
-    def box2pred(self, mgr, name, box, nbits, innerapprox = False, tol = .00001):
+    def conc2pred(self, mgr, name, box, nbits, innerapprox = False, tol = .00001):
         """
         Overapproximation of a concrete box with its BDD
 
@@ -396,10 +486,10 @@ class FixedPartition(ContinuousPartition):
 
     def abs_space(self, mgr, name = None):
         """
-        Returns the predicate of the abstract space
+        Returns the predicate of the fixed partition abstract space
         """
-        left_bv = _int2bv(0, self.num_bits)
-        right_bv = _int2bv(0,self.num_bits)
+        left_bv =  _int2bv(0, self.num_bits)
+        right_bv = _int2bv(self.bins-1,self.num_bits)
         bvs = bv_interval(left_bv, right_bv)
         boxbdd = mgr.false
         for i in map(lambda x: bv2pred(mgr, name, x), bvs):
@@ -478,7 +568,7 @@ class FixedPartition(ContinuousPartition):
         else: 
             return bv_interval(left_bv, right_bv)
 
-    def box2pred(self, mgr, name, box, innerapprox = False, tol = .0000001):
+    def conc2pred(self, mgr, name, box, innerapprox = False, tol = .0000001):
 
         # left, right = box
 
@@ -488,4 +578,3 @@ class FixedPartition(ContinuousPartition):
             boxbdd |= i
 
         return boxbdd 
-

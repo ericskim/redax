@@ -5,7 +5,7 @@ from dd.cudd import BDD
 import numpy as np 
 
 from vpax.module import AbstractModule
-from vpax.symbolicinterval import *
+from vpax.spaces import *
  
 
 def test_dynamic_module():
@@ -20,7 +20,7 @@ def test_dynamic_module():
     h = AbstractModule(mgr, inputs, output)
 
     # Rename inputs 
-    assert set(h.inputs) == {'x','y'} 
+    assert set(h.inputs) == {'x','y'}
     assert set(h.outputs) == {'z'}
     g = ('j', 'x') >> h >> ('z', 'r')
     assert set(g.inputs) == {'j','y'}
@@ -45,8 +45,8 @@ def test_dynamic_module():
                                                      'y_0', 'y_1', 'y_2',
                                                      'z_0', 'z_1', 'z_2'}
 
-    assert g.nonblock == mgr.true # No inputs block
-    assert g.nonblock == (g.hide(g.outputs).pred)
+    assert g.nonblock() == mgr.true # No inputs block
+    assert g.nonblock() == (g.hide(g.outputs).pred)
 
     # Identity test for input and output renaming 
     assert ((g  >> ('r', 'z') ) >> ('z','r')) == g
@@ -64,26 +64,43 @@ def test_mixed_module():
 
     from dd.cudd import BDD
 
-    import numpy as np 
-
     from vpax.module import AbstractModule
-    from vpax.symbolicinterval import DynamicPartition, FixedPartition
+    from vpax.spaces import DynamicPartition, FixedPartition
 
     mgr = BDD() 
     inputs = {'x': DynamicPartition(0, 16),
-              'y': FixedPartition(-10,10,10),
+              'y': FixedPartition(-10, 10, 10),
               'theta': DynamicPartition(-np.pi, np.pi, periodic=True),
-              'v': FixedPartition(0,5, 5),
-              'omega': FixedPartition(-2,2,4)
+              'v': FixedPartition(0, 5, 5),
+              'omega': FixedPartition(-2, 2, 4)
               }
     outputs = {'xnext': DynamicPartition(0, 4),
              'ynext': FixedPartition(-10,10,10),
              'thetanext': DynamicPartition(-np.pi, np.pi, periodic=True)
              }
-
+    
     dubins = AbstractModule(mgr, inputs, outputs) 
 
     dubins.ioimplies2pred( {'v': (3.6,3.7), 'theta': (6,-6), 'y': (2,3), 'ynext': (2.1,3.1)}, 
                             precision = {'theta': 3}) 
 
+    # Test that fixed partitions yield correct space cardinality
+    assert mgr.count(dubins.inspace(), 4+4+4+3+2) == 16 * 10 * 16 * 5 * 4
+    assert mgr.count(dubins.outspace(), 2 + 4 + 4) == 4 * 10 * 16
+
     
+def test_embeddedgrid_module():
+    from dd.cudd import BDD
+
+    from vpax.module import AbstractModule
+    from vpax.spaces import EmbeddedGrid
+
+    mgr = BDD() 
+    inputs = {'x': EmbeddedGrid(0,3,4)}
+    outputs = {'y': EmbeddedGrid(4,11,8)}
+
+    m = AbstractModule(mgr, inputs, outputs)
+
+    assert m.ioimplies2pred({'x': 2, 'y':4}) == mgr.add_expr(" ~( x_0 /\ ~x_1) | (~y_0 /\ ~y_1 /\ ~y_2)")
+    
+    assert len(mgr.vars) > 0 

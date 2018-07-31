@@ -12,7 +12,7 @@ def to_control_module(mod, states):
         prepost = [(pre,post) for pre,post in states]
     finally:
         pass 
-
+    
     # Check pre/post state domain equality
     if not {post for pre,post in prepost}.issubset(mod.outputs):
         raise ValueError("Unknown post state")
@@ -62,4 +62,10 @@ class ControlModule(AbstractModule):
         return s
 
     def __eq__(self, other):
+        raise NotImplementedError 
+
+    def controlspace(self):
+        raise NotImplementedError
+        
+    def statespace(self):
         raise NotImplementedError 

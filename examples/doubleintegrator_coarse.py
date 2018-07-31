@@ -8,13 +8,12 @@ from dd.cudd import BDD
 import numpy as np 
 
 from vpax.module import AbstractModule
-from vpax.symbolicinterval import DynamicPartition
-from vpax.synthesizer import ControlPre, SafetyGame
-from vpax.visualizer import plot2D
-from vpax.controlmodule import *
+from vpax.spaces import DynamicPartition
+from vpax.synthesis import SafetyGame
+from vpax.visualizer import plot2D, plot3D
+from vpax.controlmodule import to_control_module
 
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 ts = .2
 k = .03
@@ -39,13 +38,7 @@ system = AbstractModule(mgr,
                          'vnext': vspace}
         )
 
-        
 bounds = {'p': [-10,10], 'v': [-16,16]}
-
-# Visualization
-# fig = plt.figure()
-# ax = fig.gca(projection='3d') 
-# voxelcolors = '#7A88CC' + '10' # color  + opacity 
 
 # Declare grid precision 
 precision = {'p': 6, 'v':6, 'a': 6, 'pnext': 6, 'vnext': 6}
@@ -81,7 +74,7 @@ for iobox in system.input_iter({'p': 3, 'v':4, 'a': 3}):
         continue
     
     # Apply 3d constraint 
-    system.pred &= system.ioimplies2pred(iobox, precision = precision)
+    system.pred &= system.ioimplies2pred(iobox, precision = precision) 
 
     # Apply 2d constraint to slices. Identical to parallel update.
     # system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
@@ -89,25 +82,12 @@ for iobox in system.input_iter({'p': 3, 'v':4, 'a': 3}):
     
     numapplied += 1
 
-    # # Visualization 
-    # p,v,a = np.indices(((2,2,2)))/1.0
-    # p[0,:,:] += iobox['p'][0] 
-    # p[1,:,:] *= iobox['p'][1]
-    # v[:,0,:] += iobox['v'][0]
-    # v[:,1,:] *= iobox['v'][1]
-    # a[:,:,0] += iobox['a'][0]
-    # a[:,:,1] *= iobox['a'][1]
-    # ax.voxels(p,v,a, 
-    #           np.array([[[True]]]), 
-    #           facecolors =  np.array([[[voxelcolors]]])
-    #           )
-
     if numapplied % 500 == 0:
         print("(samples, I/O % transitions) --- ({0}, {1})".format(numapplied, 100*system.count_io(bittotal)/possible_transitions))
 
 print("# samples after exhaustive grid search: {0}".format(numapplied))
 
-while(numapplied < 3577): 
+while(numapplied < 4000): 
 
     # Shrink window widths over time 
     width = 40 * 1/np.log10(2*numapplied+10)
@@ -133,38 +113,33 @@ while(numapplied < 3577):
         out_of_domain_violations +=1
         continue
     
-    # Apply 3d constraint, even though the system has lower dimensions 
-    system.pred &= system.ioimplies2pred(iobox, precision = precision)
-    
+    # Apply 3d constraint, even though the system has lower dimensions
+    # system.pred &= system.ioimplies2pred(iobox, precision = precision)
+
     # Apply 2d constraint to slices. Identical to parallel update. 
-    # system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
-    # system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+    system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
+    system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
 
     numapplied += 1
 
     if numapplied % 500 == 0:
         print("(samples, I/O % transitions) --- ({0}, {1})".format(numapplied, 100*system.count_io(bittotal)/possible_transitions))
     
-# ax.set_xlim(-10,10)
-# ax.set_ylim(-16,16)
-# ax.set_zlim(0,20)
-# plt.show() 
 print("# I/O Transitions: ", system.count_io(bittotal))
 print("# Out of Domain errors:", out_of_domain_violations) 
 
 # Control system declaration 
-csys = to_control_module(system, (('p', 'pnext'), ('v','vnext'))) 
-cpre = ControlPre(csys)
+csys = to_control_module(system, (('p', 'pnext'), ('v','vnext')))
 
 # Declare safe set 
-safe = pspace.box2pred(mgr, 'p', [-8,8], 6, innerapprox = True) 
+safe = pspace.box2pred(mgr, 'p', [-8,8], 6, innerapprox = True)
 
-inv = cpre(safe)
-game = SafetyGame(cpre, safe)
-inv, steps = game.step()
+game = SafetyGame(csys, safe)
+inv, steps = game.step() 
 
 print("Safe Size:", system.mgr.count(safe, 12))
 print("Invariant Size:", system.mgr.count( inv, 12))
 print("Game Steps:", steps)
 
-# plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
+plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
+# plot3D(system.mgr, ('v', vspace), ('p', pspace), ('a', aspace), inv)

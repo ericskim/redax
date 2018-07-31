@@ -1,4 +1,4 @@
-from vpax.symbolicinterval import *
+from vpax.spaces import *
 from dd.cudd import BDD 
 
 from pytest import approx, raises 
@@ -16,6 +16,7 @@ def test_dynamic_regular():
     x = DynamicPartition(-2.0, 2.0)
     assert x.pt2bv(-2.0,3) == (False, False, False)
     assert x.pt2bv(2.0,3) == (True, True, True)
+    assert x.pt2bv(-1, 1) == (False,)
     assert x.pt2box(-.1, 3) == (approx(-.5), approx(0))
     assert x.pt2box(.6, 3) == (approx(.5), approx(1.0))
     assert x.pt2box(.6, nbits = 4) == (approx(.5), approx(.75))
@@ -27,7 +28,6 @@ def test_dynamic_regular():
 
     with raises(AssertionError):
         x.pt2bv(3, 1)
-        x.pt2bv(-1, 1) 
 
     # Inner approximation tests
     assert set(x.box2bvs((.4,.6), 2, innerapprox=True)) == set([])
@@ -40,7 +40,7 @@ def test_dynamic_regular():
     assert set(x.box2bvs((.99,1.01), 2, innerapprox=False)) == {(True,False), (True,True)}
 
     # BDD creation
-    assert x.box2pred(mgr, "x", (.4,.6), 1, True) == mgr.false
+    assert x.conc2pred(mgr, "x", (.4,.6), 1, True) == mgr.false
     # assert x.pt2bv(-2.000000000000001, 3) == (False, False, False)
 
 def test_dynamic_periodic():
@@ -57,8 +57,8 @@ def test_dynamic_periodic():
                                                               (False,False), 
                                                               (False, True)} 
 
-    assert x.box2pred(mgr, 'x', (1,19), 3) == mgr.true
-    assert x.box2pred(mgr, 'x', (19,1), 3, True) == mgr.false
+    assert x.conc2pred(mgr, 'x', (1,19), 3) == mgr.true
+    assert x.conc2pred(mgr, 'x', (19,1), 3, True) == mgr.false
 
 def test_fixed_regular():
     x = FixedPartition( -3, 7, 13)
@@ -106,6 +106,29 @@ def test_fixed_periodic():
 
 def test_discrete():
     pass
+
+def test_embedded_grid():
+    x = EmbeddedGrid(10, 50, 21) 
+    assert x.num_bits == 5
+    assert x.pt2index(24) == 7 #(24-10)/2
+    assert x.pt2index(22.9, snap = True) == 6
+    assert x.pt2index(25.1, snap = True) == 8
+
+    with raises(ValueError):
+        x.pt2index(23)
+    with raises(ValueError):
+        EmbeddedGrid(40,50,0)
+    with raises(ValueError):
+        EmbeddedGrid(50,40,3)
+    with raises(ValueError):
+        EmbeddedGrid(40,50,1)
+
+    # Snapping to nearest from out of range 
+    assert x.pt2index(9, snap = True) == 0
+    assert x.pt2index(60, snap = True) == 20 
+
+    EmbeddedGrid(10,10,1)
+
 
 def test_utils():
     # Regular intervals 

@@ -1,6 +1,6 @@
 import itertools
 
-import vpax.symbolicinterval as si
+import vpax.spaces as si
 
 class AbstractModule(object):
     """
@@ -21,6 +21,8 @@ class AbstractModule(object):
 
         self._in  = inputs 
         self._out = outputs
+        self.mgr = mgr
+        self._iospace = self.inspace() & self.outspace()
 
         if not set(self._in).isdisjoint(self._out):
             raise ValueError("A variable cannot be both an input and output")
@@ -28,8 +30,8 @@ class AbstractModule(object):
         if any(var.isalnum() is False for var in self.vars):
             raise ValueError("Only alphanumeric strings are accepted as variable names")
 
-        self.mgr = mgr
-        self.pred = self.mgr.true if pred is None else pred # FIXME: Change this to inspace => outspace 
+
+        self.pred = self._iospace if pred is None else pred
 
     def __repr__(self):
         s = "Input Grids:\n"
@@ -78,50 +80,98 @@ class AbstractModule(object):
             allocbits[prefix].append(bitvar)
         return allocbits
 
-    @property
+    def inspace(self):
+        """
+        Input space predicate
+
+        Returns:
+            bdd: Predicate corresponding to the Cartesian product of each input space. 
+        """
+        space = self.mgr.true
+        for var in self.inputs:
+            space &= self.inputs[var].abs_space(self.mgr, var)
+        return space
+
+    def outspace(self):
+        """
+        Output space predicate 
+
+        Returns:
+            bdd: Predicate corresponding to the Cartesian product of each output space. 
+        """
+        space = self.mgr.true
+        for var in self.outputs:
+            space &= self.outputs[var].abs_space(self.mgr, var)
+        return space
+
     def nonblock(self):
-        # TODO: Change so that it outputs a module and uses the output hiding operator instead. 
+        """
+        Returns a predicate of the inputs for which there exists an associated output. 
+
+        Returns:
+            bdd: Predicate for exists x'. (system /\ outspace(x'))
+        
+        Equivalent to hiding all module outputs and obtaining the predicate 
+        """
         elim_bits = []
         for k in self._out:
             elim_bits += self.pred_bitvars[k]
-        return self.mgr.exist(elim_bits, self.pred) 
+        return self.mgr.exist(elim_bits, self.pred & self.outspace()) 
 
-    def ioimplies2pred(self, hyperbox, **kwargs):
+    def constrained_inputs(self):
         """
-        Returns the implication (input box => output box) 
+        Inputs withough fully nondeterministic outputs
+
+        Returns:
+            bdd: Predicate for forall x'. (outspace(x') => system)
+        """
+        elim_bits = []
+        for k in self._out:
+            elim_bits += self.pred_bitvars[k]
+        return self.mgr.forall(elim_bits, ~self.outspace() | self.pred)
+
+
+    def ioimplies2pred(self, concrete, **kwargs):
+        """
+        Returns the implication (input box => output box)
 
         Splits the hypberbox into input, output variables
         If the input/output boxes don't align with the grid then:
             - The input box is contracted 
             - The output box is expanded
 
-        If the hyperbox is underspecified, then it generates a hyperinterval embedded in a lower dimension 
+        If the concrete is underspecified, then it generates a hyperinterval embedded in a lower dimension
         """
         
-        in_bdd = self.mgr.true # FIXME: Errors if using fixed intervals with non-power of two 
-        out_bdd = self.mgr.true 
-        for var in hyperbox.keys():
+        in_bdd  = self.inspace() 
+        out_bdd = self.outspace()
+        for var in concrete.keys():
             if isinstance(self[var], si.DynamicPartition):
                 nbits = kwargs['precision'][var]
                 assert nbits >= 0 
                 if var in self._in:
-                    in_bdd  &= self[var].box2pred(self.mgr, var, hyperbox[var],
+                    in_bdd  &= self[var].conc2pred(self.mgr, var, concrete[var],
                                                  nbits, innerapprox = True)
                 else:
-                    out_bdd &= self[var].box2pred(self.mgr, var, hyperbox[var],
+                    out_bdd &= self[var].conc2pred(self.mgr, var, concrete[var],
                                                  nbits, innerapprox = False)
             elif isinstance(self[var], si.FixedPartition):
                 if var in self._in:
-                    in_bdd  &= self[var].box2pred(self.mgr, var, hyperbox[var],
+                    in_bdd  &= self[var].conc2pred(self.mgr, var, concrete[var],
                                                     innerapprox = True)
                 else:
-                    out_bdd &= self[var].box2pred(self.mgr, var, hyperbox[var],
-                                                    innerapprox = False)
+                    out_bdd &= self[var].conc2pred(self.mgr, var, concrete[var],
+                                                    innerapprox = False) 
+            elif isinstance(self[var], si.EmbeddedGrid):
+                if var in self._in:
+                    in_bdd  &= self[var].conc2pred(self.mgr, var, concrete[var])
+                else:
+                    out_bdd &= self[var].conc2pred(self.mgr, var, concrete[var])
             else:
                 raise NotImplementedError 
 
         return (~in_bdd | out_bdd)
-
+        
     def iopair2pred(self, hyperbox, **kwargs):
         """
         Returns the pair (input box AND output box) 
@@ -134,7 +184,7 @@ class AbstractModule(object):
         If the hyperbox is underspecified, then it generates a hyperinterval embedded in a lower dimension
         """
         
-        io_bdd = self.mgr.true # FIXME: Errors if using fixed intervals with non-power of two 
+        io_bdd = self._iospace
         for var in hyperbox.keys():
             if isinstance(self[var], si.DynamicPartition):
                 nbits = kwargs['precision'][var]
@@ -167,19 +217,17 @@ class AbstractModule(object):
         iters = [v.conc_iter(precision[k]) for k,v in self.inputs.items()]
         for i in itertools.product(*iters):
             yield {names[j]: i[j] for j in range(numin)}
-        
-    def input_space_pred(self):
-        raise NotImplementedError
-    
-    def output_space_pred(self):
-        raise NotImplementedError 
 
     def count_io(self, bits):
         return self.mgr.count(self.pred, bits)
 
     def hide(self, elim_vars):
         """
-        Hides an output variable and returns another module 
+        Hides an output variable and returns another module
+
+        Args:
+            elim_vars: Iterable of output variable names
+        
         """
 
         if any(var not in self._out for var in elim_vars):
@@ -195,7 +243,7 @@ class AbstractModule(object):
         return AbstractModule(self.mgr, 
                               self.inputs.copy(),
                               newoutputs,
-                              self.mgr.exist(elim_bits, self.pred))
+                              self.mgr.exist(elim_bits, self.pred & self._iospace))
     
     def __le__(self,other):
         """
@@ -203,10 +251,12 @@ class AbstractModule(object):
         """
         raise NotImplementedError
 
+
     
     def __rshift__(self, other):
         """
         Serial composition self >> other by feeding self's output into other's input
+        Also an output renaming operator
         """
         if isinstance(other, tuple):
             # Renaming an output  
@@ -253,8 +303,8 @@ class AbstractModule(object):
             # Flattens list of lists to a single list
             flatten = lambda l: [item for sublist in l for item in sublist]
 
-            # Compute forall outputvars . (self.pred => other.nonblock)
-            nonblocking = ~self.pred | other.nonblock 
+            # Compute forall outputvars . (self.pred => other.nonblock())
+            nonblocking = ~self.outspace() | ~self.pred | other.nonblock()
             elim_bits   = set(flatten([self.pred_bitvars[k] for k in self._out]))
             elim_bits  |= set(flatten([other.pred_bitvars[k] for k in other._out]))
             elim_bits  &= nonblocking.support
@@ -265,10 +315,11 @@ class AbstractModule(object):
         else:
             raise TypeError 
 
-    # Serial composition being fed by other 
     def __rrshift__(self, other):
         """
-        Serial composition by feeding other output into self input 
+        Input renaming operator via serial composition notation 
+
+        Example: module = ("a", "b") >> module
         """
         if isinstance(other, tuple):
             # Renaming an input 
