@@ -49,8 +49,6 @@ def test_dynamic_periodic():
     assert x.pt2bv(11,4) == (True, True, False, False)
     assert x.pt2bv(19+20,4) == (True, False, False, False)
 
-
-
     # Wrap around
     assert set(x.box2bvs((17, 7), 2, innerapprox=True)) == {(False,False)}
     assert set(x.box2bvs((17, 7), 2, innerapprox=False)) == {(True, False), 
@@ -113,6 +111,9 @@ def test_embedded_grid():
     assert x.pt2index(24) == 7 #(24-10)/2
     assert x.pt2index(22.9, snap = True) == 6
     assert x.pt2index(25.1, snap = True) == 8
+
+    mgr = BDD() 
+    assert(mgr.count(x.abs_space(mgr, 'x'), 5)) == 21
 
     with raises(ValueError):
         x.pt2index(23)

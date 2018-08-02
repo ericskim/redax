@@ -2,7 +2,9 @@
 # Visualize BDD sets in 2D or 3D
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-import numpy as np 
+import numpy as np
+
+from vpax.spaces import _bv2int, _graytobin
 
 def _name(i):
     return i.split('_')[0]
@@ -58,7 +60,7 @@ def plot2D(mgr, xspace, yspace, pred):
         xbv = [pt[bit] for bit in xvars]
         ybv = [pt[bit] for bit in yvars]
 
-        xpts.append(xgrid.bv2box(xbv)) 
+        xpts.append(xgrid.bv2box(xbv))
         ypts.append(ygrid.bv2box(ybv))
     
     fig, ax = plt.subplots()
@@ -109,7 +111,11 @@ def plot3D(mgr, xspace, yspace, zspace, pred, opacity=40):
         ybv = [pt[bit] for bit in yvars]
         zbv = [pt[bit] for bit in zvars]
 
-        mask[bv2int(xbv), bv2int(ybv), bv2int(zbv)] = True 
+        x_idx = _bv2int(xbv) if xgrid.periodic == False else _graytobin(_bv2int(xbv))
+        y_idx = _bv2int(ybv) if ygrid.periodic == False else _graytobin(_bv2int(ybv))
+        z_idx = _bv2int(zbv) if zgrid.periodic == False else _graytobin(_bv2int(zbv))
+
+        mask[x_idx, y_idx, z_idx] = True
         
     fig = plt.figure()
     ax = fig.gca(projection='3d')
@@ -152,11 +158,11 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
     xbins = 2**xbits
     ybins = 2**ybits
     zbins = 2**zbits 
-    # Voxel corners 
-    x, y, z = np.indices((xbins+1, ybins+1, zbins+1))
-    x = (x * (xgrid.ub - xgrid.lb)/xbins) + xgrid.lb
-    y = (y * (ygrid.ub - ygrid.lb)/ybins) + ygrid.lb
-    z = (z * (zgrid.ub - zgrid.lb)/zbins) + zgrid.lb
+    # # Voxel corners 
+    # x, y, z = np.indices((xbins+1, ybins+1, zbins+1))
+    # x = (x * (xgrid.ub - xgrid.lb)/xbins) + xgrid.lb
+    # y = (y * (ygrid.ub - ygrid.lb)/ybins) + ygrid.lb
+    # z = (z * (zgrid.ub - zgrid.lb)/zbins) + zgrid.lb
 
     # Construct bitmask
     mask = np.full((xbins, ybins, zbins), False)
@@ -175,8 +181,12 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
         ybv = [pt[bit] for bit in yvars]
         zbv = [pt[bit] for bit in zvars]
 
-        mask[bv2int(xbv), bv2int(ybv), bv2int(zbv)] = True 
+        x_idx = _bv2int(xbv) if xgrid.periodic == False else _graytobin(_bv2int(xbv))
+        y_idx = _bv2int(ybv) if ygrid.periodic == False else _graytobin(_bv2int(ybv))
+        z_idx = _bv2int(zbv) if zgrid.periodic == False else _graytobin(_bv2int(zbv))
 
+        mask[x_idx, y_idx, z_idx] = True
+    
     d2 = np.empty(mask.shape + (4,), dtype=np.ubyte)
     d2[..., 0] = mask.astype(np.float) * 255
     d2[..., 1] = mask.astype(np.float) * 255
@@ -184,19 +194,17 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
     d2[..., 3] = mask.astype(np.float) * opacity
 
     v = gl.GLVolumeItem(d2, smooth = False)
-    v.translate(-centerspace(xgrid), 
-                -centerspace(ygrid),
-                -centerspace(zgrid))
+    v.translate(-xbins//2, 
+                -ybins//2,
+                -zbins//2)
     w.addItem(v)
 
     g = gl.GLGridItem()
-    g.scale(10, 10, 1)
-    g.translate(-centerspace(xgrid), 
-                -centerspace(ygrid),
-                -centerspace(zgrid))
+    g.scale(xbins//10, ybins//10, zbins//10)
     w.addItem(g)
 
-    # ax = gl.GLAxisItem()
-    # w.addItem(ax)
+    ax = gl.GLAxisItem()
+    w.addItem(ax)
 
     QtGui.QApplication.instance().exec_()
+    

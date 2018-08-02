@@ -16,7 +16,7 @@ from vpax.controlmodule import to_control_module
 import matplotlib.pyplot as plt
 
 ts = .2
-k = .03
+k = .1
 g = 9.8
 
 mgr = BDD()
@@ -45,13 +45,6 @@ precision = {'p': 6, 'v':6, 'a': 6, 'pnext': 6, 'vnext': 6}
 bittotal = sum(precision.values()) 
 outorder = {0: 'pnext', 1: 'vnext'}
 
-def detect_violation(ll, ur):
-    if ll[0] < bounds['p'][0] or ll[1] < bounds['v'][0]:
-        return True
-    if ur[0] > bounds['p'][1] or ur[1] > bounds['v'][1]:
-        return True
-    return False 
-
 # Sample generator 
 numapplied = 0
 out_of_domain_violations = 0
@@ -67,14 +60,13 @@ for iobox in system.input_iter({'p': 3, 'v':4, 'a': 3}):
     ur = dynamics(**f_right)
     outbox = {outorder[i]: (ll[i], ur[i]) for i in range(2)}
     iobox.update(outbox)
-
-    # Detect output domain violation 
-    if detect_violation(ll,ur):
+    
+    # Apply 3d constraint
+    try:
+        system.pred &= system.ioimplies2pred(iobox, precision = precision) 
+    except AssertionError:
         out_of_domain_violations +=1
         continue
-    
-    # Apply 3d constraint 
-    system.pred &= system.ioimplies2pred(iobox, precision = precision) 
 
     # Apply 2d constraint to slices. Identical to parallel update.
     # system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
@@ -107,23 +99,25 @@ while(numapplied < 4000):
     ur = dynamics(**f_right)
     outbox = {outorder[i]: (ll[i], ur[i]) for i in range(2)}
     iobox.update(outbox)
-
-    # Detect output domain violation 
-    if detect_violation(ll,ur):
+    
+    try: 
+        # Apply 3d constraint, even though the system has lower dimensions
+        # system.pred &= system.ioimplies2pred(iobox, precision = precision)
+        
+        # Apply 2d constraint to slices. Identical to parallel update.
+        system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
+        system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+    except AssertionError:
         out_of_domain_violations +=1
         continue
-    
-    # Apply 3d constraint, even though the system has lower dimensions
-    # system.pred &= system.ioimplies2pred(iobox, precision = precision)
-
-    # Apply 2d constraint to slices. Identical to parallel update. 
-    system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
-    system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
 
     numapplied += 1
 
     if numapplied % 500 == 0:
-        print("(samples, I/O % transitions) --- ({0}, {1})".format(numapplied, 100*system.count_io(bittotal)/possible_transitions))
+        iotrans = system.count_io(bittotal)
+        print("(samples, I/O % transitions,bddsize) --- ({0}, {1:.3}, {2})".format(numapplied, 
+                                                            100*iotrans/possible_transitions,
+                                                            len(system.pred)))
     
 print("# I/O Transitions: ", system.count_io(bittotal))
 print("# Out of Domain errors:", out_of_domain_violations) 
@@ -132,7 +126,7 @@ print("# Out of Domain errors:", out_of_domain_violations)
 csys = to_control_module(system, (('p', 'pnext'), ('v','vnext')))
 
 # Declare safe set 
-safe = pspace.box2pred(mgr, 'p', [-8,8], 6, innerapprox = True)
+safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox = True)
 
 game = SafetyGame(csys, safe)
 inv, steps = game.step() 

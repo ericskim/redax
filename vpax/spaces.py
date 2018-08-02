@@ -27,10 +27,16 @@ def find_nearest(array,value):
         return idx
 
 def _bintogray(x:int):
+    """
+    Converts a binary encoded positive integer into gray code 
+    """
     assert x >= 0 
     return x ^ (x >> 1)
 
 def _graytobin(x:int):
+    """
+    Converts a gray code encoded positive integer into the standard binary encoding 
+    """
     assert x >= 0
     mask = x >> 1
     while(mask != 0):
@@ -42,26 +48,19 @@ def _int2bv(index:int, nbits:int):
     """
     A really high nbits just right pads the bitvector with "False"
     """
-    # bv = [False] * nbits
-    # for i in range(nbits):
-    #     if ((index >> i) % 2 == 1):
-    #         bv[nbits-1-i] = True
-    #     # else:
-    #     #     bv[]
-    # return bv 
 
     return tuple(True if ((index >> i) % 2 == 1) else False for i in range(nbits-1,-1,-1))
 
 def _bv2int(bv):
     """
-    Converts bitvector (list or tuple) into an integer 
+    Converts bitvector (list or tuple) with the standard binary encoding into an integer
     """
     nbits = len(bv)
     index = 0
     for i in range(nbits):
         if bv[i]:
             index += 2**(nbits - i - 1)
-    return index 
+    return index
 
 def increment_bv(bv, increment, graycode = False, saturate = False):
     """
@@ -173,8 +172,8 @@ class DiscreteSet(SymbolicSet):
         return (0, self.num_vals-1)
 
     def __repr__(self):
-        s = "Discrete Interval, "
-        s += "Bounds: [0,...,{0}], ".format(str(self.num_vals-1))
+        s = "Discrete Set, "
+        s += "Bounds: [0,...,{0}]".format(str(self.num_vals-1))
         return s
 
     def abs_space(self, mgr, name):
@@ -197,14 +196,15 @@ class DiscreteSet(SymbolicSet):
 class EmbeddedGrid(DiscreteSet):
     """
     A discrete grid of points embedded in continuous space
+
+    Args:
+        left (float): Left point (inclusive)
+        right (float): Right point (inclusive)
+        num (int): Number of points
+
+    EmbeddedGrid(-2,2,4) corresponds with points [-2, -2/3, 2/3, 2]
     """
     def __init__(self, left, right, num):
-        """
-        Args:
-            left:
-            right:
-            num:
-        """
         if num <= 0:
             raise ValueError("Grid must have at least one point")
         if left > right:
@@ -256,8 +256,11 @@ class EmbeddedGrid(DiscreteSet):
         """
         Iterable of points 
         """
-        raise NotImplementedError
+        return self.pts
     
+    def __repr__(self):
+        s = "Embedded Grid({0},{1},{2})".format(str(self.left), str(self.right), str(self.num_vals))
+        return s
 
 class ContinuousPartition(SymbolicSet):
     """
@@ -273,6 +276,9 @@ class ContinuousPartition(SymbolicSet):
     @property
     def bounds(self):
         return (self.lb, self.ub)
+
+    def width(self):
+        return self.ub - self.lb
 
     def _wrap(self, point):
         """
@@ -313,17 +319,22 @@ class ContinuousPartition(SymbolicSet):
 
 class DynamicPartition(ContinuousPartition):
     """
-    Unlike Fixed, all bits assignments are considered valid and correspond to a quad/oct-ant of the space
+    Dynamically partitions the space with a variable number of bits. 
+    Number of partitions is always a power of two. 
 
+    Args:
+        lb (float): Lower bound of interval being partitioned
+        ub (float): Upper bound of interval being partitioned
+        periodic (bool): If true, uses gray code encoding. 
     """
     def __init__(self, lb, ub, periodic = False):
         ContinuousPartition.__init__(self, lb, ub, periodic)
 
     def __repr__(self):
-        s = "Dynamic, "
-        s += "Bounds: {0} ".format(str(self.bounds))
-        if self.periodic:
-            s += ", Periodic"
+        s = "DynamicPartition({0}, {1}, periodic={2})".format(self.lb, self.ub, self.periodic)
+        # s += "Bounds: {0} ".format(str(self.bounds))
+        # if self.periodic:
+        #     s += ", Periodic"
         return s
 
     def abs_space(self, mgr, name = None):
@@ -404,10 +415,10 @@ class DynamicPartition(ContinuousPartition):
             right_bv = self.pt2bv(right + abs_tol, nbits, tol = abs_tol)
             if left_bv == right_bv: # In same box e.g. [.4,.6] <= [0,1]
                 return [] 
-            left_bv = increment_bv(left_bv, 1, self.periodic, saturate= True)
+            left_bv = increment_bv(left_bv, 1, self.periodic, saturate = True)
             if left_bv == right_bv: # Adjacent boxes [.4,.6] overlaps [0,.5] and [.5,1]
                 return []
-            right_bv = increment_bv(right_bv, -1, self.periodic, saturate= True)
+            right_bv = increment_bv(right_bv, -1, self.periodic, saturate = True)
         else:
             left_bv  = self.pt2bv(left - abs_tol, nbits = nbits, tol = abs_tol)
             right_bv = self.pt2bv(right + abs_tol, nbits = nbits, tol = abs_tol)
@@ -430,7 +441,7 @@ class DynamicPartition(ContinuousPartition):
         """ 
 
         predbox = mgr.false
-        for bv in self.box2bvs(box, nbits, innerapprox, tol): 
+        for bv in self.box2bvs(box, nbits, innerapprox, tol):
             predbox |= bv2pred(mgr, name, bv)
 
         assert len(predbox.support) <= nbits, "Support " + str(predbox.support) + "exceeds " + nbits + " bits"
@@ -477,11 +488,7 @@ class FixedPartition(ContinuousPartition):
         return math.ceil(math.log2(self.bins))
 
     def __repr__(self):
-        s = "Fixed, "
-        s += "Bounds: {0}, ".format(str(self.bounds))
-        s += "# Bins: " + str(self.bins) 
-        if self.periodic:
-            s += ", Periodic"
+        s = "FixedPartition({0}, {1}, bins = {2}, periodic={3})".format(self.lb, self.ub, self.bins, self.periodic)
         return s
 
     def abs_space(self, mgr, name = None):

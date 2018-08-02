@@ -59,7 +59,10 @@ def test_dynamic_module():
     # Series composition with disjoint I/O yields parallel composition 
     assert (g >> h) == (g | h) 
 
-
+    # Out of bounds errors 
+    with raises(AssertionError):
+        g.pred &= g.ioimplies2pred( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,4.6)}, precision = precision)
+    
 def test_mixed_module():
 
     from dd.cudd import BDD

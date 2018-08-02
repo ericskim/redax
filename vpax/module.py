@@ -1,6 +1,6 @@
 import itertools
 
-import vpax.spaces as si
+import vpax.spaces as sp
 
 class AbstractModule(object):
     """
@@ -120,7 +120,7 @@ class AbstractModule(object):
 
     def constrained_inputs(self):
         """
-        Inputs withough fully nondeterministic outputs
+        Inputs with fully nondeterministic outputs
 
         Returns:
             bdd: Predicate for forall x'. (outspace(x') => system)
@@ -131,22 +131,50 @@ class AbstractModule(object):
         return self.mgr.forall(elim_bits, ~self.outspace() | self.pred)
 
 
+    def _newinputs(self, inputpred):
+        """
+        
+        Args:
+            inputpred (bdd): Inputs
+
+        Returns:
+            bdd: (~self.nonblock() & inputpred & self.inspace())
+
+        Assumes that inputpred is actually a predicate over the input space alone.
+
+        An input predicate can include inputs that are not currently covered by the current
+        abstraction's nonblocking inputs. This method identifies the new region. 
+        """
+        # TODO: Check that predicate is actually an input predicate! 
+        return ~self.nonblock() & inputpred & self.inspace()
+
     def ioimplies2pred(self, concrete, **kwargs):
         """
         Returns the implication (input box => output box)
+
+        Args:
+            - concrete (dict): Keys are variable names, values are concrete instances of that variable
+            - kwargs: Arguments that are specific to each input/output space's conc2pred method
+
+        Returns:
+            bdd: Implication (input pred => output pred)
 
         Splits the hypberbox into input, output variables
         If the input/output boxes don't align with the grid then:
             - The input box is contracted 
             - The output box is expanded
 
-        If the concrete is underspecified, then it generates a hyperinterval embedded in a lower dimension
+        TODO: 
+        Change this to get
+            pred = (pred | (~nb & ibox)) & (ibox => obox)
+
+        If concrete is underspecified, then it generates a hyperinterval embedded in a lower dimension
         """
         
         in_bdd  = self.inspace() 
         out_bdd = self.outspace()
         for var in concrete.keys():
-            if isinstance(self[var], si.DynamicPartition):
+            if isinstance(self[var], sp.DynamicPartition):
                 nbits = kwargs['precision'][var]
                 assert nbits >= 0 
                 if var in self._in:
@@ -155,23 +183,24 @@ class AbstractModule(object):
                 else:
                     out_bdd &= self[var].conc2pred(self.mgr, var, concrete[var],
                                                  nbits, innerapprox = False)
-            elif isinstance(self[var], si.FixedPartition):
+            elif isinstance(self[var], sp.FixedPartition):
                 if var in self._in:
                     in_bdd  &= self[var].conc2pred(self.mgr, var, concrete[var],
                                                     innerapprox = True)
                 else:
                     out_bdd &= self[var].conc2pred(self.mgr, var, concrete[var],
-                                                    innerapprox = False) 
-            elif isinstance(self[var], si.EmbeddedGrid):
+                                                    innerapprox = False)
+            elif isinstance(self[var], sp.EmbeddedGrid):
                 if var in self._in:
                     in_bdd  &= self[var].conc2pred(self.mgr, var, concrete[var])
                 else:
                     out_bdd &= self[var].conc2pred(self.mgr, var, concrete[var])
             else:
-                raise NotImplementedError 
+                raise TypeError  
+
 
         return (~in_bdd | out_bdd)
-        
+
     def iopair2pred(self, hyperbox, **kwargs):
         """
         Returns the pair (input box AND output box) 
@@ -186,7 +215,7 @@ class AbstractModule(object):
         
         io_bdd = self._iospace
         for var in hyperbox.keys():
-            if isinstance(self[var], si.DynamicPartition):
+            if isinstance(self[var], sp.DynamicPartition):
                 nbits = kwargs['precision'][var]
                 assert type(nbits) == int 
                 if var in self._in:
@@ -196,7 +225,7 @@ class AbstractModule(object):
                     io_bdd &= self[var].box2pred(self.mgr, var, hyperbox[var],
                                                  nbits, innerapprox = False)
             else:
-                raise NotImplementedError
+                raise TypeError
 
         return io_bdd
 
@@ -209,12 +238,13 @@ class AbstractModule(object):
 
         Returns:
 
-
         Implementation assumes dictionary ordering is stable
         """
         numin = len(self.inputs)
-        names = tuple(self.inputs.keys())
-        iters = [v.conc_iter(precision[k]) for k,v in self.inputs.items()]
+        names = [k for k,v in self.inputs.items() if isinstance(v, sp.DynamicPartition)]
+        names += [k for k,v in self.inputs.items() if not isinstance(v, sp.DynamicPartition)]
+        iters = [v.conc_iter(precision[k]) for k,v in self.inputs.items() if isinstance(v, sp.DynamicPartition)]  #FIXME: not everything has a precision!!!
+        iters += [v.conc_iter() for k,v in self.inputs.items() if not isinstance(v, sp.DynamicPartition)]
         for i in itertools.product(*iters):
             yield {names[j]: i[j] for j in range(numin)}
 
@@ -250,8 +280,6 @@ class AbstractModule(object):
         Checks for a feedback refinement relation between two modules
         """
         raise NotImplementedError
-
-
     
     def __rshift__(self, other):
         """
