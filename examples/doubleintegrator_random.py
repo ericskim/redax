@@ -55,7 +55,7 @@ system = pcomp | vcomp
 precision = {'p': 6, 'v':6, 'a': 6, 'pnext': 6, 'vnext': 6}
 bittotal = sum(precision.values())
 outorder = {0: 'pnext', 1: 'vnext'}
-possible_transitions = (pcomp | vcomp).count_io(bittotal)
+possible_transitions = (pcomp | vcomp).count_io_space(bittotal)
 
 # Sample generator 
 numapplied = 0
@@ -83,15 +83,16 @@ while(numapplied < 4000):
 
     try: 
         # Apply 3d constraint
-        # system.pred &= system.ioimplies2pred(iobox, precision = precision)
+        system.apply_abstract_transitions(iobox, precision = precision)
 
         # Apply 2d constraint to slices. Identical to parallel update but cannot be decomposed later 
-        # system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
-        # system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
+        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
         
         # Apply constraint to parallel updates 
-        pcomp.pred &= pcomp.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
-        vcomp.pred &= vcomp.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+        pcomp.apply_abstract_transitions({k:v for k,v in iobox.items() if k in pcomp.vars}, precision = precision)
+        vcomp.apply_abstract_transitions({k:v for k,v in iobox.items() if k in vcomp.vars}, precision = precision)
+
         
     except AssertionError:
         out_of_domain_violations +=1
@@ -116,7 +117,7 @@ while(numapplied < 4000):
         system = pcomp | vcomp 
         print("# samples", numapplied, " --- # I/O transitions", system.count_io(bittotal))
         print("(samples, I/O % transitions) --- ({0}, {1})".format(numapplied, 100*system.count_io(bittotal)/possible_transitions))
-        plot3D_QT(mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred & ~vcomp.constrained_inputs(), 128)
+        plot3D_QT(mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
 
 
 # plot3D(mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred & ~vcomp.constrained_inputs(), 40)

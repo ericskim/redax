@@ -1,10 +1,6 @@
 """
-Symbolic Intervals
+.. module::spaces
 
-# Discrete vs continuous, fixed vs dynamic, linear vs periodic
-
-# discrete => fixed, linear
-# continuous => either linear or periodic, either fixed or dynamic
 
 Nomenclature:
     bv = Bit vector 
@@ -135,9 +131,9 @@ def bv2pred(mgr, name, bv):
     b = mgr.true 
     for i in range(len(bv)):
         if bv[i]:
-            b = b &  mgr.var(name + "_" + str(i))
+            b &=  mgr.var(name + "_" + str(i))
         else:
-            b = b & ~mgr.var(name + "_" + str(i))
+            b &= ~mgr.var(name + "_" + str(i))
     return b
 
 class SymbolicSet(object):
@@ -222,8 +218,7 @@ class EmbeddedGrid(DiscreteSet):
         """
         Args:
             pt  (float): Continuous point to be converted into a bitvector
-            snap (bool): Snaps pt to the nearest discrete point with preference towards greater point.
-                         Otherwise requires exact equality.
+            snap (bool): Snaps pt to the nearest discrete point with preference towards greater point. Otherwise requires exact equality.
 
         Returns:
             int 
@@ -322,12 +317,14 @@ class DynamicPartition(ContinuousPartition):
     Dynamically partitions the space with a variable number of bits. 
     Number of partitions is always a power of two. 
 
-    Args:
-        lb (float): Lower bound of interval being partitioned
-        ub (float): Upper bound of interval being partitioned
-        periodic (bool): If true, uses gray code encoding. 
     """
     def __init__(self, lb, ub, periodic = False):
+        """
+        Args:
+            lb (float): Lower bound of interval being partitioned
+            ub (float): Upper bound of interval being partitioned
+            periodic (bool): If true, uses gray code encoding. 
+        """
         ContinuousPartition.__init__(self, lb, ub, periodic)
 
     def __repr__(self):
@@ -436,14 +433,14 @@ class DynamicPartition(ContinuousPartition):
             name
             box 
             innerapprox - 
-            tol - tolerance for numerical errors as a fraction of the grid size. 
-                     Must lie within [0,1]
+            tol - tolerance for numerical errors as a fraction of the grid size. Must lie within [0,1]
         """ 
+        assert nbits >= 0
 
         predbox = mgr.false
         for bv in self.box2bvs(box, nbits, innerapprox, tol):
             predbox |= bv2pred(mgr, name, bv)
-
+        
         assert len(predbox.support) <= nbits, "Support " + str(predbox.support) + "exceeds " + nbits + " bits"
         return predbox
 
@@ -570,7 +567,7 @@ class FixedPartition(ContinuousPartition):
         if self.periodic and left > right:
             zero_bv = _int2bv(0, self.num_bits)
             max_bv = _int2bv(self.bins-1, self.num_bits)
-            return itertools.chain(bv_interval(zero_bv, right_bv), 
+            return itertools.chain(bv_interval(zero_bv, right_bv),
                                    bv_interval(left_bv, max_bv))
         else: 
             return bv_interval(left_bv, right_bv)

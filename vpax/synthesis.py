@@ -22,11 +22,12 @@ class ControlPre():
         self.swapvars = {i:j for i,j in zip(prebits, self.postbits)} 
 
     def __call__(self, Z, no_inputs = False):
-        """
+        r"""
         Controllable predecessor for target next state set Z(x')
 
         Args:
             Z (bdd):
+            no_inputs (bool): If false then returns a (pre state,control) predicate. If true, returns a pre state predicate.
 
         nonblock /\ forall x'. (sys(x,u,x') => Z(x'))
         """
@@ -159,8 +160,26 @@ class ReachGame():
         return z, i 
 
 class ReachAvoidGame():
-    def __init__(self):
-        pass 
+    def __init__(self, sys, safe, target):
+        self.cpre = ControlPre(sys)
+        self.target = target # TODO: Check if a subset of the state space
+        self.safe = safe 
 
-    def __call__(self):
-        pass
+    def __call__(self, steps = None):
+        raise NotImplementedError
+
+        if steps: 
+            assert steps >= 0
+
+        z = self.cpre.sys.mgr.false
+        zz = self.cpre.sys.mgr.true 
+
+        i = 0
+        while (z != zz):
+            if steps and i == steps:
+                break
+            zz = z
+            z = (zz | self.cpre(zz, no_inputs = True) | self.target) & self.safe
+            i += 1
+                
+        return z, i 

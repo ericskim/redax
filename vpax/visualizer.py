@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 
-from vpax.spaces import _bv2int, _graytobin
+from vpax.spaces import _bv2int, _graytobin, DynamicPartition
 
 def _name(i):
     return i.split('_')[0]
@@ -29,6 +29,12 @@ def bv2int(bv):
         if bv[i]:
             index += 2**(nbits - i - 1)
     return index 
+
+def dynamicperiodic(space):
+    if isinstance(space, DynamicPartition) and space.periodic == True:
+        return True
+    return False
+
 
 #Organize into bitvectors 
 def plot2D(mgr, xspace, yspace, pred):
@@ -111,9 +117,9 @@ def plot3D(mgr, xspace, yspace, zspace, pred, opacity=40):
         ybv = [pt[bit] for bit in yvars]
         zbv = [pt[bit] for bit in zvars]
 
-        x_idx = _bv2int(xbv) if xgrid.periodic == False else _graytobin(_bv2int(xbv))
-        y_idx = _bv2int(ybv) if ygrid.periodic == False else _graytobin(_bv2int(ybv))
-        z_idx = _bv2int(zbv) if zgrid.periodic == False else _graytobin(_bv2int(zbv))
+        x_idx = _bv2int(xbv) if not dynamicperiodic(xgrid) else _graytobin(_bv2int(xbv))
+        y_idx = _bv2int(ybv) if not dynamicperiodic(ygrid) else _graytobin(_bv2int(ybv))
+        z_idx = _bv2int(zbv) if not dynamicperiodic(zgrid) else _graytobin(_bv2int(zbv))
 
         mask[x_idx, y_idx, z_idx] = True
         
@@ -181,9 +187,9 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
         ybv = [pt[bit] for bit in yvars]
         zbv = [pt[bit] for bit in zvars]
 
-        x_idx = _bv2int(xbv) if xgrid.periodic == False else _graytobin(_bv2int(xbv))
-        y_idx = _bv2int(ybv) if ygrid.periodic == False else _graytobin(_bv2int(ybv))
-        z_idx = _bv2int(zbv) if zgrid.periodic == False else _graytobin(_bv2int(zbv))
+        x_idx = _bv2int(xbv) if not dynamicperiodic(xgrid) else _graytobin(_bv2int(xbv))
+        y_idx = _bv2int(ybv) if not dynamicperiodic(ygrid) else _graytobin(_bv2int(ybv))
+        z_idx = _bv2int(zbv) if not dynamicperiodic(zgrid) else _graytobin(_bv2int(zbv))
 
         mask[x_idx, y_idx, z_idx] = True
     

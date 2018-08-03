@@ -1,0 +1,9 @@
+**/*.egg
+**/*.txt
+**/*.cpython
+**/__pycache__
+build/
+*.cache
+*.egg-info
+*.code-workspace
+./docs/**

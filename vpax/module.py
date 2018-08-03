@@ -31,7 +31,8 @@ class AbstractModule(object):
             raise ValueError("Only alphanumeric strings are accepted as variable names")
 
 
-        self.pred = self._iospace if pred is None else pred
+        self._pred = self.mgr.false if pred is None else pred
+        self._nb   = self.mgr.false 
 
     def __repr__(self):
         s = "Input Grids:\n"
@@ -57,7 +58,11 @@ class AbstractModule(object):
             return False
         if self.pred != other.pred:
             return False 
-        return True 
+        return True
+
+    @property
+    def pred(self):
+        return self._pred
 
     @property
     def vars(self):
@@ -76,7 +81,7 @@ class AbstractModule(object):
         s = self.pred.support
         allocbits = {v: [] for v in self.vars}
         for bitvar in s:
-            prefix, index = bitvar.split("_")
+            prefix, _ = bitvar.split("_")
             allocbits[prefix].append(bitvar)
         return allocbits
 
@@ -105,8 +110,8 @@ class AbstractModule(object):
         return space
 
     def nonblock(self):
-        """
-        Returns a predicate of the inputs for which there exists an associated output. 
+        r"""
+        Returns a predicate of the inputs for which there exists an associated output.
 
         Returns:
             bdd: Predicate for exists x'. (system /\ outspace(x'))
@@ -116,7 +121,7 @@ class AbstractModule(object):
         elim_bits = []
         for k in self._out:
             elim_bits += self.pred_bitvars[k]
-        return self.mgr.exist(elim_bits, self.pred & self.outspace()) 
+        return self.mgr.exist(elim_bits, self.pred & self.outspace())
 
     def constrained_inputs(self):
         """
@@ -132,7 +137,7 @@ class AbstractModule(object):
 
 
     def _newinputs(self, inputpred):
-        """
+        r"""
         
         Args:
             inputpred (bdd): Inputs
@@ -148,8 +153,87 @@ class AbstractModule(object):
         # TODO: Check that predicate is actually an input predicate! 
         return ~self.nonblock() & inputpred & self.inspace()
 
-    def ioimplies2pred(self, concrete, **kwargs):
+    def apply_abstract_transitions(self, concrete, **kwargs):
+        r"""
+        Abstracts a concrete I/O transition and applies the abstract transitions to
+        the current system abstraction.
+
+        Args:
+
+        Returns:
+            bool: False if the transition was not applied due to an out of domain error
+
+        Proceeds in two steps:
+            1. Adds fully nondeterministic outputs to any new input transitions
+            2. Constraints input/output pairs corresponding to the concrete transitions
+
+        pred = (pred | (~nb & ibox)) & (ibox => obox)
         """
+        inputs = {k:v for k,v in concrete.items() if k in self.inputs}
+        outputs = {k:v for k,v in concrete.items() if k in self.outputs}
+        inpred = self.concrete_input_to_abs(inputs, **kwargs)
+        outpred = self.concrete_output_to_abs(outputs, **kwargs)
+        
+        self._pred = ((~self._nb & inpred) | self.pred) & (~inpred | outpred)
+        self._nb   = self._nb | inpred
+
+
+    def check(self):
+        """
+        Checks consistency of interval attributes 
+        """
+        raise NotImplementedError 
+
+    def concrete_input_to_abs(self, concrete, **kwargs):
+        r"""
+        Args:
+            - concrete (dict): Keys are variable names, values are concrete instances of that variable
+            - kwargs: Arguments that are specific to each input space's conc2pred method
+        Returns:        
+        """
+        in_bdd  = self.inspace()
+        for var in concrete.keys():
+            if isinstance(self[var], sp.DynamicPartition):
+                bits = kwargs['precision'][var]
+                in_bdd  &= self.inputs[var].conc2pred(self.mgr, var, concrete[var],
+                                                        bits, innerapprox = True)
+            elif isinstance(self[var], sp.FixedPartition):
+                in_bdd  &= self.inputs[var].conc2pred(self.mgr, var, concrete[var],
+                                                                innerapprox = True)
+            elif isinstance(self[var], sp.EmbeddedGrid):
+                in_bdd  &= self.inputs[var].conc2pred(self.mgr, var, concrete[var])
+            else:
+                raise TypeError
+        
+        return in_bdd
+
+    def concrete_output_to_abs(self, concrete, **kwargs):
+        r"""
+        
+        Args:
+            - concrete (dict): Keys are variable names, values are concrete instances of that variable
+            - kwargs: Arguments that are specific to each output space's conc2pred method
+        Returns:
+
+        """
+        out_bdd = self.outspace()
+        for var in concrete.keys():
+            if isinstance(self[var], sp.DynamicPartition):
+                bits = kwargs['precision'][var]
+                out_bdd &= self.outputs[var].conc2pred(self.mgr, var, concrete[var],
+                                                         bits, innerapprox = False)
+            elif isinstance(self[var], sp.FixedPartition):
+                out_bdd &= self.outputs[var].conc2pred(self.mgr, var, concrete[var],
+                                                                innerapprox = False)
+            elif isinstance(self[var], sp.EmbeddedGrid):
+                out_bdd &= self.outputs[var].conc2pred(self.mgr, var, concrete[var])
+            else:
+                raise TypeError
+
+        return out_bdd
+
+    def ioimplies2pred(self, concrete, **kwargs):
+        r"""
         Returns the implication (input box => output box)
 
         Args:
@@ -164,74 +248,18 @@ class AbstractModule(object):
             - The input box is contracted 
             - The output box is expanded
 
-        TODO: 
-        Change this to get
-            pred = (pred | (~nb & ibox)) & (ibox => obox)
-
         If concrete is underspecified, then it generates a hyperinterval embedded in a lower dimension
         """
-        
-        in_bdd  = self.inspace() 
-        out_bdd = self.outspace()
-        for var in concrete.keys():
-            if isinstance(self[var], sp.DynamicPartition):
-                nbits = kwargs['precision'][var]
-                assert nbits >= 0 
-                if var in self._in:
-                    in_bdd  &= self[var].conc2pred(self.mgr, var, concrete[var],
-                                                 nbits, innerapprox = True)
-                else:
-                    out_bdd &= self[var].conc2pred(self.mgr, var, concrete[var],
-                                                 nbits, innerapprox = False)
-            elif isinstance(self[var], sp.FixedPartition):
-                if var in self._in:
-                    in_bdd  &= self[var].conc2pred(self.mgr, var, concrete[var],
-                                                    innerapprox = True)
-                else:
-                    out_bdd &= self[var].conc2pred(self.mgr, var, concrete[var],
-                                                    innerapprox = False)
-            elif isinstance(self[var], sp.EmbeddedGrid):
-                if var in self._in:
-                    in_bdd  &= self[var].conc2pred(self.mgr, var, concrete[var])
-                else:
-                    out_bdd &= self[var].conc2pred(self.mgr, var, concrete[var])
-            else:
-                raise TypeError  
 
-
-        return (~in_bdd | out_bdd)
-
-    def iopair2pred(self, hyperbox, **kwargs):
-        """
-        Returns the pair (input box AND output box) 
-
-        Splits the hypberbox into input, output variables
-        If the input/output boxes don't align with the grid then:
-            - The input box is contracted 
-            - The output box is expanded
-
-        If the hyperbox is underspecified, then it generates a hyperinterval embedded in a lower dimension
-        """
-        
-        io_bdd = self._iospace
-        for var in hyperbox.keys():
-            if isinstance(self[var], sp.DynamicPartition):
-                nbits = kwargs['precision'][var]
-                assert type(nbits) == int 
-                if var in self._in:
-                    io_bdd  &= self[var].box2pred(self.mgr, var, hyperbox[var],
-                                                 nbits, innerapprox = True)
-                else:
-                    io_bdd &= self[var].box2pred(self.mgr, var, hyperbox[var],
-                                                 nbits, innerapprox = False)
-            else:
-                raise TypeError
-
-        return io_bdd
+        inputs = {k:v for k,v in concrete.items() if k in self.inputs}
+        outputs = {k:v for k,v in concrete.items() if k in self.outputs}
+        inpred = self.concrete_input_to_abs(inputs, **kwargs)
+        outpred = self.concrete_output_to_abs(outputs, **kwargs)
+        return (~inpred | outpred)
 
     def input_iter(self, precision):
-        """
-        Exhaustively searches over the input grid
+        r"""
+        Exhaustively searches over the concrete input grid
 
         Args:
             precision: A dictionary 
@@ -243,13 +271,19 @@ class AbstractModule(object):
         numin = len(self.inputs)
         names = [k for k,v in self.inputs.items() if isinstance(v, sp.DynamicPartition)]
         names += [k for k,v in self.inputs.items() if not isinstance(v, sp.DynamicPartition)]
-        iters = [v.conc_iter(precision[k]) for k,v in self.inputs.items() if isinstance(v, sp.DynamicPartition)]  #FIXME: not everything has a precision!!!
+
+        #TODO: This solution is very adhoc!!! Need to find a better way to accommodate keyword arguments 
+        iters = [v.conc_iter(precision[k]) for k,v in self.inputs.items() if isinstance(v, sp.DynamicPartition)] 
         iters += [v.conc_iter() for k,v in self.inputs.items() if not isinstance(v, sp.DynamicPartition)]
+
         for i in itertools.product(*iters):
             yield {names[j]: i[j] for j in range(numin)}
 
     def count_io(self, bits):
         return self.mgr.count(self.pred, bits)
+
+    def count_io_space(self, bits):
+        return self.mgr.count(self._iospace, bits)
 
     def hide(self, elim_vars):
         """

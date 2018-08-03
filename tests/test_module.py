@@ -5,7 +5,7 @@ from dd.cudd import BDD
 import numpy as np 
 
 from vpax.module import AbstractModule
-from vpax.spaces import *
+from vpax.spaces import DynamicPartition, FixedPartition, EmbeddedGrid
  
 
 def test_dynamic_module():
@@ -29,13 +29,14 @@ def test_dynamic_module():
     precision = {'j': 4, 'y': 3, 'r': 3}
     bittotal = sum(precision.values()) 
     
-    assert g.count_io(bittotal) == approx(1024)
-    g.pred &= g.ioimplies2pred( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,3.1)}, precision = precision)
-    assert g.count_io(bittotal) == approx(954) 
-
+    assert g.count_io_space(bittotal) == approx(1024)
+    assert g.count_io(bittotal) == approx(0)
+    g.apply_abstract_transitions( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,3.1)}, precision = precision)
+    assert g.count_io(bittotal) == approx(42) # = 7 * 2 * 3
+    
     # Adding same transitions twice does nothing 
     oldpred = g.pred
-    g.pred &= g.ioimplies2pred( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,3.1)}, precision = precision)
+    g.apply_abstract_transitions( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,3.1)}, precision = precision)
     assert g.pred == oldpred 
 
     assert (g).pred.support == {'j_0', 'j_1', 'j_2', 'j_3',
@@ -45,8 +46,8 @@ def test_dynamic_module():
                                                      'y_0', 'y_1', 'y_2',
                                                      'z_0', 'z_1', 'z_2'}
 
-    assert g.nonblock() == mgr.true # No inputs block
-    assert g.nonblock() == (g.hide(g.outputs).pred)
+    assert g.nonblock() == g.concrete_input_to_abs({'j': (3.,10.), 'y': (2.5,3.8)}, precision = precision) # No inputs block
+    assert g.nonblock() == (g.hide(g.outputs).pred) 
 
     # Identity test for input and output renaming 
     assert ((g  >> ('r', 'z') ) >> ('z','r')) == g

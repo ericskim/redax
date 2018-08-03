@@ -107,43 +107,40 @@ dubins = (dubins_x | dubins_y | dubins_theta)
 
 precision = {'x': 6,
              'y':6,
-             'theta': 5,
+             'theta': 6,
              'xnext': 6,
              'ynext': 6,
-             'thetanext': 5}
-bittotal = sum(precision.values()) + 3 # +3 for the embedded grid bits 
-possible_transitions = dubins.count_io(bittotal)
+             'thetanext': 6}
+bittotal = sum(precision.values()) + 3 # +3 for the discrete embedded grid bits
+possible_transitions = dubins.count_io_space(bittotal)
 
 coarseiter = 0
-coarse_x_errors = 0
-coarse_y_errors = 0
-coarse_theta_errors = 0 
+coarse_errors = {'x':0, 'y':0, 'theta':0}
 errorboxes = []
 for iobox in dubins.input_iter(precision = {'x':4, 'y':4, 'theta':3}):
     # Generate output windows
     iobox['xnext']     = xwindow(**{k:v for k,v in iobox.items() if k in dubins_x.inputs})
     iobox['ynext']     = ywindow(**{k:v for k,v in iobox.items() if k in dubins_y.inputs})
     iobox['thetanext'] = thetawindow(**{k:v for k,v in iobox.items() if k in dubins_theta.inputs})
-
+    
     # Add transitions 
     try:
-        dubins_x.pred &= dubins_x.ioimplies2pred({k:v for k,v in iobox.items() if k in dubins_x.vars},
+        dubins_x.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_x.vars},
                                              precision = precision)
     except AssertionError:
-        coarse_x_errors += 1
-        continue
+        coarse_errors['x'] += 1
 
     try:
-        dubins_y.pred &= dubins_y.ioimplies2pred({k:v for k,v in iobox.items() if k in dubins_y.vars},
+        dubins_y.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_y.vars},
                                             precision = precision)
     except AssertionError:
-        coarse_y_errors +=1
+        coarse_errors['y'] +=1
 
     try: 
-        dubins_theta.pred &= dubins_theta.ioimplies2pred({k:v for k,v in iobox.items() if k in dubins_theta.vars},
-                                             precision = precision)
+        dubins_theta.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_theta.vars},
+                                              precision = precision)
     except AssertionError:
-        coarse_theta_errors += 1 
+        coarse_errors['theta'] += 1
 
     coarseiter += 1
     if coarseiter % 2000 == 0: 
@@ -153,13 +150,13 @@ for iobox in dubins.input_iter(precision = {'x':4, 'y':4, 'theta':3}):
                                                             100*iotrans/possible_transitions,
                                                             len(dubins.pred)))
 
-
 # Sample generator 
 numapplied = 0
 out_of_domain_violations = 0
+random_errors = {'x':0, 'y':0, 'theta':0}
 abs_starttime = time.time()
-while(numapplied < 40000):
-
+while(numapplied < 8000):
+    
     # Shrink window widths over time 
     scale = 1/np.log10(1.0*numapplied+10)
     
@@ -180,17 +177,25 @@ while(numapplied < 40000):
     iobox['ynext']     = ywindow(**{k:v for k,v in iobox.items() if k in dubins_y.inputs})
     iobox['thetanext'] = thetawindow(**{k:v for k,v in iobox.items() if k in dubins_theta.inputs})
 
-    # Add transitions 
+    # Constrain transitions 
     try:
-        dubins_x.pred &= dubins_x.ioimplies2pred({k:v for k,v in iobox.items() if k in dubins_x.vars},
-                                             precision = precision)
-        dubins_y.pred &= dubins_y.ioimplies2pred({k:v for k,v in iobox.items() if k in dubins_y.vars},
-                                             precision = precision)
-        dubins_theta.pred &= dubins_theta.ioimplies2pred({k:v for k,v in iobox.items() if k in dubins_theta.vars},
+        dubins_x.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_x.vars},
                                              precision = precision)
     except AssertionError:
-        out_of_domain_violations += 1
-        continue
+        random_errors['x'] += 1
+
+    try:
+        dubins_y.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_y.vars},
+                                            precision = precision)
+    except AssertionError:
+        random_errors['y'] += 1
+
+    try:
+        dubins_theta.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_theta.vars},
+                                              precision = precision)
+    except AssertionError:
+        # out_of_domain_violations += 1
+        random_errors['theta'] += 1
 
     numapplied += 1
     
@@ -206,23 +211,24 @@ dubins = (dubins_x | dubins_y | dubins_theta)
 csys = to_control_module(dubins, (('x', 'xnext'), ('y','ynext'), ('theta','thetanext')))
 
 # Declare reach set 
-target =  pspace.conc2pred(mgr, 'x', [-.6,.6], 5, innerapprox = True)
-target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 5, innerapprox = True)
+target =  pspace.conc2pred(mgr, 'x', [0,.8], 6, innerapprox = False)
+target &= pspace.conc2pred(mgr, 'y', [-.8,0], 6, innerapprox = False)
 
 game = ReachGame(csys, target)
 starttime = time.time()
 basin, steps = game.step()
 print("Solve Time:", time.time() - starttime)
-print("Reach Size:", dubins.mgr.count(basin, 17))
-print("Target Size:", dubins.mgr.count(target, 17))
+print("Reach Size:", dubins.mgr.count(basin, 18))
+print("Target Size:", dubins.mgr.count(target, 18))
 print("Game Steps:", steps)
 
+# Plot reachable winning set 
 plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), basin, 128)
 
 # Plot x transition relation for v = .5 
-# a = mgr.exist(['v_0'],(dubins_x.pred) & mgr.var('v_0') & ~dubins_x.constrained_inputs())
-# plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), a, 128) 
+a = mgr.exist(['v_0'],(dubins_x.pred) & mgr.var('v_0'))
+plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), a, 128)
 
 # Plot y transition relation for v = .5 
-# a = mgr.exist(['v_0'],(dubins_y.pred) & mgr.var('v_0') & ~dubins_y.constrained_inputs())
-# plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), a, 128)
+a = mgr.exist(['v_0'],(dubins_y.pred) & mgr.var('v_0'))
+plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), a, 128)

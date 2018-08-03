@@ -48,7 +48,7 @@ outorder = {0: 'pnext', 1: 'vnext'}
 # Sample generator 
 numapplied = 0
 out_of_domain_violations = 0
-possible_transitions = system.count_io(bittotal)
+possible_transitions = system.count_io_space(bittotal)
 print("# I/O Transitions: ", possible_transitions)
 for iobox in system.input_iter({'p': 3, 'v':4, 'a': 3}):
 
@@ -63,15 +63,16 @@ for iobox in system.input_iter({'p': 3, 'v':4, 'a': 3}):
     
     # Apply 3d constraint
     try:
-        system.pred &= system.ioimplies2pred(iobox, precision = precision) 
+        system.apply_abstract_transitions(iobox, precision = precision)
     except AssertionError:
         out_of_domain_violations +=1
         continue
 
     # Apply 2d constraint to slices. Identical to parallel update.
-    # system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
-    # system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
-    
+    system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
+    system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+
+
     numapplied += 1
 
     if numapplied % 500 == 0:
@@ -102,11 +103,12 @@ while(numapplied < 4000):
     
     try: 
         # Apply 3d constraint, even though the system has lower dimensions
-        # system.pred &= system.ioimplies2pred(iobox, precision = precision)
-        
+        # system.apply_abstract_transitions(iobox, precision = precision)
+
         # Apply 2d constraint to slices. Identical to parallel update.
-        system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
-        system.pred &= system.ioimplies2pred({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
+        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+
     except AssertionError:
         out_of_domain_violations +=1
         continue
