@@ -83,15 +83,15 @@ while(numapplied < 4000):
 
     try: 
         # Apply 3d constraint
-        system.apply_abstract_transitions(iobox, precision = precision)
+        system.apply_abstract_transitions(iobox, nbits =  precision)
 
         # Apply 2d constraint to slices. Identical to parallel update but cannot be decomposed later 
-        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
-        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, nbits =  precision)
+        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, nbits =  precision)
         
         # Apply constraint to parallel updates 
-        pcomp.apply_abstract_transitions({k:v for k,v in iobox.items() if k in pcomp.vars}, precision = precision)
-        vcomp.apply_abstract_transitions({k:v for k,v in iobox.items() if k in vcomp.vars}, precision = precision)
+        pcomp.apply_abstract_transitions({k:v for k,v in iobox.items() if k in pcomp.vars}, nbits =  precision)
+        vcomp.apply_abstract_transitions({k:v for k,v in iobox.items() if k in vcomp.vars}, nbits =  precision)
 
         
     except AssertionError:
@@ -119,9 +119,6 @@ while(numapplied < 4000):
         print("(samples, I/O % transitions) --- ({0}, {1})".format(numapplied, 100*system.count_io(bittotal)/possible_transitions))
         plot3D_QT(mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
 
-
-# plot3D(mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred & ~vcomp.constrained_inputs(), 40)
-# plot3D_QT(mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred & ~vcomp.constrained_inputs(), 128)
 
 system = pcomp | vcomp
 

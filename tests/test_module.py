@@ -31,12 +31,12 @@ def test_dynamic_module():
     
     assert g.count_io_space(bittotal) == approx(1024)
     assert g.count_io(bittotal) == approx(0)
-    g.apply_abstract_transitions( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,3.1)}, precision = precision)
+    g.apply_abstract_transitions( {'j': (2.9,10.1), 'y': (2.4,3.8), 'r': (2.1,3.1)}, nbits = precision)
     assert g.count_io(bittotal) == approx(42) # = 7 * 2 * 3
     
-    # Adding same transitions twice does nothing 
+    # Adding approximately the same transitions twice does nothing due to quantization 
     oldpred = g.pred
-    g.apply_abstract_transitions( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,3.1)}, precision = precision)
+    g.apply_abstract_transitions( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,3.1)}, nbits = precision)
     assert g.pred == oldpred 
 
     assert (g).pred.support == {'j_0', 'j_1', 'j_2', 'j_3',
@@ -46,7 +46,7 @@ def test_dynamic_module():
                                                      'y_0', 'y_1', 'y_2',
                                                      'z_0', 'z_1', 'z_2'}
 
-    assert g.nonblock() == g.concrete_input_to_abs({'j': (3.,10.), 'y': (2.5,3.8)}, precision = precision) # No inputs block
+    assert g.nonblock() == g.concrete_input_to_abs({'j': (3.,10.), 'y': (2.5,3.8)}, nbits = precision) # No inputs block
     assert g.nonblock() == (g.hide(g.outputs).pred) 
 
     # Identity test for input and output renaming 
@@ -62,7 +62,7 @@ def test_dynamic_module():
 
     # Out of bounds errors 
     with raises(AssertionError):
-        g.pred &= g.ioimplies2pred( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,4.6)}, precision = precision)
+        g.pred &= g.ioimplies2pred( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,4.6)}, nbits = precision)
     
 def test_mixed_module():
 
@@ -86,7 +86,7 @@ def test_mixed_module():
     dubins = AbstractModule(mgr, inputs, outputs) 
 
     dubins.ioimplies2pred( {'v': (3.6,3.7), 'theta': (6,-6), 'y': (2,3), 'ynext': (2.1,3.1)}, 
-                            precision = {'theta': 3}) 
+                            nbits = {'theta': 3}) 
 
     # Test that fixed partitions yield correct space cardinality
     assert mgr.count(dubins.inspace(), 4+4+4+3+2) == 16 * 10 * 16 * 5 * 4

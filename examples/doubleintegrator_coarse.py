@@ -63,14 +63,14 @@ for iobox in system.input_iter({'p': 3, 'v':4, 'a': 3}):
     
     # Apply 3d constraint
     try:
-        system.apply_abstract_transitions(iobox, precision = precision)
+        system.apply_abstract_transitions(iobox, nbits = precision)
     except AssertionError:
         out_of_domain_violations +=1
         continue
 
     # Apply 2d constraint to slices. Identical to parallel update.
-    system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
-    system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+    system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, nbits = precision)
+    system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, nbits = precision)
 
 
     numapplied += 1
@@ -103,11 +103,11 @@ while(numapplied < 4000):
     
     try: 
         # Apply 3d constraint, even though the system has lower dimensions
-        # system.apply_abstract_transitions(iobox, precision = precision)
+        # system.apply_abstract_transitions(iobox, nbits = precision)
 
         # Apply 2d constraint to slices. Identical to parallel update.
-        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, precision = precision)
-        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, precision = precision)
+        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, nbits = precision)
+        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, nbits = precision)
 
     except AssertionError:
         out_of_domain_violations +=1
@@ -139,3 +139,4 @@ print("Game Steps:", steps)
 
 plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
 # plot3D(system.mgr, ('v', vspace), ('p', pspace), ('a', aspace), inv)
+

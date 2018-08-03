@@ -126,19 +126,19 @@ for iobox in dubins.input_iter(precision = {'x':4, 'y':4, 'theta':3}):
     # Add transitions 
     try:
         dubins_x.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_x.vars},
-                                             precision = precision)
+                                             nbits = precision)
     except AssertionError:
         coarse_errors['x'] += 1
 
     try:
         dubins_y.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_y.vars},
-                                            precision = precision)
+                                            nbits = precision)
     except AssertionError:
         coarse_errors['y'] +=1
 
     try: 
         dubins_theta.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_theta.vars},
-                                              precision = precision)
+                                              nbits = precision)
     except AssertionError:
         coarse_errors['theta'] += 1
 
@@ -180,19 +180,19 @@ while(numapplied < 8000):
     # Constrain transitions 
     try:
         dubins_x.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_x.vars},
-                                             precision = precision)
+                                             nbits = precision)
     except AssertionError:
         random_errors['x'] += 1
 
     try:
         dubins_y.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_y.vars},
-                                            precision = precision)
+                                            nbits = precision)
     except AssertionError:
         random_errors['y'] += 1
 
     try:
         dubins_theta.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_theta.vars},
-                                              precision = precision)
+                                              nbits = precision)
     except AssertionError:
         # out_of_domain_violations += 1
         random_errors['theta'] += 1
