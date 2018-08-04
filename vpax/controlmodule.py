@@ -2,9 +2,15 @@
 from bidict import bidict
 from vpax.module import AbstractModule
 
+
+
 def to_control_module(mod, states):
     """
-    Constructs a control module from a generic one. 
+    Constructs a control module from a generic one.
+
+    Args:
+        mod (AbstractModule): Module
+        states: Dictionary or tuple of input/output pairs signifying pre and post states. 
     """
     try: # Dictionary 
         prepost = [(k,v) for k,v in states.items()]
@@ -21,7 +27,7 @@ def to_control_module(mod, states):
     if any(mod.inputs[pre] != mod.outputs[post] for pre,post in prepost):
         raise ValueError("Pre and post state domains do not match")    
 
-    
+
     # Inputs that are not states are controllable 
     pres = [i for i in zip(*prepost)][0]
     control = {k:v for k,v in mod.inputs.items() if k not in pres}

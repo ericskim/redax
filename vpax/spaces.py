@@ -10,11 +10,14 @@ partition = \n
 grid = a countable set of points embedded in continuous space \n
 """
 
-import math 
 import itertools
+import math
+from abc import abstractmethod
+
+from vpax.utils import *
 
 import numpy as np
-from abc import abstractmethod
+
 
 def find_nearest(array,value):
     idx = np.searchsorted(array, value, side="left")
@@ -23,119 +26,6 @@ def find_nearest(array,value):
     else:
         return idx
 
-def _bintogray(x:int):
-    """
-    Converts a binary encoded positive integer into gray code 
-    """
-    assert x >= 0 
-    return x ^ (x >> 1)
-
-def _graytobin(x:int):
-    """
-    Converts a gray code encoded positive integer into the standard binary encoding 
-    """
-    assert x >= 0
-    mask = x >> 1
-    while(mask != 0):
-        x = x ^ mask
-        mask = mask >> 1
-    return x
-
-def _int2bv(index:int, nbits:int):
-    """
-    A really high nbits just right pads the bitvector with "False"
-    """
-
-    return tuple(True if ((index >> i) % 2 == 1) else False for i in range(nbits-1,-1,-1))
-
-def _bv2int(bv):
-    """
-    Converts bitvector (list or tuple) with the standard binary encoding into an integer
-    """
-    nbits = len(bv)
-    index = 0
-    for i in range(nbits):
-        if bv[i]:
-            index += 2**(nbits - i - 1)
-    return index
-
-def increment_bv(bv, increment, graycode = False, saturate = False):
-    """
-    Increment a bitvector's value +1 or -1. 
-    """
-    assert increment == 1 or increment == -1
-    nbits = len(bv)
-    if graycode:
-        index = _graytobin(_bv2int(bv))
-        index = (index+increment) % 2**nbits
-        return _int2bv( _bintogray(index), nbits)
-    else:
-        if bv == tuple(True for i in range(nbits)) and increment > 0: 
-            if saturate:
-                return bv
-            raise ValueError("Bitvector overflow for nonperiodic domain.")
-        if bv == tuple(False for i in range(nbits)) and increment < 0:
-            if saturate:
-                return bv
-            raise ValueError("Bitvector overflow for nonperiodic domain.")
-        return _int2bv(_bv2int(bv) + increment, nbits)
-
-def increment_index(index, increment, nbits = None, graycode = False):
-    if graycode:
-        assert nbits is not None 
-        index = _graytobin(index)
-        index = (index + increment) % 2**nbits
-        return _bintogray(index)
-    else:
-        return index + increment
-
-def bv_interval(lb, ub, graycode = False):
-    assert len(lb) == len(ub)
-    nbits = len(lb)
-    if not graycode and lb > ub:
-        return []
-
-    lb = _bv2int(lb)
-    ub = _bv2int(ub)
-
-    return map(lambda x: _int2bv(x,nbits), 
-                    index_interval(lb, ub, nbits, graycode))
-
-def index_interval(lb, ub, nbits = None , graycode = False):
-    """
-    Constructs an integer interval that includes both ends lb and ub
-    """
-    if graycode:
-        assert nbits is not None
-    else:
-        assert lb <= ub
-
-    window = []
-    i = lb
-    while True:
-        window.append(i)
-        if i == ub:
-            break
-        i = increment_index(i, 1, nbits, graycode)
-    return window
-
-def num_with_name(name, x):
-    return len([i for i in x if name in i])
-
-def bv2pred(mgr, name, bv):
-    """
-    If bv's size is smaller than the bits allocated, then it takes the most significant ones
-    """
-
-    for i in range(len(bv)):
-        mgr.declare(name + "_" + str(i))
-    b = mgr.true 
-    for i in range(len(bv)):
-        if bv[i]:
-            b &=  mgr.var(name + "_" + str(i))
-        else:
-            b &= ~mgr.var(name + "_" + str(i))
-    return b
 
 class SymbolicSet(object):
     """
@@ -153,7 +43,7 @@ class SymbolicSet(object):
     
 class DiscreteSet(SymbolicSet):
     """
-    Discrete Interval 
+    Discrete set abstract class 
     """
     def __init__(self, num_vals):
         SymbolicSet.__init__(self)
@@ -162,7 +52,7 @@ class DiscreteSet(SymbolicSet):
 
     def pt2bv(self, point):
         assert point < self.num_vals
-        return _int2bv(point, self.num_bits)
+        return int2bv(point, self.num_bits)
 
     @property 
     def bounds(self):
@@ -181,8 +71,8 @@ class DiscreteSet(SymbolicSet):
             mgr: bdd manager
             name: BDD variable name, e.g. "x" for names "x_1", "x_2", etc. 
         """
-        left_bv =  _int2bv(0, self.num_bits)
-        right_bv = _int2bv(self.num_vals-1,self.num_bits)
+        left_bv =  int2bv(0, self.num_bits)
+        right_bv = int2bv(self.num_vals-1,self.num_bits)
         bvs = bv_interval(left_bv, right_bv)
         boxbdd = mgr.false
         for i in map(lambda x: bv2pred(mgr, name, x), bvs):
@@ -192,7 +82,7 @@ class DiscreteSet(SymbolicSet):
 
 class EmbeddedGrid(DiscreteSet):
     """
-    A discrete grid of points embedded in continuous space
+    A discrete grid of points embedded in continuous space.
 
     Args:
         left (float): Left point (inclusive)
@@ -201,6 +91,7 @@ class EmbeddedGrid(DiscreteSet):
 
     EmbeddedGrid(-2,2,4) corresponds with points [-2, -2/3, 2/3, 2]
     """
+
     def __init__(self, left, right, num):
         if num <= 0:
             raise ValueError("Grid must have at least one point")
@@ -234,7 +125,7 @@ class EmbeddedGrid(DiscreteSet):
 
     def conc2pred(self, mgr, name, concrete, snap = True):
         """
-        Translates from a concrete value to a the associated predicate
+        Translate from a concrete value to a the associated predicate.
 
         Args: 
             mgr (dd mgr):
@@ -245,12 +136,12 @@ class EmbeddedGrid(DiscreteSet):
             bdd: 
 
         """
-        bv = _int2bv(self.pt2index(concrete, snap), self.num_bits)
+        bv = int2bv(self.pt2index(concrete, snap), self.num_bits)
         return bv2pred(mgr, name, bv)
 
     def conc_iter(self):
         """
-        Iterable of points 
+        Iterable of points
         """
         return self.pts
     
@@ -262,7 +153,7 @@ class EmbeddedGrid(DiscreteSet):
         """
         Converts a bitvector into a concrete grid point
         """
-        return self.pts[_bv2int(bv)]
+        return self.pts[bv2int(bv)]
 
 class ContinuousPartition(SymbolicSet):
     """
@@ -367,9 +258,9 @@ class DynamicPartition(ContinuousPartition):
             index = 2**nbits - 1
 
         if self.periodic:
-            index = _bintogray(index)
+            index = bintogray(index)
 
-        return _int2bv(index,nbits)
+        return int2bv(index,nbits)
 
     def pt2bdd(self, mgr, name, pt, nbits, innerapprox = False, tol = .00001):
         return bv2pred(mgr, name, self.pt2bv(pt, nbits))
@@ -380,10 +271,10 @@ class DynamicPartition(ContinuousPartition):
         if nbits == 0:
             return (self.lb, self.ub)
 
-        index = _bv2int(bv)
+        index = bv2int(bv)
         
         if self.periodic:
-            index = _graytobin(index)
+            index = graytobin(index)
 
         eps = (self.ub - self.lb) / (2**nbits)
         left  = self.lb + index * eps
@@ -463,7 +354,7 @@ class DynamicPartition(ContinuousPartition):
     def conc_iter(self, prec):
         i = 0
         while(i < 2**prec):
-            yield self.bv2conc(_int2bv(i, prec))
+            yield self.bv2conc(int2bv(i, prec))
             i += 1
 
 class FixedPartition(ContinuousPartition):
@@ -499,8 +390,8 @@ class FixedPartition(ContinuousPartition):
         """
         Returns the predicate of the fixed partition abstract space
         """
-        left_bv =  _int2bv(0, self.num_bits)
-        right_bv = _int2bv(self.bins-1,self.num_bits)
+        left_bv =  int2bv(0, self.num_bits)
+        right_bv = int2bv(self.bins-1,self.num_bits)
         bvs = bv_interval(left_bv, right_bv)
         boxbdd = mgr.false
         for i in map(lambda x: bv2pred(mgr, name, x), bvs):
@@ -522,7 +413,7 @@ class FixedPartition(ContinuousPartition):
         Maps a point to bitvector corresponding to the bin that contains it 
         """
         index = self.pt2index(point, tol)
-        return _int2bv(index, self.num_bits)
+        return int2bv(index, self.num_bits)
     
     def pt2index(self, point, tol = 0.0):
         if self.periodic:
@@ -545,7 +436,7 @@ class FixedPartition(ContinuousPartition):
             return (self.lb, self.ub)
 
         left = self.lb
-        left += _bv2int(bv) * self.binwidth
+        left += bv2int(bv) * self.binwidth
         right = left + self.binwidth
         return (left, right)
 
@@ -570,12 +461,12 @@ class FixedPartition(ContinuousPartition):
                 left  = (left + 1) % self.bins
                 right = (right - 1) % self.bins 
 
-        left_bv  = _int2bv( left, self.num_bits)
-        right_bv = _int2bv(right, self.num_bits)
+        left_bv  = int2bv( left, self.num_bits)
+        right_bv = int2bv(right, self.num_bits)
 
         if self.periodic and left > right:
-            zero_bv = _int2bv(0, self.num_bits)
-            max_bv = _int2bv(self.bins-1, self.num_bits)
+            zero_bv = int2bv(0, self.num_bits)
+            max_bv = int2bv(self.bins-1, self.num_bits)
             return itertools.chain(bv_interval(zero_bv, right_bv),
                                    bv_interval(left_bv, max_bv))
         else: 

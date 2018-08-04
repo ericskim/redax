@@ -3,17 +3,15 @@ Double integrator example where the abstraction is initialized with a coarse gri
 and further refined by randomly sampling of boxes. 
 """
 
+import matplotlib.pyplot as plt
+import numpy as np
 from dd.cudd import BDD
 
-import numpy as np 
-
+from vpax.controlmodule import to_control_module
 from vpax.module import AbstractModule
 from vpax.spaces import DynamicPartition
 from vpax.synthesis import SafetyGame
 from vpax.visualizer import plot2D, plot3D
-from vpax.controlmodule import to_control_module
-
-import matplotlib.pyplot as plt
 
 ts = .2
 k = .1
@@ -52,7 +50,7 @@ possible_transitions = system.count_io_space(bittotal)
 print("# I/O Transitions: ", possible_transitions)
 for iobox in system.input_iter({'p': 3, 'v': 4, 'a': 3}):
 
-    f_left = {k: v[0] for k,v in iobox.items()}
+    f_left  = {k: v[0] for k,v in iobox.items()}
     f_right = {k: v[1] for k,v in iobox.items()}
 
     # Generate output overapproximation 
@@ -80,7 +78,7 @@ for iobox in system.input_iter({'p': 3, 'v': 4, 'a': 3}):
 
 print("# samples after exhaustive grid search: {0}".format(numapplied))
 
-while(numapplied < 4000): 
+while(numapplied < 8000): 
 
     # Shrink window widths over time 
     width = 40 * 1/np.log10(2*numapplied+10)
@@ -104,7 +102,7 @@ while(numapplied < 4000):
     try: 
         # Apply 3d constraint, even though the system has lower dimensions
         # system.apply_abstract_transitions(iobox, nbits = precision)
-
+        
         # Apply 2d constraint to slices. Identical to parallel update.
         system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p', 'v', 'pnext'}}, nbits = precision)
         system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v', 'a', 'vnext'}}, nbits = precision)
@@ -139,3 +137,4 @@ print("Game Steps:", steps)
 
 plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
 # plot3D(system.mgr, ('v', vspace), ('p', pspace), ('a', aspace), inv)
+

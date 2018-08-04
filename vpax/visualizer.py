@@ -1,10 +1,11 @@
 
 # Visualize BDD sets in 2D or 3D
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
 
-from vpax.spaces import _bv2int, _graytobin, DynamicPartition
+from vpax.spaces import DynamicPartition
+from vpax.utils import bv2int, graytobin
 
 
 def _name(i):
@@ -23,15 +24,6 @@ def center(box):
 def centerspace(space):
     return space.lb + (space.ub - space.lb)/2.0
 
-
-def bv2int(bv):
-    """Converts bitvector (list or tuple) into an integer"""
-    nbits = len(bv)
-    index = 0
-    for i in range(nbits):
-        if bv[i]:
-            index += 2**(nbits - i - 1)
-    return index
 
 
 def dynamicperiodic(space):
@@ -120,9 +112,9 @@ def plot3D(mgr, xspace, yspace, zspace, pred, opacity=40):
         ybv = [pt[bit] for bit in yvars]
         zbv = [pt[bit] for bit in zvars]
 
-        x_idx = _bv2int(xbv) if not dynamicperiodic(xgrid) else _graytobin(_bv2int(xbv))
-        y_idx = _bv2int(ybv) if not dynamicperiodic(ygrid) else _graytobin(_bv2int(ybv))
-        z_idx = _bv2int(zbv) if not dynamicperiodic(zgrid) else _graytobin(_bv2int(zbv))
+        x_idx = bv2int(xbv) if not dynamicperiodic(xgrid) else graytobin(bv2int(xbv))
+        y_idx = bv2int(ybv) if not dynamicperiodic(ygrid) else graytobin(bv2int(ybv))
+        z_idx = bv2int(zbv) if not dynamicperiodic(zgrid) else graytobin(bv2int(zbv))
 
         mask[x_idx, y_idx, z_idx] = True
 
@@ -184,9 +176,9 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
         ybv = [pt[bit] for bit in yvars]
         zbv = [pt[bit] for bit in zvars]
 
-        x_idx = _bv2int(xbv) if not dynamicperiodic(xgrid) else _graytobin(_bv2int(xbv))
-        y_idx = _bv2int(ybv) if not dynamicperiodic(ygrid) else _graytobin(_bv2int(ybv))
-        z_idx = _bv2int(zbv) if not dynamicperiodic(zgrid) else _graytobin(_bv2int(zbv))
+        x_idx = bv2int(xbv) if not dynamicperiodic(xgrid) else graytobin(bv2int(xbv))
+        y_idx = bv2int(ybv) if not dynamicperiodic(ygrid) else graytobin(bv2int(ybv))
+        z_idx = bv2int(zbv) if not dynamicperiodic(zgrid) else graytobin(bv2int(zbv))
 
         mask[x_idx, y_idx, z_idx] = True
 

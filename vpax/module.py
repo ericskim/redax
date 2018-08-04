@@ -2,6 +2,7 @@ import itertools
 
 import vpax.spaces as sp
 
+
 class AbstractModule(object):
     """
     Wrapper for translating between concrete and discrete I/O values.
@@ -158,35 +159,40 @@ class AbstractModule(object):
         Abstracts a concrete I/O transition and applies the abstract transitions to
         the current system abstraction.
 
-        Args:
-
-        Returns:
-            bool: False if the transition was not applied due to an out of domain error
-
         Proceeds in two steps:
-            1. Adds fully nondeterministic outputs to any new input transitions
+            1. Adds fully nondeterministic outputs to any new inputs
+                pred = pred | (~nonblocking & abstract_inputs)
             2. Constraints input/output pairs corresponding to the concrete transitions
+                pred = pred & (abstract_inputs => abstract_outputs)
 
-        pred = (pred | (~nb & ibox)) & (ibox => obox)
+        Args:
+            concrete (dict):
+            kwargs: 
+            
+        Returns:
+            bool: False if the transition was not applied due to an out of domain error.
+
         """
+
+        # FIXME: Assert that the concrete boxes fully specify the inputs/outputs
         try:
             inputs = {k:v for k,v in concrete.items() if k in self.inputs}
             outputs = {k:v for k,v in concrete.items() if k in self.outputs}
             inpred = self.concrete_input_to_abs(inputs, **kwargs)
             outpred = self.concrete_output_to_abs(outputs, **kwargs)
-        except: # FIXME: Should catch a custom out of boundaries error
+        except: # TODO: Should catch a custom out of boundaries error
             return False
         
         self._pred = ((~self._nb & inpred) | self.pred) & (~inpred | outpred)
         self._nb   = self._nb | inpred
-        
+
         return True
 
     def check(self):
         """
         Checks consistency of interval attributes 
         """
-        raise NotImplementedError 
+        raise NotImplementedError
 
     def concrete_input_to_abs(self, concrete, **kwargs):
         r"""
@@ -195,7 +201,6 @@ class AbstractModule(object):
             - kwargs: Arguments that are specific to each input space's conc2pred method
         Returns:        
 
-        kwargs 
         """
         in_bdd  = self.inspace()
         for var in concrete.keys():
@@ -435,4 +440,3 @@ class AbstractModule(object):
 
         return AbstractModule(self.mgr, newinputs, newoutputs,
                                 self.pred & other.pred)
-

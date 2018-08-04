@@ -3,17 +3,16 @@ Dubins vehicle example
 """
 
 
+import time
+
+import numpy as np
 from dd.cudd import BDD
 
-import numpy as np 
-
-from vpax.module import AbstractModule
-from vpax.spaces import DynamicPartition, FixedPartition, EmbeddedGrid
 from vpax.controlmodule import to_control_module
+from vpax.module import AbstractModule
+from vpax.spaces import DynamicPartition, EmbeddedGrid, FixedPartition
 from vpax.synthesis import ReachGame
-from vpax.visualizer import plot3D_QT, plot3D
-
-import time
+from vpax.visualizer import plot3D, plot3D_QT
 
 """
 Specify dynamics and overapproximations 
@@ -25,7 +24,7 @@ def dynamics(x,y,theta,v,omega):
     return x + v*np.cos(theta), y + v*np.sin(theta), theta + (1/L) * v * np.sin(omega)
 
 def containszero(left, right):
-    """Determine if 0 is contained in a periodic interval [left,right]. Possible that right < left.""" 
+    """Determine if 0 is contained in a periodic interval [left,right]. Possible that right < left."""
     # Map to interval [-pi,pi]
     left = ((left + np.pi) % (np.pi*2) ) - np.pi
     left = left - 2*np.pi if left > np.pi else left
@@ -43,7 +42,7 @@ def containszero(left, right):
 
 def maxmincos(left, right):
     """Compute the maximum and minimum values of cos in an interval."""
-    if containszero(left,right) is True:
+    if containszero(left, right) is True:
         maxval = 1
     else:
         maxval = max([np.cos(left), np.cos(right)])
@@ -78,16 +77,16 @@ Declare modules
 
 mgr = BDD() 
 
-# Declare spaces 
-pspace = DynamicPartition(-2,2)
-anglespace = DynamicPartition(-np.pi, np.pi, periodic=True)
-vspace = EmbeddedGrid(vmax/2, vmax, 2)
+# Declare spaces
+pspace      = DynamicPartition(-2,2)
+anglespace  = DynamicPartition(-np.pi, np.pi, periodic=True)
+vspace      = EmbeddedGrid(vmax/2, vmax, 2)
 angaccspace = EmbeddedGrid(-1.5, 1.5, 3)
 
 # Declare modules
-dubins_x = AbstractModule(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace}, {'xnext': pspace})
-dubins_y = AbstractModule(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace}, {'ynext': pspace})
-dubins_theta =  AbstractModule(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace}, {'thetanext': anglespace})
+dubins_x        = AbstractModule(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace}, {'xnext': pspace})
+dubins_y        = AbstractModule(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace}, {'ynext': pspace})
+dubins_theta    = AbstractModule(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace}, {'thetanext': anglespace})
 
 dubins = (dubins_x | dubins_y | dubins_theta)
 
@@ -101,20 +100,20 @@ bittotal = sum(precision.values()) + 3 # +3 for the discrete embedded grid bits
 possible_transitions = dubins.count_io_space(bittotal)
 
 coarseiter = 0
-coarse_errors = {'x':0, 'y':0, 'theta':0}
+coarse_errors = {'x': 0, 'y': 0, 'theta': 0}
 errorboxes = []
-for iobox in dubins.input_iter(precision = {'x':4, 'y':4, 'theta':3}):
+for iobox in dubins.input_iter(precision={'x': 4, 'y': 4, 'theta': 3}):
     # Generate output windows
-    iobox['xnext']     = xwindow(**{k:v for k,v in iobox.items() if k in dubins_x.inputs})
-    iobox['ynext']     = ywindow(**{k:v for k,v in iobox.items() if k in dubins_y.inputs})
-    iobox['thetanext'] = thetawindow(**{k:v for k,v in iobox.items() if k in dubins_theta.inputs})
+    iobox['xnext']     = xwindow(**{k: v for k, v in iobox.items() if k in dubins_x.inputs})
+    iobox['ynext']     = ywindow(**{k: v for k, v in iobox.items() if k in dubins_y.inputs})
+    iobox['thetanext'] = thetawindow(**{k: v for k, v in iobox.items() if k in dubins_theta.inputs})
     
-    # Add transitions 
-    if not dubins_x.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_x.vars}, nbits = precision):
+    # Add transitions
+    if not dubins_x.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_x.vars}, nbits=precision):
         coarse_errors['x'] += 1
-    if not dubins_y.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_y.vars}, nbits = precision):
-        coarse_errors['y'] +=1
-    if not dubins_theta.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_theta.vars}, nbits = precision):
+    if not dubins_y.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_y.vars}, nbits=precision):
+        coarse_errors['y'] += 1
+    if not dubins_theta.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_theta.vars}, nbits=precision):
         coarse_errors['theta'] += 1
 
     coarseiter += 1
@@ -128,9 +127,9 @@ for iobox in dubins.input_iter(precision = {'x':4, 'y':4, 'theta':3}):
 # Sample generator 
 numapplied = 0
 out_of_domain_violations = 0
-random_errors = {'x':0, 'y':0, 'theta':0}
+random_errors = {'x': 0, 'y': 0, 'theta': 0}
 abs_starttime = time.time()
-while(numapplied < 4000):
+while(numapplied < 5000):
     
     # Shrink window widths over time 
     scale = 1/np.log10(1.0*numapplied+10)
@@ -139,25 +138,25 @@ while(numapplied < 4000):
     f_width = {'x':     np.random.rand()*scale*pspace.width(),
                'y':     np.random.rand()*scale*pspace.width(),
                'theta': .2*anglespace.width()} 
-    f_left = {'x':     pspace.lb +  np.random.rand() * (pspace.width() - f_width['x']),
-              'y':     pspace.lb +  np.random.rand() * (pspace.width() - f_width['y']),
+    f_left = {'x':     pspace.lb + np.random.rand() * (pspace.width() - f_width['x']),
+              'y':     pspace.lb + np.random.rand() * (pspace.width() - f_width['y']),
               'theta': anglespace.lb + np.random.rand() * (anglespace.width())}
     f_right = {k: f_width[k] + f_left[k] for k in f_width}
-    iobox = {'v':     np.random.randint(1,3)*vmax/2,
-             'omega': np.random.randint(-1,2)*1.5}
+    iobox = {'v':     np.random.randint(1, 3) * vmax/2,
+             'omega': np.random.randint(-1, 2) * 1.5}
     iobox.update({k: (f_left[k], f_right[k]) for k in f_width})
 
     # Generate output windows
-    iobox['xnext']     = xwindow(**{k:v for k,v in iobox.items() if k in dubins_x.inputs})
-    iobox['ynext']     = ywindow(**{k:v for k,v in iobox.items() if k in dubins_y.inputs})
-    iobox['thetanext'] = thetawindow(**{k:v for k,v in iobox.items() if k in dubins_theta.inputs})
+    iobox['xnext']     = xwindow(**{k: v for k, v in iobox.items() if k in dubins_x.inputs})
+    iobox['ynext']     = ywindow(**{k: v for k, v in iobox.items() if k in dubins_y.inputs})
+    iobox['thetanext'] = thetawindow(**{k: v for k, v in iobox.items() if k in dubins_theta.inputs})
 
     # Constrain transitions 
-    if not dubins_x.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_x.vars}, nbits = precision):
+    if not dubins_x.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_x.vars}, nbits=precision):
         random_errors['x'] += 1
-    if not dubins_y.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_y.vars}, nbits = precision):
+    if not dubins_y.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_y.vars}, nbits=precision):
         random_errors['y'] += 1
-    if not dubins_theta.apply_abstract_transitions({k:v for k,v in iobox.items() if k in dubins_theta.vars}, nbits = precision):
+    if not dubins_theta.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_theta.vars}, nbits=precision):
         random_errors['theta'] += 1
 
     numapplied += 1
@@ -172,11 +171,11 @@ while(numapplied < 4000):
 
 dubins = (dubins_x | dubins_y | dubins_theta)
 
-csys = to_control_module(dubins, (('x', 'xnext'), ('y','ynext'), ('theta','thetanext')))
+csys = to_control_module(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')))
 
 # Declare reach set 
-target =  pspace.conc2pred(mgr, 'x', [0,.8], 6, innerapprox = False)
-target &= pspace.conc2pred(mgr, 'y', [-.8,0], 6, innerapprox = False)
+target =  pspace.conc2pred(mgr, 'x', [0, .8], 6, innerapprox=False)
+target &= pspace.conc2pred(mgr, 'y', [-.8, 0], 6, innerapprox=False)
 
 game = ReachGame(csys, target)
 starttime = time.time()
@@ -187,12 +186,12 @@ print("Target Size:", dubins.mgr.count(target, 18))
 print("Game Steps:", steps)
 
 # # Plot reachable winning set
-# plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), basin, 128)
+plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), basin, 128)
 
 # # Plot x transition relation for v = .5
-# xdyn = mgr.exist(['v_0'],(dubins_x.pred) & mgr.var('v_0'))
-# plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
+xdyn = mgr.exist(['v_0'],(dubins_x.pred) & mgr.var('v_0'))
+plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
 
 # # Plot y transition relation for v = .5
-# ydyn = mgr.exist(['v_0'],(dubins_y.pred) & mgr.var('v_0'))
-# plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
+ydyn = mgr.exist(['v_0'],(dubins_y.pred) & mgr.var('v_0'))
+plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)

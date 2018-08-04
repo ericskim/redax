@@ -1,25 +1,26 @@
 from functools import reduce
-from vpax.controller import MemorylessController 
 
 flatten = lambda l: [item for sublist in l for item in sublist]
 
 def _name(i):
     return i.split('_')[0]
 
+
 def _idx(i):
     return i.split('_')[1]
+
 
 class ControlPre():
     def __init__(self, controlsys):
         self.sys = controlsys
         self.nonblock = controlsys.nonblock()
 
-        self.elimcontrol = lambda bits, pred : self.sys.mgr.exist(bits, pred) # FIXME: exists 
+        self.elimcontrol = lambda bits, pred : self.sys.mgr.exist(bits, pred)  #FIXME: exists
         self.elimpost = lambda bits, pred: self.sys.mgr.forall(bits, ~self.sys.outspace() | pred)
 
         prebits = flatten([self.sys.pred_bitvars[state] for state in self.sys.prestate])
         self.postbits = [self.sys.pre_to_post[_name(i)] + '_' + _idx(i) for i in prebits]
-        self.swapvars = {i:j for i,j in zip(prebits, self.postbits)} 
+        self.swapvars = {i: j for i, j in zip(prebits, self.postbits)}
 
     def __call__(self, Z, no_inputs = False):
         r"""
@@ -32,11 +33,11 @@ class ControlPre():
         nonblock /\ forall x'. (sys(x,u,x') => Z(x'))
         """
 
-        # Exchange Z's pre state variables for post state variables 
+        # Exchange Z's pre state variables for post state variables
         Z = self.sys.mgr.let(self.swapvars, Z)
-        # Compute implication 
+        # Compute implication
         Z = (~self.sys.pred | Z)
-        # Eliminate x' and return 
+        # Eliminate x' and return
         if no_inputs:
             controlbits = flatten([self.sys.pred_bitvars[c] for c in self.sys.control])
             return self.elimcontrol(controlbits, (self.nonblock & self.elimpost(self.postbits, Z)))
@@ -68,8 +69,8 @@ class SafetyGame():
             int       : Actualy number of game steps run.
             generator : Controller that maps state dictionary to safe input dictionary
         """
-        if steps: 
-            assert steps >= 0 
+        if steps:
+            assert steps >= 0
 
         z = self.sys.mgr.true if winning is None else winning
         zz = self.sys.mgr.false
@@ -77,9 +78,9 @@ class SafetyGame():
         i = 0
         while (z != zz):
             if steps and i == steps:
-                break 
-            zz = z 
-            z = zz & self.cpre(zz, no_inputs = True) & self.safe
+                break
+            zz = z
+            z = zz & self.cpre(zz, no_inputs=True) & self.safe
             i += 1
         
         def safecontrols(state):
@@ -88,6 +89,7 @@ class SafetyGame():
             """
             assert (state.keys() == self.sys.prestate.keys())
 
+            # Convert concrete state to BDD
             pt_bdd = self.sys.mgr.true
             forall_bits = []
             exists_bits = []
@@ -98,10 +100,10 @@ class SafetyGame():
                 nbits = len(self.sys.pred_bitvars[k])
                 pt_bdd &= self.sys.prestate[k].pt2bdd(self.sys.mgr, k, v, nbits)
 
-            # Safe state-input pairs 
+            # Safe state-input pairs
             xu = pt_bdd & z & self.cpre(z, no_inputs = False) & self.safe
 
-            # Safe control inputs 
+            # Safe control inputs
             u = self.sys.mgr.exist(exists_bits, xu)
 
             # Return generator for safe controls
@@ -121,26 +123,26 @@ class SafetyGame():
 class ReachGame():
     def __init__(self, sys, target):
         self.cpre = ControlPre(sys)
-        self.target = target # TODO: Check if a subset of the state space 
-        self.sys = sys 
+        self.target = target # TODO: Check if a subset of the state space
+        self.sys = sys
 
     def step(self, steps = None):
         """
         Run a reachability game until reaching a fixed point or a maximum number of steps.
 
         Args: 
-            steps (int): Maximum number of game steps 
+            steps (int): Maximum number of game steps
 
         Returns:
-            dd BDD: Backward reachable set 
+            dd BDD: Backward reachable set
             int   : Number of game steps run
         """
         
-        if steps: 
+        if steps:
             assert steps >= 0
 
         z = self.sys.mgr.false
-        zz = self.sys.mgr.true 
+        zz = self.sys.mgr.true
 
         i = 0
         while (z != zz):
@@ -150,14 +152,14 @@ class ReachGame():
             z = zz | self.cpre(zz, no_inputs = True) | self.target
             i += 1
         
-        return z, i 
+        return z, i
 
 class ReachAvoidGame():
     def __init__(self, sys, safe, target):
         self.cpre = ControlPre(sys)
-        self.target = target # TODO: Check if a subset of the state space
+        self.target = target  # TODO: Check if a subset of the state space
         self.safe = safe
-        self.sys = sys 
+        self.sys = sys
 
     def __call__(self, steps = None):
         """
@@ -171,11 +173,11 @@ class ReachAvoidGame():
             int   : Number of game steps run
         """
 
-        if steps: 
+        if steps:
             assert steps >= 0
 
         z = self.sys.mgr.false
-        zz = self.sys.mgr.true 
+        zz = self.sys.mgr.true
 
         i = 0
         while (z != zz):
@@ -185,4 +187,4 @@ class ReachAvoidGame():
             z = (zz | self.cpre(zz, no_inputs = True) | self.target) & self.safe
             i += 1
                 
-        return z, i 
+        return z, i

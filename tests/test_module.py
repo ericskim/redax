@@ -1,12 +1,10 @@
-from pytest import approx, raises 
-
+import numpy as np
 from dd.cudd import BDD
-
-import numpy as np 
+from pytest import approx, raises
 
 from vpax.module import AbstractModule
-from vpax.spaces import DynamicPartition, FixedPartition, EmbeddedGrid
- 
+from vpax.spaces import DynamicPartition, EmbeddedGrid, FixedPartition
+
 
 def test_dynamic_module():
     mgr = BDD() 

@@ -1,5 +1,6 @@
-from vpax.spaces import DynamicPartition, FixedPartition, EmbeddedGrid, bv_interval, index_interval
-from dd.cudd import BDD 
+from vpax.spaces import DynamicPartition, FixedPartition, EmbeddedGrid
+from vpax.utils import bv_interval, index_interval
+from dd.cudd import BDD
 
 from pytest import approx, raises 
 
