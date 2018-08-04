@@ -60,7 +60,7 @@ possible_transitions = (pcomp | vcomp).count_io_space(bittotal)
 # Sample generator 
 numapplied = 0
 out_of_domain_violations = 0
-while(numapplied < 4000): 
+while(numapplied < 3000): 
 
     # Shrink window widths over time 
     width = 18 * 1/np.log10(2*numapplied+10)
@@ -117,8 +117,7 @@ while(numapplied < 4000):
         system = pcomp | vcomp 
         print("# samples", numapplied, " --- # I/O transitions", system.count_io(bittotal))
         print("(samples, I/O % transitions) --- ({0}, {1})".format(numapplied, 100*system.count_io(bittotal)/possible_transitions))
-        plot3D_QT(mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
-
+        # plot3D_QT(mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
 
 system = pcomp | vcomp
 
@@ -133,7 +132,9 @@ safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox = True)
 
 # Solve game and plot 2D invariant region 
 game = SafetyGame(csys, safe)
-inv, steps = game.step()
+inv, steps, controller = game.step()
 print("Safe Size:", system.mgr.count(safe, 12))
 print("Invariant Size:", system.mgr.count( inv, 12))
-plot2D(system.mgr, ('v', vspace), ('p', pspace), inv) 
+plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
+
+# controller = game.get_controller(inv)

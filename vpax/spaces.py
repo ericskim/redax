@@ -3,10 +3,11 @@
 
 
 Nomenclature:
-    bv = Bit vector 
-    box = 
-    point = element of set
-    grid = a countable set of points embedded in continuous space 
+bv = Bit vector \n
+box = \n
+point = element of set \n
+partition = \n
+grid = a countable set of points embedded in continuous space \n
 """
 
 import math 
@@ -257,6 +258,12 @@ class EmbeddedGrid(DiscreteSet):
         s = "Embedded Grid({0},{1},{2})".format(str(self.left), str(self.right), str(self.num_vals))
         return s
 
+    def bv2conc(self, bv):
+        """
+        Converts a bitvector into a concrete grid point
+        """
+        return self.pts[_bv2int(bv)]
+
 class ContinuousPartition(SymbolicSet):
     """
     Continuous Interval
@@ -367,7 +374,7 @@ class DynamicPartition(ContinuousPartition):
     def pt2bdd(self, mgr, name, pt, nbits, innerapprox = False, tol = .00001):
         return bv2pred(mgr, name, self.pt2bv(pt, nbits))
 
-    def bv2box(self, bv):
+    def bv2conc(self, bv):
         nbits = len(bv)
 
         if nbits == 0:
@@ -385,7 +392,7 @@ class DynamicPartition(ContinuousPartition):
         return (left, right)
 
     def pt2box(self, point, nbits):
-        return self.bv2box(self.pt2bv(point, nbits = nbits))
+        return self.bv2conc(self.pt2bv(point, nbits = nbits))
 
     def box2bvs(self, box, nbits, innerapprox = False, tol = .0000001):
         """
@@ -427,7 +434,7 @@ class DynamicPartition(ContinuousPartition):
 
     def conc2pred(self, mgr, name, box, nbits, innerapprox = False, tol = .00001):
         """
-        Overapproximation of a concrete box with its BDD
+        Overapproximation of a concrete box with its BDD.
 
         Args: 
             name
@@ -440,7 +447,7 @@ class DynamicPartition(ContinuousPartition):
         predbox = mgr.false
         for bv in self.box2bvs(box, nbits, innerapprox, tol):
             predbox |= bv2pred(mgr, name, bv)
-        
+
         assert len(predbox.support) <= nbits, "Support " + str(predbox.support) + "exceeds " + nbits + " bits"
         return predbox
 
@@ -456,7 +463,7 @@ class DynamicPartition(ContinuousPartition):
     def conc_iter(self, prec):
         i = 0
         while(i < 2**prec):
-            yield self.bv2box(_int2bv(i, prec))
+            yield self.bv2conc(_int2bv(i, prec))
             i += 1
 
 class FixedPartition(ContinuousPartition):
@@ -508,7 +515,7 @@ class FixedPartition(ContinuousPartition):
         raise NotImplementedError
 
     def pt2box(self, point):
-        return self.bv2box(self.pt2bv(point))
+        return self.bv2conc(self.pt2bv(point))
 
     def pt2bv(self, point, tol = 0.0):
         """
@@ -531,7 +538,9 @@ class FixedPartition(ContinuousPartition):
 
         return index
 
-    def bv2box(self, bv):
+    def bv2conc(self, bv):
+        """
+        """
         if len(bv) == 0:
             return (self.lb, self.ub)
 

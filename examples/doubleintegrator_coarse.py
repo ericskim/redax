@@ -23,11 +23,11 @@ mgr = BDD()
 
 def dynamics(p,v,a):
     vsign = 1 if v > 0 else -1 
-    return p + v*ts , v + a*ts - vsign*k*(v**2)*ts - g*ts
+    return p + v * ts , v + a * ts - vsign*k*(v**2)*ts - g*ts
 
-pspace = DynamicPartition(-10,10)
-vspace = DynamicPartition(-16,16)
-aspace = DynamicPartition(0,20)
+pspace = DynamicPartition(-10, 10)
+vspace = DynamicPartition(-16, 16)
+aspace = DynamicPartition(0, 20)
 
 # Monolithic module
 system = AbstractModule(mgr, 
@@ -38,10 +38,10 @@ system = AbstractModule(mgr,
                          'vnext': vspace}
         )
 
-bounds = {'p': [-10,10], 'v': [-16,16]}
+bounds = {'p': [-10, 10], 'v': [-16, 16]}
 
 # Declare grid precision 
-precision = {'p': 6, 'v':6, 'a': 6, 'pnext': 6, 'vnext': 6}
+precision = {'p': 6, 'v': 6, 'a': 6, 'pnext': 6, 'vnext': 6}
 bittotal = sum(precision.values()) 
 outorder = {0: 'pnext', 1: 'vnext'}
 
@@ -50,7 +50,7 @@ numapplied = 0
 out_of_domain_violations = 0
 possible_transitions = system.count_io_space(bittotal)
 print("# I/O Transitions: ", possible_transitions)
-for iobox in system.input_iter({'p': 3, 'v':4, 'a': 3}):
+for iobox in system.input_iter({'p': 3, 'v': 4, 'a': 3}):
 
     f_left = {k: v[0] for k,v in iobox.items()}
     f_right = {k: v[1] for k,v in iobox.items()}
@@ -65,12 +65,12 @@ for iobox in system.input_iter({'p': 3, 'v':4, 'a': 3}):
     try:
         system.apply_abstract_transitions(iobox, nbits = precision)
     except AssertionError:
-        out_of_domain_violations +=1
+        out_of_domain_violations += 1
         continue
 
     # Apply 2d constraint to slices. Identical to parallel update.
-    system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, nbits = precision)
-    system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, nbits = precision)
+    system.apply_abstract_transitions({k: v for k, v in iobox.items() if k in {'p', 'v', 'pnext'}}, nbits = precision)
+    system.apply_abstract_transitions({k: v for k, v in iobox.items() if k in {'v', 'a', 'vnext'}}, nbits = precision)
 
 
     numapplied += 1
@@ -87,11 +87,11 @@ while(numapplied < 4000):
 
     # Generate random input windows 
     f_width = {'p': np.random.rand()*width,
-            'v':np.random.rand()*width,
-            'a':np.random.rand()*width} 
-    f_left = {'p': -10 +  np.random.rand() * (20 - f_width['p']), 
-            'v': -16 + np.random.rand() * (32 - f_width['v']), 
-            'a': 0 + np.random.rand() * (20 - f_width['a'])}
+               'v': np.random.rand()*width,
+               'a': np.random.rand()*width}
+    f_left = {'p': -10 + np.random.rand() * (20 - f_width['p']),
+              'v': -16 + np.random.rand() * (32 - f_width['v']),
+              'a': 0 + np.random.rand() * (20 - f_width['a'])}
     f_right = {k: f_width[k] + f_left[k] for k in f_width}
     iobox = {k: (f_left[k], f_right[k]) for k in f_width}
 
@@ -106,8 +106,8 @@ while(numapplied < 4000):
         # system.apply_abstract_transitions(iobox, nbits = precision)
 
         # Apply 2d constraint to slices. Identical to parallel update.
-        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, nbits = precision)
-        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, nbits = precision)
+        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p', 'v', 'pnext'}}, nbits = precision)
+        system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v', 'a', 'vnext'}}, nbits = precision)
 
     except AssertionError:
         out_of_domain_violations +=1
@@ -128,15 +128,14 @@ print("# Out of Domain errors:", out_of_domain_violations)
 csys = to_control_module(system, (('p', 'pnext'), ('v','vnext')))
 
 # Declare safe set 
-safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox = True)
+safe = pspace.conc2pred(mgr, 'p', [-8, 8], 6, innerapprox = True)
 
 game = SafetyGame(csys, safe)
-inv, steps = game.step() 
+inv, steps, controller = game.step()
 
 print("Safe Size:", system.mgr.count(safe, 12))
-print("Invariant Size:", system.mgr.count( inv, 12))
+print("Invariant Size:", system.mgr.count(inv, 12))
 print("Game Steps:", steps)
 
 plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
 # plot3D(system.mgr, ('v', vspace), ('p', pspace), ('a', aspace), inv)
-

@@ -14,7 +14,7 @@ class ControlPre():
         self.sys = controlsys
         self.nonblock = controlsys.nonblock()
 
-        self.elimcontrol = lambda bits, pred : self.sys.mgr.exist(bits, pred) # FIXME: exists
+        self.elimcontrol = lambda bits, pred : self.sys.mgr.exist(bits, pred) # FIXME: exists 
         self.elimpost = lambda bits, pred: self.sys.mgr.forall(bits, ~self.sys.outspace() | pred)
 
         prebits = flatten([self.sys.pred_bitvars[state] for state in self.sys.prestate])
@@ -52,88 +52,81 @@ class SafetyGame():
     """
     def __init__(self, sys, safeset):
         self.cpre = ControlPre(sys)
+        self.sys  = sys 
         self.safe = safeset # TODO: Check if a subset of the state space
 
     def step(self, steps = None, winning = None):
         """
-        Runs a safety game until reaching a fixed point or a maximum number of steps
-
+        Run a safety game until reaching a fixed point or a maximum number of steps.
+        
         Args: 
             steps (int): Maximum number of game steps
-            winning (dd BDD): Current winning set
+            winning (dd BDD): Intermediate winning set
 
         Returns:
-            dd BDD: Safe invariant region
-            int   : Number of game steps run 
+            dd BDD    : Safe invariant region
+            int       : Actualy number of game steps run.
+            generator : Controller that maps state dictionary to safe input dictionary
         """
         if steps: 
             assert steps >= 0 
 
-        z = self.cpre.sys.mgr.true if winning is None else winning
-        zz = self.cpre.sys.mgr.false
+        z = self.sys.mgr.true if winning is None else winning
+        zz = self.sys.mgr.false
 
         i = 0
         while (z != zz):
             if steps and i == steps:
                 break 
             zz = z 
-            z = zz & self.cpre(zz, no_inputs = True) & self.safe 
+            z = zz & self.cpre(zz, no_inputs = True) & self.safe
             i += 1
         
-        return z, i
-
-    def get_controller(self, winningset):
-        """
-        Takes winning set for invariance game and outputs a controller object
-
-        Args:
-            winningset (bdd): Winning region for invariance game 
-        
-        Returns: 
-            MemorylessController TODO: finish this 
-        """
-        raise NotImplementedError
-
-        c = MemorylessController(self.cpre.sys) 
-        mgr = self.cpre.sys.mgr 
         def safecontrols(state):
+            r"""
+
             """
+            assert (state.keys() == self.sys.prestate.keys())
 
+            pt_bdd = self.sys.mgr.true
+            forall_bits = []
+            exists_bits = []
+            for k, v in state.items():
+                poststate = self.sys.pre_to_post[k]
+                forall_bits += self.sys.pred_bitvars[poststate]
+                exists_bits += self.sys.pred_bitvars[k]
+                nbits = len(self.sys.pred_bitvars[k])
+                pt_bdd &= self.sys.prestate[k].pt2bdd(self.sys.mgr, k, v, nbits)
 
-            """
-            assert (state.keys() == self.cpre.sys.prestate.keys())
+            # Safe state-input pairs 
+            xu = pt_bdd & z & self.cpre(z, no_inputs = False) & self.safe
 
-            pt_bdd = mgr.true
-            elim_bits = []
-            for k,v in state:
-                elim_bits += self.cpre.sys.pred_bitvars[k]
-                nbits = len(self.cpre.sys.pred_bitvars[k])
-                pt_bdd &= self.cpre.sys.prestate[k].pt2bdd(mgr, k, state, nbits)
+            # Safe control inputs 
+            u = self.sys.mgr.exist(exists_bits, xu)
 
-            # x AND forall x'.(sys(x,u) => winningset)
-            # equivalent to forall x'( x & ~sys | x & winningset )
-            xu = mgr.forall(elim_bits, (pt_bdd & ~self.cpre.sys.pred) | (pt_bdd & winningset))
-            
-            xu = mgr.exist(self.cpre.sys.prestate.keys(), xu)
             # Return generator for safe controls
-            for ubdd in mgr.pick_iter(xu):
-                # Translate BDD to an input box... 
-                yield  
+            for u_assignment in self.sys.mgr.pick_iter(u):
+                # Translate BDD assignment into concrete counterpart
+                uval = dict()
+                for uvar in self.sys.control.keys():
+                    ubits = [k for k in u_assignment if _name(k) == uvar]
+                    ubits.sort()
+                    bv = [u_assignment[bit] for bit in ubits]
+                    uval[uvar] = self.sys.control[uvar].bv2conc(bv)
+                yield uval
 
-        # Override abstract call method 
-        c.__call__ = lambda s: safecontrols(s)
-        
-        return c 
+        return z, i, safecontrols
 
 
 class ReachGame():
     def __init__(self, sys, target):
         self.cpre = ControlPre(sys)
         self.target = target # TODO: Check if a subset of the state space 
+        self.sys = sys 
 
     def step(self, steps = None):
         """
-        Runs a reachability game until reaching a fixed point or a maximum number of steps
+        Run a reachability game until reaching a fixed point or a maximum number of steps.
 
         Args: 
             steps (int): Maximum number of game steps 
@@ -146,8 +139,8 @@ class ReachGame():
         if steps: 
             assert steps >= 0
 
-        z = self.cpre.sys.mgr.false
-        zz = self.cpre.sys.mgr.true 
+        z = self.sys.mgr.false
+        zz = self.sys.mgr.true 
 
         i = 0
         while (z != zz):
@@ -163,16 +156,26 @@ class ReachAvoidGame():
     def __init__(self, sys, safe, target):
         self.cpre = ControlPre(sys)
         self.target = target # TODO: Check if a subset of the state space
-        self.safe = safe 
+        self.safe = safe
+        self.sys = sys 
 
     def __call__(self, steps = None):
-        raise NotImplementedError
+        """
+        Run a reachability game until reaching a fixed point or a maximum number of steps.
+
+        Args: 
+            steps (int): Maximum number of game steps 
+
+        Returns:
+            dd BDD: Safe backward reachable set
+            int   : Number of game steps run
+        """
 
         if steps: 
             assert steps >= 0
 
-        z = self.cpre.sys.mgr.false
-        zz = self.cpre.sys.mgr.true 
+        z = self.sys.mgr.false
+        zz = self.sys.mgr.true 
 
         i = 0
         while (z != zz):

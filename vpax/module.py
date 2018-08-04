@@ -4,7 +4,7 @@ import vpax.spaces as sp
 
 class AbstractModule(object):
     """
-    Wrapper for translating between concrete and discrete I/O values
+    Wrapper for translating between concrete and discrete I/O values.
        
     Attributes:
         mgr: dd manager
@@ -169,14 +169,18 @@ class AbstractModule(object):
 
         pred = (pred | (~nb & ibox)) & (ibox => obox)
         """
-        inputs = {k:v for k,v in concrete.items() if k in self.inputs}
-        outputs = {k:v for k,v in concrete.items() if k in self.outputs}
-        inpred = self.concrete_input_to_abs(inputs, **kwargs)
-        outpred = self.concrete_output_to_abs(outputs, **kwargs)
+        try:
+            inputs = {k:v for k,v in concrete.items() if k in self.inputs}
+            outputs = {k:v for k,v in concrete.items() if k in self.outputs}
+            inpred = self.concrete_input_to_abs(inputs, **kwargs)
+            outpred = self.concrete_output_to_abs(outputs, **kwargs)
+        except: # FIXME: Should catch a custom out of boundaries error
+            return False
         
         self._pred = ((~self._nb & inpred) | self.pred) & (~inpred | outpred)
         self._nb   = self._nb | inpred
-
+        
+        return True
 
     def check(self):
         """
@@ -187,54 +191,53 @@ class AbstractModule(object):
     def concrete_input_to_abs(self, concrete, **kwargs):
         r"""
         Args:
-            - concrete (dict): Keys are variable names, values are concrete instances of that variable
+            - concrete (dict): Keys are input variable names, values are concrete instances of that variable
             - kwargs: Arguments that are specific to each input space's conc2pred method
         Returns:        
+
+        kwargs 
         """
         in_bdd  = self.inspace()
         for var in concrete.keys():
-            if isinstance(self[var], sp.DynamicPartition):
-                bits = kwargs['precision'][var]
-                in_bdd  &= self.inputs[var].conc2pred(self.mgr, var, concrete[var],
-                                                        bits, innerapprox = True)
-            elif isinstance(self[var], sp.FixedPartition):
-                in_bdd  &= self.inputs[var].conc2pred(self.mgr, var, concrete[var],
-                                                                innerapprox = True)
-            elif isinstance(self[var], sp.EmbeddedGrid):
-                in_bdd  &= self.inputs[var].conc2pred(self.mgr, var, concrete[var])
-            else:
-                raise TypeError
-        
+            custom_args = {k:v[var] for k,v in kwargs.items() if var in v}
+
+            if isinstance(self[var], sp.ContinuousPartition):
+                custom_args.update({'innerapprox': True})
+
+            in_bdd &= self.inputs[var].conc2pred(self.mgr, var, concrete[var], **custom_args)
+
         return in_bdd
 
     def concrete_output_to_abs(self, concrete, **kwargs):
-        r"""
-        
+        r"""       
+
         Args:
-            - concrete (dict): Keys are variable names, values are concrete instances of that variable
+            - concrete (dict): Keys are output variable names, values are concrete instances of that variable
             - kwargs: Arguments that are specific to each output space's conc2pred method
         Returns:
 
         """
         out_bdd = self.outspace()
         for var in concrete.keys():
-            if isinstance(self[var], sp.DynamicPartition):
-                bits = kwargs['precision'][var]
-                out_bdd &= self.outputs[var].conc2pred(self.mgr, var, concrete[var],
-                                                         bits, innerapprox = False)
-            elif isinstance(self[var], sp.FixedPartition):
-                out_bdd &= self.outputs[var].conc2pred(self.mgr, var, concrete[var],
-                                                                innerapprox = False)
-            elif isinstance(self[var], sp.EmbeddedGrid):
-                out_bdd &= self.outputs[var].conc2pred(self.mgr, var, concrete[var])
-            else:
-                raise TypeError
+            custom_args = {k: v[var] for k, v in kwargs.items() if var in v}
+
+            if isinstance(self[var], sp.ContinuousPartition):
+                custom_args.update({'innerapprox': False})
+
+            out_bdd &= self.outputs[var].conc2pred(self.mgr, var, concrete[var], **custom_args)
 
         return out_bdd
 
     def ioimplies2pred(self, concrete, **kwargs):
         r"""
-        Returns the implication (input box => output box)
+        Return the implication (input box => output box).
+
+        Splits the hypberbox into input, output variables
+        If the input/output boxes don't align with the grid then:
+            - The input box is contracted 
+            - The output box is expanded
+
+        If concrete is underspecified, then it generates a hyperinterval embedded in a lower dimension
 
         Args:
             - concrete (dict): Keys are variable names, values are concrete instances of that variable
@@ -243,14 +246,7 @@ class AbstractModule(object):
         Returns:
             bdd: Implication (input pred => output pred)
 
-        Splits the hypberbox into input, output variables
-        If the input/output boxes don't align with the grid then:
-            - The input box is contracted 
-            - The output box is expanded
-
-        If concrete is underspecified, then it generates a hyperinterval embedded in a lower dimension
         """
-
         inputs = {k:v for k,v in concrete.items() if k in self.inputs}
         outputs = {k:v for k,v in concrete.items() if k in self.outputs}
         inpred = self.concrete_input_to_abs(inputs, **kwargs)
@@ -259,7 +255,7 @@ class AbstractModule(object):
 
     def input_iter(self, precision):
         r"""
-        Exhaustively searches over the concrete input grid
+        Exhaustively searches over the concrete input grid.
 
         Args:
             precision: A dictionary 
@@ -287,7 +283,7 @@ class AbstractModule(object):
 
     def hide(self, elim_vars):
         """
-        Hides an output variable and returns another module
+        Hides an output variable and returns another module.
 
         Args:
             elim_vars: Iterable of output variable names
@@ -311,13 +307,13 @@ class AbstractModule(object):
     
     def __le__(self,other):
         """
-        Checks for a feedback refinement relation between two modules
+        Checks for a feedback refinement relation between two modules.
         """
         raise NotImplementedError
     
     def __rshift__(self, other):
         """
-        Serial composition self >> other by feeding self's output into other's input
+        Serial composition self >> other by feeding self's output into other's input.
         Also an output renaming operator
         """
         if isinstance(other, tuple):
