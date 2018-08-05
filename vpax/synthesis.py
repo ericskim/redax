@@ -47,20 +47,22 @@ class ControlPre():
 
 class SafetyGame():
     """
-    Attributes: 
-        cpre: 
-        safe: 
+    Safety game solver.
+
+    Attributes:
+        sys (ControlModule): Control system module
+        safe (bdd): Safe set
     """
     def __init__(self, sys, safeset):
         self.cpre = ControlPre(sys)
-        self.sys  = sys 
+        self.sys  = sys
         self.safe = safeset # TODO: Check if a subset of the state space
 
-    def step(self, steps = None, winning = None):
+    def step(self, steps=None, winning=None):
         """
         Run a safety game until reaching a fixed point or a maximum number of steps.
-        
-        Args: 
+
+        Args:
             steps (int): Maximum number of game steps
             winning (dd BDD): Intermediate winning set
 
@@ -69,10 +71,10 @@ class SafetyGame():
             int       : Actualy number of game steps run.
             generator : Controller that maps state dictionary to safe input dictionary
         """
-        if steps:
+        if steps is not None:
             assert steps >= 0
 
-        z = self.sys.mgr.true if winning is None else winning
+        z = self.sys.statespace() if winning is None else winning
         zz = self.sys.mgr.false
 
         i = 0
@@ -80,9 +82,9 @@ class SafetyGame():
             if steps and i == steps:
                 break
             zz = z
-            z = zz & self.cpre(zz, no_inputs=True) & self.safe
+            z = self.cpre(zz, no_inputs=True) & self.safe
             i += 1
-        
+
         def safecontrols(state):
             r"""
 
@@ -121,27 +123,35 @@ class SafetyGame():
 
 
 class ReachGame():
+    """
+    Reach game solver.
+
+    Attributes:
+        sys (ControlModule): Control system module
+        target (bdd): Target set
+    """
     def __init__(self, sys, target):
         self.cpre = ControlPre(sys)
         self.target = target # TODO: Check if a subset of the state space
         self.sys = sys
 
-    def step(self, steps = None):
+    def step(self, steps = None, winning=None):
         """
         Run a reachability game until reaching a fixed point or a maximum number of steps.
 
-        Args: 
+        Args:
             steps (int): Maximum number of game steps
+            winning(bdd): Currently winning region
 
         Returns:
             dd BDD: Backward reachable set
             int   : Number of game steps run
         """
-        
-        if steps:
+
+        if steps is not None:
             assert steps >= 0
 
-        z = self.sys.mgr.false
+        z = self.sys.mgr.false if winning is None else winning
         zz = self.sys.mgr.true
 
         i = 0
@@ -149,9 +159,9 @@ class ReachGame():
             if steps and i == steps:
                 break
             zz = z
-            z = zz | self.cpre(zz, no_inputs = True) | self.target
+            z = self.cpre(zz, no_inputs = True) | self.target
             i += 1
-        
+
         return z, i
 
 class ReachAvoidGame():
@@ -163,10 +173,12 @@ class ReachAvoidGame():
 
     def __call__(self, steps = None):
         """
-        Run a reachability game until reaching a fixed point or a maximum number of steps.
+        Run a reach-avoid game until reaching a fixed point or a maximum number of steps.
 
-        Args: 
-            steps (int): Maximum number of game steps 
+        Minimum fixed point
+
+        Args:
+            steps (int): Maximum number of game steps
 
         Returns:
             dd BDD: Safe backward reachable set
@@ -184,7 +196,8 @@ class ReachAvoidGame():
             if steps and i == steps:
                 break
             zz = z
-            z = (zz | self.cpre(zz, no_inputs = True) | self.target) & self.safe
+            # z = (zz | self.cpre(zz, no_inputs = True) | self.target) & self.safe
+            z = (self.cpre(zz, no_inputs=True) & self.safe) | self.target
             i += 1
-                
+
         return z, i

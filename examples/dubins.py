@@ -2,7 +2,6 @@
 Dubins vehicle example 
 """
 
-
 import time
 
 import numpy as np
@@ -77,59 +76,55 @@ Declare modules
 
 mgr = BDD() 
 
-# Declare spaces
+# Declare continuous state spaces
 pspace      = DynamicPartition(-2,2)
 anglespace  = DynamicPartition(-np.pi, np.pi, periodic=True)
+# Declare discrete control spaces 
 vspace      = EmbeddedGrid(vmax/2, vmax, 2)
 angaccspace = EmbeddedGrid(-1.5, 1.5, 3)
 
 # Declare modules
-dubins_x        = AbstractModule(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace}, {'xnext': pspace})
-dubins_y        = AbstractModule(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace}, {'ynext': pspace})
-dubins_theta    = AbstractModule(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace}, {'thetanext': anglespace})
+dubins_x        = AbstractModule(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace}, 
+                                      {'xnext': pspace})
+dubins_y        = AbstractModule(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace}, 
+                                      {'ynext': pspace})
+dubins_theta    = AbstractModule(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace}, 
+                                      {'thetanext': anglespace})
 
 dubins = (dubins_x | dubins_y | dubins_theta)
 
-precision = {'x': 6,
-             'y':6,
-             'theta': 6,
-             'xnext': 6,
-             'ynext': 6,
-             'thetanext': 6}
+precision = {'x': 6, 'y':6, 'theta': 6,
+             'xnext': 6, 'ynext': 6, 'thetanext': 6}
 bittotal = sum(precision.values()) + 3 # +3 for the discrete embedded grid bits
 possible_transitions = dubins.count_io_space(bittotal)
 
 coarseiter = 0
 coarse_errors = {'x': 0, 'y': 0, 'theta': 0}
-errorboxes = []
+abs_starttime = time.time()
 for iobox in dubins.input_iter(precision={'x': 4, 'y': 4, 'theta': 3}):
     # Generate output windows
     iobox['xnext']     = xwindow(**{k: v for k, v in iobox.items() if k in dubins_x.inputs})
     iobox['ynext']     = ywindow(**{k: v for k, v in iobox.items() if k in dubins_y.inputs})
     iobox['thetanext'] = thetawindow(**{k: v for k, v in iobox.items() if k in dubins_theta.inputs})
     
-    # Add transitions
-    if not dubins_x.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_x.vars}, nbits=precision):
-        coarse_errors['x'] += 1
-    if not dubins_y.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_y.vars}, nbits=precision):
-        coarse_errors['y'] += 1
-    if not dubins_theta.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_theta.vars}, nbits=precision):
-        coarse_errors['theta'] += 1
+    # Add new inputs and constrain output nondeterminism
+    for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
+        filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
+        if not sys.apply_abstract_transitions(filtered_iobox, nbits=precision):
+            coarse_errors[var] += 1
 
     coarseiter += 1
     if coarseiter % 2000 == 0: 
         dubins = (dubins_x | dubins_y | dubins_theta) 
         iotrans = dubins.count_io(bittotal)
-        print("(samples, I/O % transitions, bddsize) --- ({0}, {1:.3}, {2})".format(coarseiter, 
-                                                            100*iotrans/possible_transitions,
-                                                            len(dubins.pred)))
+        print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(coarseiter, 
+                                                    100*iotrans/possible_transitions,
+                                                    len(dubins.pred),
+                                                    time.time() - abs_starttime))                                                            
 
 # Sample generator 
-numapplied = 0
-out_of_domain_violations = 0
 random_errors = {'x': 0, 'y': 0, 'theta': 0}
-abs_starttime = time.time()
-while(numapplied < 5000):
+for numapplied in range(5000):
     
     # Shrink window widths over time 
     scale = 1/np.log10(1.0*numapplied+10)
@@ -151,13 +146,11 @@ while(numapplied < 5000):
     iobox['ynext']     = ywindow(**{k: v for k, v in iobox.items() if k in dubins_y.inputs})
     iobox['thetanext'] = thetawindow(**{k: v for k, v in iobox.items() if k in dubins_theta.inputs})
 
-    # Constrain transitions 
-    if not dubins_x.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_x.vars}, nbits=precision):
-        random_errors['x'] += 1
-    if not dubins_y.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_y.vars}, nbits=precision):
-        random_errors['y'] += 1
-    if not dubins_theta.apply_abstract_transitions({k: v for k, v in iobox.items() if k in dubins_theta.vars}, nbits=precision):
-        random_errors['theta'] += 1
+    # Add new inputs and constrain output nondeterminism
+    for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
+        filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
+        if not sys.apply_abstract_transitions(filtered_iobox, nbits=precision):
+            random_errors[var] += 1
 
     numapplied += 1
     
@@ -186,12 +179,12 @@ print("Target Size:", dubins.mgr.count(target, 18))
 print("Game Steps:", steps)
 
 # # Plot reachable winning set
-plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), basin, 128)
+# plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), basin, 128)
 
 # # Plot x transition relation for v = .5
-xdyn = mgr.exist(['v_0'],(dubins_x.pred) & mgr.var('v_0'))
-plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
+# xdyn = mgr.exist(['v_0'],(dubins_x.pred) & mgr.var('v_0'))
+# plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
 
 # # Plot y transition relation for v = .5
-ydyn = mgr.exist(['v_0'],(dubins_y.pred) & mgr.var('v_0'))
-plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
+# ydyn = mgr.exist(['v_0'],(dubins_y.pred) & mgr.var('v_0'))
+# plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
