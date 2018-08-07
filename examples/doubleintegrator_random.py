@@ -2,6 +2,8 @@
 Double integrator example where the abstraction is constructed via random sampling of boxes.
 """
 
+import time
+
 import numpy as np
 from dd.cudd import BDD
 
@@ -51,15 +53,16 @@ possible_transitions = (pcomp | vcomp).count_io_space(bittotal)
 # Sample generator 
 numapplied = 0
 out_of_domain_violations = 0
-while(numapplied < 8000): 
+abs_starttime = time.time()
+while(numapplied < 5000): 
 
     # Shrink window widths over time 
     width = 18 * 1/np.log10(2*numapplied+10)
 
     # Generate random input windows 
     f_width = {'p': np.random.rand()*.5*width,
-               'v':np.random.rand()*width,
-               'a':np.random.rand()*.5*width}
+               'v': np.random.rand()*width,
+               'a': np.random.rand()*.5*width}
     f_left  = {'p': -10 +  np.random.rand() * (20 - f_width['p']),
                'v': -16 + np.random.rand() * (32 - f_width['v']),
                'a': 0 + np.random.rand() * (20 - f_width['a'])}
@@ -71,24 +74,23 @@ while(numapplied < 8000):
     ur = dynamics(**f_right)
     outbox = {outorder[i]: (ll[i], ur[i]) for i in range(2)}
     iobox.update(outbox)
-
-    # Apply 3d constraint
-    # system.apply_abstract_transitions(iobox, nbits =  precision)
-
-    # Apply 2d constraint to slices. Identical to parallel update but cannot be decomposed later 
-    # system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'p','v','pnext'}}, nbits =  precision)
-    # system.apply_abstract_transitions({k:v for k,v in iobox.items() if k in {'v','a','vnext'}}, nbits =  precision)
     
     # Apply constraint to parallel updates 
-    pcomp.apply_abstract_transitions({k: v for k, v in iobox.items() if k in pcomp.vars}, nbits =  precision)
-    vcomp.apply_abstract_transitions({k: v for k, v in iobox.items() if k in vcomp.vars}, nbits =  precision)
+    pcomp.apply_abstract_transitions({k: v for k, v in iobox.items() if k in pcomp.vars}, nbits=precision)
+    vcomp.apply_abstract_transitions({k: v for k, v in iobox.items() if k in vcomp.vars}, nbits=precision)
 
     numapplied += 1
 
-    if numapplied % 1000 == 0:
-        # assert system == pcomp | vcomp # TODO: This assertion doesn't hold. Figure out why! 
-        print("# samples", numapplied, " --- # I/O transitions", system.count_io(bittotal))
-        print("(samples, I/O % transitions) --- ({0}, {1})".format(numapplied, 100*system.count_io(bittotal)/possible_transitions))
+    if numapplied % 500 == 0:
+        system = pcomp | vcomp
+
+        iotrans = system.count_io(bittotal)
+        print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(numapplied, 
+                                                    100*iotrans/possible_transitions,
+                                                    len(system.pred),
+                                                    time.time() - abs_starttime))         
+
+        # plot3D_QT(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
 
 system = pcomp | vcomp
 
@@ -108,4 +110,5 @@ print("Safe Size:", system.mgr.count(safe, 12))
 print("Invariant Size:", system.mgr.count( inv, 12))
 plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
 
+# plot3D_QT(system.mgr, ('p', vspace), ('v', aspace), ('pnext', vspace), pcomp.pred, 128)
 # plot3D_QT(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)

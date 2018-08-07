@@ -179,9 +179,8 @@ class ContinuousPartition(SymbolicSet):
 
         if point == self.ub:
             return point
-        width = self.ub - self.lb
-        point =  (point - self.lb) % width
-        return point + self.lb
+        width = self.ub - self.lb 
+        return ((point - self.lb) % width) + self.lb
 
     @abstractmethod
     def pt2bv(self, point):
@@ -246,20 +245,32 @@ class DynamicPartition(ContinuousPartition):
         if self.periodic:
             point = self._wrap(point)
 
-        assert point <= self.ub + tol, "Point {0} exceeds upper bound {1}".format(point, self.ub + tol)
-        assert point >= self.lb - tol, "Point {0} exceeds lower bound {1}".format(point, self.lb - tol)
-
-        # FIXME: Use a binary search and queries for membership in intervals instead.
-        index = int((point - self.lb) / (self.ub - self.lb) * 2**nbits)
-
-        # Catch numerical errors when point == self.ub
-        if index >= 2**nbits:
-            index = 2**nbits - 1
+        index = self.pt2index(point, nbits, alignleft=True)
 
         if self.periodic:
             index = bintogray(index)
 
         return int2bv(index,nbits)
+
+    def pt2index(self, point, nbits, alignleft = True, tol = 0.0):
+        """Convert a floating point into an integer index of the partition the point lies in."""
+        assert isinstance(nbits, int)
+
+        if self.periodic:
+            point = self._wrap(point)
+
+        assert point <= self.ub + tol, "Point {0} exceeds upper bound {1}".format(point, self.ub + tol)
+        assert point >= self.lb - tol, "Point {0} exceeds lower bound {1}".format(point, self.lb - tol)
+
+        bucket_fraction = 2**nbits * (point - self.lb) / (self.ub - self.lb)
+
+        index = math.floor(bucket_fraction) if alignleft else math.ceil(bucket_fraction)
+
+        # Catch numerical errors when point == self.ub
+        if alignleft is True and index >= 2**nbits:
+            index = (2**nbits) - 1
+
+        return index
 
     def pt2bdd(self, mgr, name, pt, nbits, innerapprox = False, tol = .00001):
         return bv2pred(mgr, name, self.pt2bv(pt, nbits))
@@ -301,7 +312,6 @@ class DynamicPartition(ContinuousPartition):
         abs_tol = eps * tol
 
         # TODO: Check for out of bounds error here!
-        # TODO: Variable declarations here!
 
         if innerapprox:
             # Inner approximations move in the box
@@ -322,7 +332,74 @@ class DynamicPartition(ContinuousPartition):
 
         return bv_interval(left_bv, right_bv, self.periodic)
 
+
+    def box2indexwindow(self, box, nbits, innerapprox = False, tol = .0000001):
+        """
+        Returns:
+            None if the index window is empty
+            (left, right) index tuple otherwise
+        """
+        left, right = box
+        assert tol >= 0 and tol <= 1, "Tolerance is not 0 <= tol <= 1"
+        eps = (self.ub - self.lb) / (2**nbits)
+        abs_tol = eps * tol
+
+        if nbits == 0 and self.periodic:
+            return None if innerapprox else (0,0)
+
+        if self.periodic:
+            left = self._wrap(left)
+            right = self._wrap(right)
+
+        # If true, then the XORs flip the usual value
+        flip = True if self.periodic and right < left else False
+
+        if innerapprox:
+            leftidx = self.pt2index(left, nbits, alignleft=False)
+            rightidx = self.pt2index(right, nbits, alignleft=True)
+
+            # print(flip, leftidx, rightidx)
+            # Left and right were in the same bin. Return empty window! 
+            if self.periodic is False and leftidx >= rightidx:
+                return None 
+            if self.periodic is True and not flip and leftidx >= rightidx:
+                return None
+            # Left boundary is near the upper value, right boundary is near lower value
+            if flip and leftidx == (2**nbits) and rightidx == 0:
+                return None
+            
+        else: 
+            leftidx = self.pt2index(left, nbits, alignleft=True)
+            rightidx = self.pt2index(right, nbits, alignleft=False)
+            # print(flip, leftidx, rightidx)
+
+        # Weird off by one errors happen.
+        # if flip is False:
+        rightidx = (rightidx - 1) % (2**nbits)
+        leftidx = leftidx % (2**nbits)
+        # else:
+            # leftidx  = (leftidx - 1) % (2**nbits)
+
+        return leftidx, rightidx
+
+
     def conc2pred(self, mgr, name, box, nbits, innerapprox = False, tol = .00001):
+        predbox = mgr.false
+
+        window = self.box2indexwindow(box, nbits, innerapprox, tol)
+        if window == None:
+            return predbox
+        leftidx, rightidx = window
+
+        if self.periodic: 
+            for bv in bvwindowgray(leftidx, rightidx, nbits):
+                predbox |= bv2pred(mgr, name, bv)
+        else:
+            for bv in bvwindow(leftidx, rightidx, nbits):
+                predbox |= bv2pred(mgr, name, bv)
+        return predbox
+
+    def conc2predold(self, mgr, name, box, nbits, innerapprox = False, tol = .00001):
         """
         Overapproximation of a concrete box with its BDD.
 

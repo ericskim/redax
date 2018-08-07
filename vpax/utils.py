@@ -53,9 +53,7 @@ def num_with_name(name: str, x):
 
 
 def bv2pred(mgr, name: str, bv):
-    """
-    If bv's size is smaller than the bits allocated, then it takes the most significant ones
-    """
+    """Convert a variable precision bitvector into a predicate."""
 
     for i in range(len(bv)):
         mgr.declare(name + "_" + str(i))
@@ -122,13 +120,22 @@ def graytobin(x: int):
 
 
 def bvwindow(left: int, right: int, nbits: int):
-    bvs = []
-    assert left <= right
+    """
+    Convert a window [left, right] inclusive into a collection of variable precision bitvectors
+    """
+    assert left >= 0
+    assert right >= 0
     assert right <= 2**nbits - 1
-    while(True):
 
+    bvs = []
+    # Empty window
+    if right < left:
+        return bvs 
+
+    while(True):
+        
         if nbits == 0:
-            break
+            return [(True,), (False,)]
 
         if left == right:
             bvs += [int2bv(left, nbits)]
@@ -143,6 +150,9 @@ def bvwindow(left: int, right: int, nbits: int):
         if right % 2 == 0:
             bvs += [int2bv(right, nbits)]
             right -= 1
+
+        if left > right:
+            break
 
         # Reduce precision
         nbits = nbits-1
@@ -164,7 +174,7 @@ def bvwindowgray(left: int, right: int, nbits: int):
 
     while(True):
         if nbits == 0:
-            break
+            return [(True,), (False,)]
 
         if left == right:
             bvs += [int2bv(bintogray(left), nbits)]
