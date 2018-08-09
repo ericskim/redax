@@ -6,4 +6,4 @@ build/
 *.cache
 *.egg-info
 *.code-workspace
-./docs/**
+docs/**
