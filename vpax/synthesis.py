@@ -1,5 +1,7 @@
 from functools import reduce
 
+from vpax.controllers import MemorylessController
+
 flatten = lambda l: [item for sublist in l for item in sublist]
 
 def _name(i):
@@ -11,30 +13,40 @@ def _idx(i):
 
 
 class ControlPre():
+    """Controlled Predecessor Computer."""
+
     def __init__(self, controlsys):
         self.sys = controlsys
         self.nonblock = controlsys.nonblock()
 
-        self.elimcontrol = lambda bits, pred : self.sys.mgr.exist(bits, pred)  #FIXME: exists
-        self.elimpost = lambda bits, pred: self.sys.mgr.forall(bits, ~self.sys.outspace() | pred)
-
         prebits = flatten([self.sys.pred_bitvars[state] for state in self.sys.prestate])
         self.postbits = [self.sys.pre_to_post[_name(i)] + '_' + _idx(i) for i in prebits]
-        self.swapvars = {i: j for i, j in zip(prebits, self.postbits)}
+        self.swapstates = {i: j for i, j in zip(prebits, self.postbits)}
+
+    def elimcontrol(self, bits, pred):
+        r"""Existentially eliminate control bits from a predicate."""
+        return self.sys.mgr.exist(bits, pred & self.sys.controlspace())
+
+    def elimpost(self, bits, pred): 
+        r"""Universally eliminate post state bits from a predicate."""
+        return self.sys.mgr.forall(bits, ~self.sys.outspace() | pred)
 
     def __call__(self, Z, no_inputs = False):
         r"""
-        Controllable predecessor for target next state set Z(x')
+        Compute controllable predecessor for target next state set.
 
-        Args:
-            Z (bdd):
-            no_inputs (bool): If false then returns a (pre state,control) predicate. If true, returns a pre state predicate.
+        Computes  nonblock /\ forall x'. (sys(x,u,x') => Z(x'))
 
-        nonblock /\ forall x'. (sys(x,u,x') => Z(x'))
+        Parameters
+        ----------
+        Z: bdd
+            Target set (expressed over pre states) at next time step
+        no_inputs: bool
+            If false then returns a (pre state,control) predicate. If true, returns a pre state predicate.
+
         """
-
         # Exchange Z's pre state variables for post state variables
-        Z = self.sys.mgr.let(self.swapvars, Z)
+        Z = self.sys.mgr.let(self.swapstates, Z)
         # Compute implication
         Z = (~self.sys.pred | Z)
         # Eliminate x' and return
@@ -49,10 +61,15 @@ class SafetyGame():
     """
     Safety game solver.
 
-    Attributes:
-        sys (ControlModule): Control system module
-        safe (bdd): Safe set
+    Attributes
+    ----------
+    sys: ControlSystem
+        Control system to synthesize for
+    safe: bdd
+        Safe region predicate
+
     """
+
     def __init__(self, sys, safeset):
         self.cpre = ControlPre(sys)
         self.sys  = sys
@@ -62,17 +79,27 @@ class SafetyGame():
         """
         Run a safety game until reaching a fixed point or a maximum number of steps.
 
-        Args:
-            steps (int): Maximum number of game steps
-            winning (dd BDD): Intermediate winning set
+        Parameters
+        ----------
+        steps: int
+            Maximum number of game steps to run 
+        winning: int
+            Currently winning region
 
-        Returns:
-            dd BDD    : Safe invariant region
-            int       : Actualy number of game steps run.
-            generator : Controller that maps state dictionary to safe input dictionary
+        Returns
+        -------
+        bdd: 
+            Safe invariant region
+        int:
+            Actualy number of game steps run.
+        generator: 
+            Controller that maps state dictionary to safe input dictionary
+
         """
         if steps is not None:
             assert steps >= 0
+
+        C = self.sys.mgr.false
 
         z = self.sys.statespace() if winning is None else winning
         zz = self.sys.mgr.false
@@ -82,74 +109,58 @@ class SafetyGame():
             if steps and i == steps:
                 break
             zz = z
-            z = self.cpre(zz, no_inputs=True) & self.safe
+            C = self.cpre(zz) & self.safe
+            ubits = [k for k in C.support if _name(k) in self.sys.control.keys()]
             i += 1
+            z = self.sys.mgr.exist(ubits , C)
 
-        def safecontrols(state):
-            r"""
-
-            """
-            assert (state.keys() == self.sys.prestate.keys())
-
-            # Convert concrete state to BDD
-            pt_bdd = self.sys.mgr.true
-            forall_bits = []
-            exists_bits = []
-            for k, v in state.items():
-                poststate = self.sys.pre_to_post[k]
-                forall_bits += self.sys.pred_bitvars[poststate]
-                exists_bits += self.sys.pred_bitvars[k]
-                nbits = len(self.sys.pred_bitvars[k])
-                pt_bdd &= self.sys.prestate[k].pt2bdd(self.sys.mgr, k, v, nbits)
-
-            # Safe state-input pairs
-            xu = pt_bdd & z & self.cpre(z, no_inputs = False) & self.safe
-
-            # Safe control inputs
-            u = self.sys.mgr.exist(exists_bits, xu)
-
-            # Return generator for safe controls
-            for u_assignment in self.sys.mgr.pick_iter(u):
-                # Translate BDD assignment into concrete counterpart
-                uval = dict()
-                for uvar in self.sys.control.keys():
-                    ubits = [k for k in u_assignment if _name(k) == uvar]
-                    ubits.sort()
-                    bv = [u_assignment[bit] for bit in ubits]
-                    uval[uvar] = self.sys.control[uvar].bv2conc(bv)
-                yield uval
-
-        return z, i, safecontrols
+        return z, i, MemorylessController(self.sys, C)
 
 
 class ReachGame():
     """
     Reach game solver.
 
-    Attributes:
-        sys (ControlModule): Control system module
-        target (bdd): Target set
+    Attributes
+    ----------
+    sys: ControlSystem
+        Control system to synthesize for
+    target: bdd
+        Target region predicate
+
     """
+
     def __init__(self, sys, target):
         self.cpre = ControlPre(sys)
         self.target = target # TODO: Check if a subset of the state space
         self.sys = sys
 
+
     def step(self, steps = None, winning=None):
         """
         Run a reachability game until reaching a fixed point or a maximum number of steps.
 
-        Args:
-            steps (int): Maximum number of game steps
-            winning(bdd): Currently winning region
+        Parameters
+        ----------
+        steps: int
+            Maximum number of game steps to run 
+        winning: int
+            Currently winning region
 
-        Returns:
-            dd BDD: Backward reachable set
-            int   : Number of game steps run
+        Returns
+        -------
+        bdd: 
+            Backward reachable set
+        int:
+            Number of game steps run
+        MemorylessController:
+                Controller for the reach game
+
         """
-
         if steps is not None:
             assert steps >= 0
+
+        C = self.sys.mgr.false 
 
         z = self.sys.mgr.false if winning is None else winning
         zz = self.sys.mgr.true
@@ -158,13 +169,33 @@ class ReachGame():
         while (z != zz):
             if steps and i == steps:
                 break
+
             zz = z
-            z = self.cpre(zz, no_inputs = True) | self.target
+            z = self.cpre(zz) | self.target # state-input pairs
+            ubits = [k for k in z.support if _name(k) in self.sys.control.keys()]
+            C = C | (z & (~self.sys.mgr.exist(ubits , C))) # Add new state-input pairs to controller            
+            z = self.sys.mgr.exist(ubits , z)
             i += 1
 
-        return z, i
+        return z, i, MemorylessController(self.sys, C)
 
 class ReachAvoidGame():
+    """
+    Reach-avoid game solver.
+
+    Solves for the temporal logic formula "safe UNTIL target"
+
+    Attributes
+    ----------
+    sys: ControlSystem
+        Control system to synthesize for
+    safe: bdd
+        Safety region predicate
+    target: bdd
+        Target region predicate
+
+    """
+    
     def __init__(self, sys, safe, target):
         self.cpre = ControlPre(sys)
         self.target = target  # TODO: Check if a subset of the state space
@@ -175,18 +206,27 @@ class ReachAvoidGame():
         """
         Run a reach-avoid game until reaching a fixed point or a maximum number of steps.
 
-        Minimum fixed point
+        Solves for the temporal logic formula "safe UNTIL target"
 
-        Args:
-            steps (int): Maximum number of game steps
+        Parameters
+        ----------
+        steps: int 
+            Maximum number of game steps to run 
 
-        Returns:
-            dd BDD: Safe backward reachable set
-            int   : Number of game steps run
+        Returns
+        -------
+        bdd:
+            Safe backward reachable set
+        int:
+            Number of game steps run
+        MemorylessController:
+            Controller for the reach-avoid game
+            
         """
-
         if steps:
             assert steps >= 0
+
+        C = self.sys.mgr.false
 
         z = self.sys.mgr.false
         zz = self.sys.mgr.true
@@ -195,9 +235,13 @@ class ReachAvoidGame():
         while (z != zz):
             if steps and i == steps:
                 break
-            zz = z
-            # z = (zz | self.cpre(zz, no_inputs = True) | self.target) & self.safe
-            z = (self.cpre(zz, no_inputs=True) & self.safe) | self.target
-            i += 1
 
-        return z, i
+            zz = z
+            # z = (zz | self.cpre(zz, no_inputs = True) | self.target) & self.safe 
+            z = (self.cpre(zz) & self.safe) | self.target # State input pairs
+            ubits = [k for k in z.support if _name(k) in self.sys.control.keys()]
+            C = C | (z & (~self.sys.mgr.exist(ubits , C))) # Add new state-input pairs to controller
+            i += 1
+            z = self.sys.mgr.exist(ubits , z)
+
+        return z, i, MemorylessController(self.sys, C)

@@ -1,10 +1,10 @@
 
-# Visualize BDD sets in 2D or 3D
-import matplotlib.pyplot as plt
+"""Visualize BDD sets in 2D or 3D."""
 import numpy as np
+import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-from vpax.spaces import DynamicPartition
+from vpax.spaces import DynamicCover
 from vpax.utils import bv2int, graytobin
 
 
@@ -27,7 +27,7 @@ def centerspace(space):
 
 
 def dynamicperiodic(space):
-    if isinstance(space, DynamicPartition) and space.periodic is True:
+    if isinstance(space, DynamicCover) and space.periodic is True:
         return True
     return False
 
@@ -35,16 +35,23 @@ def dynamicperiodic(space):
 # Organize into bitvectors
 def plot2D(mgr, xspace, yspace, pred):
     """
+    Plot a 2D set represented by a predicate.
 
-    Args:
-        mgr:    dd manager
-        xspace: (name: str, symbolicinterval)
-        yspace: (name: str, symbolicinterval)
-        pred:   dd's bdd object over xspace and yspace
+    Parameters
+    ----------
+    mgr : dd manager
+    xspace : tuple (str, symbolic space)
+        horizontal axis name and space
+    yspace : tuple (str, symbolic space)
+        vertical axis name and space
+    pred : bdd
+        Predicate representing set over xspace and yspace
 
-    Return:
-        fig: matplotlib figure
-        ax: matplotlib axis
+    Returns
+    -------
+    matplotlib figure
+    matplotlib axis
+
     """
     xname, xgrid = xspace
     yname, ygrid = yspace
@@ -161,9 +168,7 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
 
     # Construct bitmask
     mask = np.full((xbins, ybins, zbins), False)
-    xpts = []
-    ypts = []
-    zpts = []
+
     for pt in mgr.pick_iter(pred):
         xvars = [k for k, v in pt.items() if _name(k) == xname]
         yvars = [k for k, v in pt.items() if _name(k) == yname]

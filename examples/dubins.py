@@ -9,7 +9,7 @@ from dd.cudd import BDD
 
 from vpax.controlmodule import to_control_module
 from vpax.module import AbstractModule
-from vpax.spaces import DynamicPartition, EmbeddedGrid, FixedPartition
+from vpax.spaces import DynamicCover, EmbeddedGrid, FixedCover
 from vpax.synthesis import ReachGame
 from vpax.visualizer import plot3D, plot3D_QT
 
@@ -77,8 +77,8 @@ Declare modules
 mgr = BDD() 
 
 # Declare continuous state spaces
-pspace      = DynamicPartition(-2,2)
-anglespace  = DynamicPartition(-np.pi, np.pi, periodic=True)
+pspace      = DynamicCover(-2,2)
+anglespace  = DynamicCover(-np.pi, np.pi, periodic=True)
 # Declare discrete control spaces 
 vspace      = EmbeddedGrid(vmax/2, vmax, 2)
 angaccspace = EmbeddedGrid(-1.5, 1.5, 3)
@@ -124,7 +124,7 @@ for iobox in dubins.input_iter(precision={'x': 4, 'y': 4, 'theta': 3}):
 
 # Sample generator 
 random_errors = {'x': 0, 'y': 0, 'theta': 0}
-for numapplied in range(5000):
+for numapplied in range(8000):
     
     # Shrink window widths over time 
     scale = 1/np.log10(1.0*numapplied+10)
@@ -146,7 +146,7 @@ for numapplied in range(5000):
     iobox['ynext']     = ywindow(**{k: v for k, v in iobox.items() if k in dubins_y.inputs})
     iobox['thetanext'] = thetawindow(**{k: v for k, v in iobox.items() if k in dubins_theta.inputs})
 
-    # Add new inputs and constrain output nondeterminism
+    # Add new inputs and constrain output nondeterminism for each subsystem
     for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
         filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
         if not sys.apply_abstract_transitions(filtered_iobox, nbits=precision):
@@ -172,7 +172,7 @@ target &= pspace.conc2pred(mgr, 'y', [-.8, 0], 6, innerapprox=False)
 
 game = ReachGame(csys, target)
 starttime = time.time()
-basin, steps = game.step()
+basin, steps, controller = game.step()
 print("Solve Time:", time.time() - starttime)
 print("Reach Size:", dubins.mgr.count(basin, 18))
 print("Target Size:", dubins.mgr.count(target, 18))

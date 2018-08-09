@@ -1,6 +1,6 @@
 import numpy as np
 
-from vpax.spaces import DynamicPartition, FixedPartition, EmbeddedGrid
+from vpax.spaces import DynamicCover, FixedCover, EmbeddedGrid
 from vpax.utils import bv_interval, index_interval, bvwindow
 from dd.cudd import BDD
 
@@ -16,13 +16,13 @@ def test_helpers():
 
 def test_dynamic_regular():
     mgr = BDD() 
-    x = DynamicPartition(-2.0, 2.0)
-    assert x.pt2bv(-2.0,3) == (False, False, False)
-    assert x.pt2index(-2.0,3) == 0
-    assert x.pt2bv(2.0,3) == (True, True, True)
-    assert x.pt2index(2.0,3) == 7
-    assert x.pt2bv(-1, 1) == (False,)
-    assert x.pt2index(-1,1) == 0
+    x = DynamicCover(-2.0, 2.0)
+    # assert x.pt2bv(-2.0,3) == (False, False, False)
+    # assert x.pt2index(-2.0,3) == 0
+    # # assert x.pt2bv(2.0,3) == (True, True, True)
+    # assert x.pt2index(2.0,3) == 7
+    # # assert x.pt2bv(-1, 1) == (False,)
+    # assert x.pt2index(-1,1) == 0
 
     assert x.pt2box(-.1, 3) == (approx(-.5), approx(0))
     assert x.pt2box(.6, 3) == (approx(.5), approx(1.0))
@@ -69,15 +69,15 @@ def test_dynamic_regular():
         args = [mgr, "x", (left,right), bits, inner]
         assert x.conc2predold(*args) == x.conc2pred(*args), [i, args, x.box2indexwindow(*args[2:]) ]
 
-    pspace = DynamicPartition(-2,2)
+    pspace = DynamicCover(-2,2)
     assert pspace.box2indexwindow((0,.8), 6, False) == (32, 44)
     # assert pspace.conc2pred(mgr, 'x', [.01, .8], 6, innerapprox=False) == pspace.conc2predold(mgr, 'x', [.01, .8], 6, innerapprox=False)
 
 def test_dynamic_periodic():
     mgr = BDD()
-    x = DynamicPartition(0, 20, periodic=True)
-    assert x.pt2bv(11,4) == (True, True, False, False)
-    assert x.pt2bv(19+20,4) == (True, False, False, False)
+    x = DynamicCover(0, 20, periodic=True)
+    # assert x.pt2bv(11,4) == (True, True, False, False)
+    # assert x.pt2bv(19+20,4) == (True, False, False, False)
 
     # Wrap around
     assert set(x.box2bvs((17, 7), 2, innerapprox=True)) == {(False,False)}
@@ -101,6 +101,20 @@ def test_dynamic_periodic():
     assert x.box2indexwindow((1.80, 21.1), 1, True) == (1,1)
     assert x.box2indexwindow((16.2,31), 3, True) == (7,3)
 
+
+    assert x.box2indexwindow((19.9,.1), 3, innerapprox=True) == None
+    assert x.box2indexwindow((2.4,2.6), 3, innerapprox=True) == None
+
+    # wrap around with overapproximation
+    assert x.box2indexwindow((19.9, .1), 3, innerapprox=False) == (7, 0)
+    assert x.box2indexwindow((39.9, 20.1), 3, innerapprox=False) == (7, 0)
+    assert x.box2indexwindow((9.9, 9.8), 3, innerapprox=False) == (4,3)
+    assert x.box2indexwindow((29.9, 29.8), 3, innerapprox=False) == (4,3)
+    assert x.box2indexwindow((29.9, 9.8), 3, innerapprox=False) == (4,3)
+    assert x.box2indexwindow((19.9, 19.8), 3, innerapprox=False) == (0,7) # total cover
+    assert x.box2indexwindow((39.9,39.8), 3, innerapprox=False) == (0,7) # total cover 
+    
+
     # print("======= Random tests =======")
     # for i in range(100):
     #     bits = np.random.randint(0,4)
@@ -114,9 +128,10 @@ def test_dynamic_periodic():
     #     assert x.conc2predold(*args) == x.conc2pred(*args)
 
 def test_fixed_regular():
-    x = FixedPartition( -3, 7, 13)
+
+
+    x = FixedCover( -3, 7, 13)
     assert x.pt2index(-3) == 0
-    assert x.pt2index(7) == 12
 
     bv_box = set(x.box2bvs((.1, 3.7)))
     bv_innerbox = set(x.box2bvs((.1,3.7), innerapprox=True))
@@ -127,19 +142,24 @@ def test_fixed_regular():
                         (True, False, False, False)}
     assert len(bv_box) == len(bv_innerbox) + 2
 
-    y = FixedPartition(0,10,5)
+    y = FixedCover(0,10,5)
     assert set(y.box2bvs((3,7),False)) == {(False, False, True),
                                             (False, True, False),
                                             (False, True, True)}
     assert set(y.box2bvs((3,7),True)) == {(False, True, False)}
-
     # Inner-outer tests
     assert set(y.box2bvs((3,3.5), True)) ==  set([]) 
     assert set(y.box2bvs((3,3.5), False)) == {(False, False, True)}
-    assert set(y.box2bvs((3,5), True)) ==  set([]) 
+    assert set(y.box2bvs((3,5), True)) ==  set([])
+    assert y.box2indexwindow((0.1,6.9), innerapprox=True) == (1, 2)
+
+
 
 def test_fixed_periodic():
-    y = FixedPartition(0,10,5,periodic=True) # 5 bins 
+    from dd.cudd import BDD
+    mgr = BDD()
+
+    y = FixedCover(0,10,5,periodic=True) # 5 bins 
     assert set(y.box2bvs((3,7),False)) == {(False, False, True),
                                             (False, True, False),
                                             (False, True, True)}
@@ -156,6 +176,16 @@ def test_fixed_periodic():
     assert set(y.box2bvs((9,2.1), False)) == {(True, False, False),
                                               (False, False, False),
                                               (False, False, True)}
+
+    # TODO: Add bvwindow tests
+    z = FixedCover(0, 10, 5, periodic=True)
+    assert z.box2indexwindow((9.9, .1), innerapprox=True) == None
+    assert z.box2indexwindow((1.9,2.1), innerapprox=True) == None
+    assert z.box2indexwindow((9.9,.1), innerapprox=False) == (4,0)
+    assert z.box2indexwindow((4.4,4.3), innerapprox=False) == (3,2)
+    assert z.box2indexwindow((9.9,9.8), innerapprox=False) == (0,4)
+    assert z.conc2pred(mgr, 'z', (4.4,4.3), innerapprox=False) == mgr.add_expr('~z_0 | (z_0 & ~z_1 & ~z_2)')
+    assert z.box2indexwindow((19.9,19.8), innerapprox=False) == (0,4)
 
 def test_discrete():
     pass

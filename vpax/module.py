@@ -2,22 +2,46 @@ import itertools
 
 import vpax.spaces as sp
 
-
 class AbstractModule(object):
-    """
+    r"""
     Wrapper for translating between concrete and discrete I/O values.
 
-    Attributes:
-        mgr: dd manager
-        pred: Predicate encoding the module I/O relation
-        inputs: Dictionary {str: symbolicintervals}
-        outputs:
+    Attributes
+    ----------
+    mgr: dd manager
+        Manager for manipulating predicates as bdds 
+    inputs: dict  
+        Dictionary {str: symbolicintervals}
+    outputs: dict 
+        Dictionary {str: symbolicintervals}
+    pred: bdd 
+        Predicate encoding the module I/O relation
+
+    
+    Methods
+    -------
+
 
     """
 
-    def __init__(self, mgr, inputs, outputs, pred = None):
+    def __init__(self, mgr, inputs, outputs, pred=None, nonblocking=None):
         """
+        Initialize the abstract module. 
 
+        The pred and nonblocking parameters should only be used for fast initialization of the module.
+
+        Parameters
+        ----------
+        mgr: bdd manager
+
+        inputs: dict
+            Dictionary {str: symbolicintervals}
+        outputs: dict 
+            Dictionary {str: symbolicintervals}
+        pred: bdd
+            Predicate to initialize the input-output map
+        nonblocking: bdd
+            Predicate to initialize nonblocking inputs
         """
 
         self._in = inputs
@@ -31,15 +55,16 @@ class AbstractModule(object):
         if any(var.isalnum() is False for var in self.vars):
             raise ValueError("Only alphanumeric strings are accepted as variable names")
 
-
         self._pred = self.mgr.false if pred is None else pred
-        self._nb   = self.mgr.false
+        self._nb   = self.nonblock() if nonblocking is None else nonblocking
 
     def __repr__(self):
-        s = "Input Grids:\n"
-        s += "\n".join([str(k) + " -- " + v.__repr__() for k,v in self._in.items()]) + "\n"
-        s += "Output Grids:\n"
-        s += "\n".join([str(k) + " -- " + v.__repr__() for k,v in self._out.items()]) + "\n"
+        maxvarlen = max(len(v) for v in self.vars)
+        maxvarlen = max(maxvarlen, 20) + 4
+        s = "{0:{1}}{2}\n".format("==Input Names==", maxvarlen, "==Input Spaces==")
+        s += "\n".join(["{0:{1}}".format(k,maxvarlen) + v.__repr__() for k,v in self._in.items()]) + "\n"
+        s += "{0:{1}}{2}\n".format("==Output Names==", maxvarlen, "==Output Spaces==")
+        s += "\n".join(["{0:{1}}".format(k,maxvarlen) + v.__repr__() for k,v in self._out.items()]) + "\n"
         return s
 
     def __getitem__(self, var):
@@ -79,7 +104,7 @@ class AbstractModule(object):
 
     @property
     def pred_bitvars(self):
-        """
+        r"""
         Dictionary with variable name keys and BDD bit names as values
         """
         s = self.pred.support
@@ -90,10 +115,11 @@ class AbstractModule(object):
         return allocbits
 
     def inspace(self):
-        """
+        r"""
         Input space predicate
 
-        Returns:
+        Returns
+        -------
             bdd: Predicate corresponding to the Cartesian product of each input space.
         """
         space = self.mgr.true
@@ -102,10 +128,11 @@ class AbstractModule(object):
         return space
 
     def outspace(self):
-        """
+        r"""
         Output space predicate
 
-        Returns:
+        Returns
+        -------
             bdd: Predicate corresponding to the Cartesian product of each output space.
         """
         space = self.mgr.true
@@ -115,12 +142,14 @@ class AbstractModule(object):
 
     def nonblock(self):
         r"""
-        Returns a predicate of the inputs for which there exists an associated output.
+        Returns a predicate of the inputs for which there exists an associated output. 
+        Equivalent to the predicate from hiding all module outputs. 
 
-        Returns:
-            bdd: Predicate for exists x'. (system /\ outspace(x'))
+        Returns
+        -------
+        bdd: 
+            Predicate for exists x'. (system /\ outspace(x'))
 
-        Equivalent to hiding all module outputs and obtaining the predicate
         """
         elim_bits = []
         for k in self._out:
@@ -131,7 +160,8 @@ class AbstractModule(object):
         """
         Inputs with fully nondeterministic outputs
 
-        Returns:
+        Returns
+        -------
             bdd: Predicate for forall x'. (outspace(x') => system)
         """
         elim_bits = []
@@ -143,10 +173,12 @@ class AbstractModule(object):
     def _newinputs(self, inputpred):
         r"""
 
-        Args:
+        Parameters
+        ----------
             inputpred (bdd): Inputs
 
-        Returns:
+        Returns
+        -------
             bdd: (~self.nonblock() & inputpred & self.inspace())
 
         Assumes that inputpred is actually a predicate over the input space alone.
@@ -168,16 +200,23 @@ class AbstractModule(object):
             2. Constraints input/output pairs corresponding to the concrete transitions
                 pred = pred & (abstract_inputs => abstract_outputs)
 
-        Args:
-            concrete (dict):
-            kwargs:
+        Parameters
+        ----------
+            concrete: dict 
+            **kwargs:
 
-        Returns:
+        Side Effects
+        ------------
+            Mutates the pred attribute
+
+        Returns
+        -------
             bool: False if the transition was not applied due to an out of domain error.
 
         """
 
-        # FIXME: Assert that the concrete boxes fully specify the inputs/outputs
+        assert set(concrete) == set(self.inputs) | set(self.outputs)
+
         try:
             inputs = {k:v for k,v in concrete.items() if k in self.inputs}
             outputs = {k:v for k,v in concrete.items() if k in self.outputs}
@@ -192,24 +231,30 @@ class AbstractModule(object):
         return True
 
     def check(self):
-        """
-        Checks consistency of interval attributes
+        r"""
+        Checks consistency of internal private attributes
         """
         raise NotImplementedError
 
     def concrete_input_to_abs(self, concrete, **kwargs):
         r"""
-        Args:
-            - concrete (dict): Keys are input variable names, values are concrete instances of that variable
-            - kwargs: Arguments that are specific to each input space's conc2pred method
-        Returns:
+        Parameters
+        ----------
+        concrete : dict 
+            Keys are input variable names, values are concrete instances of that variable
+        **kwargs: 
+            Arguments that are specific to each input space's conc2pred method
 
+        Returns
+        -------
+        bdd:
+            BDD corresponding to the concrete input box 
         """
         in_bdd = self.inspace()
         for var in concrete.keys():
             custom_args = {k: v[var] for k, v in kwargs.items() if var in v}
 
-            if isinstance(self[var], sp.ContinuousPartition):
+            if isinstance(self[var], sp.ContinuousCover):
                 custom_args.update({'innerapprox': True})
 
             in_bdd &= self.inputs[var].conc2pred(self.mgr, var, concrete[var], **custom_args)
@@ -219,17 +264,24 @@ class AbstractModule(object):
     def concrete_output_to_abs(self, concrete, **kwargs):
         r"""
 
-        Args:
-            - concrete (dict): Keys are output variable names, values are concrete instances of that variable
-            - kwargs: Arguments that are specific to each output space's conc2pred method
-        Returns:
+        Parameters
+        ----------
+        concrete : dict 
+            Keys are output variable names, values are concrete instances of that variable
+        **kwargs: 
+            Arguments that are specific to each output space's conc2pred method
+
+        Returns
+        -------
+        bdd:
+            BDD corresponding to the concrete output box
 
         """
         out_bdd = self.outspace()
         for var in concrete.keys():
             custom_args = {k: v[var] for k, v in kwargs.items() if var in v}
 
-            if isinstance(self[var], sp.ContinuousPartition):
+            if isinstance(self[var], sp.ContinuousCover):
                 custom_args.update({'innerapprox': False})
 
             out_bdd &= self.outputs[var].conc2pred(self.mgr, var, concrete[var], **custom_args)
@@ -247,11 +299,13 @@ class AbstractModule(object):
 
         If concrete is underspecified, then it generates a hyperinterval embedded in a lower dimension
 
-        Args:
+        Parameters
+        ----------
             - concrete (dict): Keys are variable names, values are concrete instances of that variable
             - kwargs: Arguments that are specific to each input/output space's conc2pred method
 
-        Returns:
+        Returns
+        -------
             bdd: Implication (input pred => output pred)
 
         """
@@ -267,30 +321,42 @@ class AbstractModule(object):
 
         #FIXME: Implementation assumes dictionary ordering is stable
 
-        Args:
-            precision (dict): Keys are variables associated with dynamic partitions. Values are an integer number of bits.
+        Parameters
+        ----------
+        precision: dict 
+            Keys are variables associated with dynamic covers. Values are an integer number of bits.
 
-        Returns:
-            generator:
+        Yields
+        -------
+        dict:
+            keys are input variable names, values are concrete outputs
 
         """
         numin = len(self.inputs)
-        names = [k for k,v in self.inputs.items() if isinstance(v, sp.DynamicPartition)]
-        names += [k for k,v in self.inputs.items() if not isinstance(v, sp.DynamicPartition)]
+        names = [k for k,v in self.inputs.items() if isinstance(v, sp.DynamicCover)]
+        names += [k for k,v in self.inputs.items() if not isinstance(v, sp.DynamicCover)]
 
         #TODO: This solution is very adhoc!!! Need to find a better way to accommodate keyword arguments
-        iters = [v.conc_iter(precision[k]) for k,v in self.inputs.items() if isinstance(v, sp.DynamicPartition)]
-        iters += [v.conc_iter() for k,v in self.inputs.items() if not isinstance(v, sp.DynamicPartition)]
+        iters = [v.conc_iter(precision[k]) for k,v in self.inputs.items() if isinstance(v, sp.DynamicCover)]
+        iters += [v.conc_iter() for k,v in self.inputs.items() if not isinstance(v, sp.DynamicCover)]
 
         for i in itertools.product(*iters):
             yield {names[j]: i[j] for j in range(numin)}
 
     def count_io(self, bits: int):
-        """
+        r"""
         Number of input-output pairs in abstraction
 
-        Args:
-            bits (int):
+        Parameters
+        ----------
+        bits: int
+            Number of bits when counting
+
+        Returns
+        -------
+        float:
+            Number of transitions
+
         """
         return self.mgr.count(self.pred, bits)
 
@@ -298,11 +364,18 @@ class AbstractModule(object):
         return self.mgr.count(self._iospace, bits)
 
     def hide(self, elim_vars):
-        """
+        r"""
         Hides an output variable and returns another module.
 
-        Args:
-            elim_vars: Iterable of output variable names
+        Parameters
+        ----------
+        elim_vars: iterator
+            Iterable of output variable names
+
+        Returns
+        -------
+        AbstractModule:
+            Another abstract module with the removed outputs
 
         """
 
@@ -322,13 +395,24 @@ class AbstractModule(object):
                               self.mgr.exist(elim_bits, self.pred & self._iospace))
 
     def __le__(self, other):
-        """
-        Checks for a feedback refinement relation between two modules.
+        r"""
+        Check for a feedback refinement relation between two modules.
         """
         raise NotImplementedError
 
-    def __rshift__(self, other):
+    def coarsen(self, bits):
+        r"""
+        Remove least significant bits 
+
+        Parameters
+        ---------
+        bits: dict(str: int)
+            Maps variable name to the number of bits to remove. All variables that are excluded aren't coarsened. 
         """
+        raise NotImplementedError 
+
+    def __rshift__(self, other):
+        r"""
         Serial composition self >> other by feeding self's output into other's input.
         Also an output renaming operator
         """
@@ -368,7 +452,7 @@ class AbstractModule(object):
             for k in other.inputs:
                 # Common existing inputs must have same grid type
                 if k in newinputs and newinputs[k] != other.inputs[k]:
-                    raise TypeError("Mismatch between input grids {0} and {1}".format(newinputs[k], other.inputs[k]))
+                    raise TypeError("Mismatch between input spaces {0} and {1}".format(newinputs[k], other.inputs[k]))
                 newinputs[k] = other.inputs[k]
             overlapping_vars = set(self._out) & set(other._in)
             for k in overlapping_vars:
@@ -390,7 +474,7 @@ class AbstractModule(object):
             raise TypeError
 
     def __rrshift__(self, other):
-        """
+        r"""
         Input renaming operator via serial composition notation
 
         Example: module = ("a", "b") >> module
@@ -422,7 +506,7 @@ class AbstractModule(object):
 
     # Parallel composition
     def __or__(self, other):
-        """
+        r"""
         Parallel composition of modules
         """
 
@@ -442,7 +526,7 @@ class AbstractModule(object):
         for k in other.inputs:
             # Common existing inputs must have same grid type
             if k in newinputs and newinputs[k] != other.inputs[k]:
-                raise TypeError("Mismatch between input grids {0} and {1}".format(newinputs[k], other.inputs[k]))
+                raise TypeError("Mismatch between input spaces {0} and {1}".format(newinputs[k], other.inputs[k]))
             newinputs[k] = other.inputs[k]
 
         # Take union of disjoint output sets.

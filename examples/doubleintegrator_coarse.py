@@ -3,13 +3,15 @@ Double integrator example where the abstraction is initialized with a coarse gri
 and further refined by randomly sampling of boxes. 
 """
 
+import time 
+
 import matplotlib.pyplot as plt
 import numpy as np
 from dd.cudd import BDD
 
 from vpax.controlmodule import to_control_module
 from vpax.module import AbstractModule
-from vpax.spaces import DynamicPartition
+from vpax.spaces import DynamicCover
 from vpax.synthesis import SafetyGame
 from vpax.visualizer import plot2D, plot3D
 
@@ -23,9 +25,9 @@ def dynamics(p,v,a):
     vsign = 1 if v > 0 else -1 
     return p + v * ts , v + a * ts - vsign*k*(v**2)*ts - g*ts
 
-pspace = DynamicPartition(-10, 10)
-vspace = DynamicPartition(-16, 16)
-aspace = DynamicPartition(0, 20)
+pspace = DynamicCover(-10, 10)
+vspace = DynamicCover(-16, 16)
+aspace = DynamicCover(0, 20)
 
 # Monolithic module
 system = AbstractModule(mgr, 
@@ -47,6 +49,8 @@ outorder = {0: 'pnext', 1: 'vnext'}
 numapplied = 0
 out_of_domain_violations = 0
 possible_transitions = system.count_io_space(bittotal)
+abs_starttime = time.time()
+
 print("# I/O Transitions: ", possible_transitions)
 for iobox in system.input_iter({'p': 3, 'v': 4, 'a': 3}):
 

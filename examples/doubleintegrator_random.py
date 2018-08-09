@@ -9,7 +9,7 @@ from dd.cudd import BDD
 
 from vpax.controlmodule import to_control_module
 from vpax.module import AbstractModule
-from vpax.spaces import DynamicPartition
+from vpax.spaces import DynamicCover
 from vpax.synthesis import SafetyGame
 from vpax.visualizer import plot2D, plot3D, plot3D_QT
 
@@ -23,9 +23,9 @@ def dynamics(p,v,a):
     vsign = 1 if v > 0 else -1 
     return p + v*ts , v + a*ts - vsign*k*(v**2)*ts - g*ts
 
-pspace = DynamicPartition(-10,10)
-vspace = DynamicPartition(-16,16)
-aspace = DynamicPartition(0,20) 
+pspace = DynamicCover(-10,10)
+vspace = DynamicCover(-16,16)
+aspace = DynamicCover(0,20) 
 
 # Smaller component modules 
 pcomp = AbstractModule(mgr, 

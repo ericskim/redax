@@ -3,16 +3,16 @@ from dd.cudd import BDD
 from pytest import approx, raises
 
 from vpax.module import AbstractModule
-from vpax.spaces import DynamicPartition, EmbeddedGrid, FixedPartition
+from vpax.spaces import DynamicCover, EmbeddedGrid, FixedCover
 
 
 def test_dynamic_module():
     mgr = BDD() 
     
-    inputs = {'x': DynamicPartition(0, 16),
-              'y': DynamicPartition(0, 4),
+    inputs = {'x': DynamicCover(0, 16),
+              'y': DynamicCover(0, 4),
               }
-    output = {'z': DynamicPartition(0, 4)
+    output = {'z': DynamicCover(0, 4)
              }
 
     h = AbstractModule(mgr, inputs, output)
@@ -67,18 +67,18 @@ def test_mixed_module():
     from dd.cudd import BDD
 
     from vpax.module import AbstractModule
-    from vpax.spaces import DynamicPartition, FixedPartition
+    from vpax.spaces import DynamicCover, FixedCover
 
     mgr = BDD() 
-    inputs = {'x': DynamicPartition(0, 16),
-              'y': FixedPartition(-10, 10, 10),
-              'theta': DynamicPartition(-np.pi, np.pi, periodic=True),
-              'v': FixedPartition(0, 5, 5),
-              'omega': FixedPartition(-2, 2, 4)
+    inputs = {'x': DynamicCover(0, 16),
+              'y': FixedCover(-10, 10, 10),
+              'theta': DynamicCover(-np.pi, np.pi, periodic=True),
+              'v': FixedCover(0, 5, 5),
+              'omega': FixedCover(-2, 2, 4)
               }
-    outputs = {'xnext': DynamicPartition(0, 4),
-             'ynext': FixedPartition(-10,10,10),
-             'thetanext': DynamicPartition(-np.pi, np.pi, periodic=True)
+    outputs = {'xnext': DynamicCover(0, 4),
+             'ynext': FixedCover(-10,10,10),
+             'thetanext': DynamicCover(-np.pi, np.pi, periodic=True)
              }
     
     dubins = AbstractModule(mgr, inputs, outputs) 
@@ -86,7 +86,7 @@ def test_mixed_module():
     dubins.ioimplies2pred( {'v': (3.6,3.7), 'theta': (6,-6), 'y': (2,3), 'ynext': (2.1,3.1)}, 
                             nbits = {'theta': 3}) 
 
-    # Test that fixed partitions yield correct space cardinality
+    # Test that fixed covers yield correct space cardinality
     assert mgr.count(dubins.inspace(), 4+4+4+3+2) == 16 * 10 * 16 * 5 * 4
     assert mgr.count(dubins.outspace(), 2 + 4 + 4) == 4 * 10 * 16
 
@@ -103,6 +103,13 @@ def test_embeddedgrid_module():
 
     m = AbstractModule(mgr, inputs, outputs)
 
-    assert m.ioimplies2pred({'x': 2, 'y':4}) == mgr.add_expr(" ~( x_0 /\ ~x_1) | (~y_0 /\ ~y_1 /\ ~y_2)")
+    assert m.ioimplies2pred({'x': 2, 'y':4}) == mgr.add_expr(r" ~( x_0 /\ ~x_1) | (~y_0 /\ ~y_1 /\ ~y_2)")
     
     assert len(mgr.vars) > 0 
+
+def test_identity_module():
+    from dd.cudd import BDD 
+
+    from vpax.module import AbstractModule
+
+    
