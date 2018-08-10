@@ -1,8 +1,9 @@
 from functools import reduce
 
 from vpax.controllers import MemorylessController
+from vpax.utils import flatten
 
-flatten = lambda l: [item for sublist in l for item in sublist]
+# flatten = lambda l: [item for sublist in l for item in sublist]
 
 def _name(i):
     return i.split('_')[0]

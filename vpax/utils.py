@@ -1,5 +1,15 @@
 
 
+def flatten(l):
+    """Flatten a singly nested list.
+    
+    Examples
+    -------
+    >>> flatten([[0,1,2], [4,5]])
+    [0, 1, 2, 4, 5]
+    """
+    return [item for sublist in l for item in sublist]
+
 def int2bv(index: int, nbits: int):
     """
     A really high nbits just right pads the bitvector with "False"
