@@ -60,8 +60,9 @@ class AbstractModule(object):
         self._nb   = self.nonblock() if nonblocking is None else nonblocking
 
     def __repr__(self):
-        maxvarlen = max(len(v) for v in self.vars)
-        maxvarlen = max(maxvarlen, 20) + 4
+        if len(self.vars) > 0:
+            maxvarlen = max(len(v) for v in self.vars)
+            maxvarlen = max(maxvarlen, 20) + 4
         s = "{0:{1}}{2}\n".format("==Input Names==", maxvarlen, "==Input Spaces==")
         s += "\n".join(["{0:{1}}".format(k,maxvarlen) + v.__repr__() for k,v in self._in.items()]) + "\n"
         s += "{0:{1}}{2}\n".format("==Output Names==", maxvarlen, "==Output Spaces==")
@@ -440,16 +441,20 @@ class AbstractModule(object):
         Parameters
         ---------
         bits: dict(str: int)
-            Maps variable name to the number of bits to remove. All variables
-            that are excluded aren't coarsened.
+            Maps variable name to the maximum number of bits to keep. All
+            excluded variables aren't coarsened.
         """
         raise NotImplementedError
 
         # FIXME: Can only coarsen for continuous partitions
 
+        # TODO: Change so that the function specifies a maximum precision to keep, instead
+        # of coarseninging relative to the current precision
+
         def last_bits(var, num):
             return self.pred_bitvars[var][-num:]
 
+        # Assert that bits to keep are greater than zero
         exist_bits = [last_bits(k, v) for k, v in bits.items() if k in self.outputs]
         exist_bits = flatten(exist_bits)
         forall_bits = [last_bits(k, v) for k, v in bits.items() if k in self.inputs]
@@ -458,8 +463,8 @@ class AbstractModule(object):
         nb = self.mgr.forall(forall_bits, self.nonblock())
 
         return AbstractModule(self.mgr, self.inputs, self.outputs,
-                             pred=self.mgr.exist(exist_bits, nb & self._pred),
-                             nonblocking=nb)
+                              pred=self.mgr.exist(exist_bits, nb & self._pred),
+                              nonblocking=nb)
 
 
     def __rshift__(self, other):

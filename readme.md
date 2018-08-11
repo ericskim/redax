@@ -95,9 +95,10 @@ Distinguishing Features
 
 - **Manipulate and Compose Modules**
 
-  After constructing the abstract systems, you can construct larger ones via parallel and series composition.
+  Abstract systems can be manipulated with a collection of operations:
 
   ```python
+
   # Variable Renaming
   dubins >> ('xnext', 'xnext')
 
@@ -108,13 +109,21 @@ Distinguishing Features
   m1 >> m2
 
   # Hide outputs
-  Need a simpler example... 
+  Need a simpler example...
 
-  # Future feature: Compute lower complexity abstractions by eliminating least significant bits
-  simpler_dubins = dubins.coarsen(x=1, y=2)
+  # Future feature: Compute lower complexity abstractions keeping only the most significant bits
+  simple_model = model.coarsen(x=1, y=2)
   ```
 
-- **High Performance Symbolic Backend**
+  Operations can also be chained together:
+
+  ```python
+  simpler_dubins = dubins.hide('xnext')\
+                         .coarsen(x=5,y=4)\
+                         .rename(ynext = 'nextposition')
+  ```
+
+- **Extensible Symbolic Backend**
 
   We build on top of libraries for binary decision diagrams.
 
@@ -132,18 +141,17 @@ TODOs
 - Tests for floating point inequalities for conc2abs method in continuous covers
   - Iterators for the 2^n reduced grid traversal
 - Document more (especially class attributes)
-- Change fine to coarse abstraction
-  - FRR check across modules for dynamic grids
+- FRR check across modules for dynamic grids
 - Custom errors for out of domain
-- Try and reinstall from scratch in a virtualenv
 - Example
   - 3DOF ship
-  - lunar lander
+  - OpenAI lunar lander
   - Pair of dubins vehicles
-- Upload to github and add code coverage, travis-cl banners
-- Test performance of an immutable AbstractModule and abstraction via a .refine() method.
-- Rewrite continuous covers to have an overlap parameter.
-
+- Reinstall from scratch in a virtualenv
+  - Upload to github and add code coverage, travis-ci banners
+- Test performance of an immutable AbstractModule and abstraction via a .io_refine() method.
+- Rewrite continuous cover grid to have an overlap parameter.
+- Rewrite safe/target predicates as source and sink modules and use series composition operator for synthesis.
 
 Future Features
 ------

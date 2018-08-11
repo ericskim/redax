@@ -1,5 +1,5 @@
 """
-Dubins vehicle example 
+Dubins vehicle example
 """
 
 import time
@@ -14,7 +14,7 @@ from vpax.synthesis import ReachGame
 from vpax.visualizer import plot3D, plot3D_QT
 
 """
-Specify dynamics and overapproximations 
+Specify dynamics and overapproximations
 """
 
 L= 1.4
@@ -33,10 +33,10 @@ def containszero(left, right):
     if right < left:
         if left <= 0:
             return True
-    else: 
+    else:
         if left <= 0 and right >= 0:
             return True
-    
+
     return False
 
 def maxmincos(left, right):
@@ -59,10 +59,10 @@ def maxminsin(left, right):
 
 # Overapproximations of next states for each component
 # v and omega are points and not windows
-def xwindow(x,v,theta):
+def xwindow(x, v, theta):
     mincos, maxcos = maxmincos(theta[0], theta[1])
     return x[0] + v * mincos, x[1] + v * maxcos
-def ywindow(y,v,theta):
+def ywindow(y, v, theta):
     minsin, maxsin = maxminsin(theta[0], theta[1])
     return y[0] + v * minsin, y[1] + v * maxsin
 def thetawindow(theta, v, omega):
@@ -71,15 +71,15 @@ def thetawindow(theta, v, omega):
 outorder = {0: 'xnext', 1: 'ynext', 2: 'thetanext'}
 
 """
-Declare modules 
+Declare modules
 """
 
-mgr = BDD() 
+mgr = BDD()
 
 # Declare continuous state spaces
 pspace      = DynamicCover(-2,2)
 anglespace  = DynamicCover(-np.pi, np.pi, periodic=True)
-# Declare discrete control spaces 
+# Declare discrete control spaces
 vspace      = EmbeddedGrid(vmax/2, vmax, 2)
 angaccspace = EmbeddedGrid(-1.5, 1.5, 3)
 
@@ -106,7 +106,7 @@ for iobox in dubins.input_iter(precision={'x': 4, 'y': 4, 'theta': 3}):
     iobox['xnext']     = xwindow(**{k: v for k, v in iobox.items() if k in dubins_x.inputs})
     iobox['ynext']     = ywindow(**{k: v for k, v in iobox.items() if k in dubins_y.inputs})
     iobox['thetanext'] = thetawindow(**{k: v for k, v in iobox.items() if k in dubins_theta.inputs})
-    
+
     # Add new inputs and constrain output nondeterminism
     for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
         filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
@@ -114,25 +114,25 @@ for iobox in dubins.input_iter(precision={'x': 4, 'y': 4, 'theta': 3}):
             coarse_errors[var] += 1
 
     coarseiter += 1
-    if coarseiter % 2000 == 0: 
-        dubins = (dubins_x | dubins_y | dubins_theta) 
+    if coarseiter % 2000 == 0:
+        dubins = (dubins_x | dubins_y | dubins_theta)
         iotrans = dubins.count_io(bittotal)
-        print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(coarseiter, 
+        print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(coarseiter,
                                                     100*iotrans/possible_transitions,
                                                     len(dubins.pred),
-                                                    time.time() - abs_starttime))                                                            
+                                                    time.time() - abs_starttime))
 
-# Sample generator 
+# Sample generator
 random_errors = {'x': 0, 'y': 0, 'theta': 0}
 for numapplied in range(8000):
-    
-    # Shrink window widths over time 
+
+    # Shrink window widths over time
     scale = 1/np.log10(1.0*numapplied+10)
-    
+
     # Generate random input windows and points
     f_width = {'x':     np.random.rand()*scale*pspace.width(),
                'y':     np.random.rand()*scale*pspace.width(),
-               'theta': .2*anglespace.width()} 
+               'theta': .2*anglespace.width()}
     f_left = {'x':     pspace.lb + np.random.rand() * (pspace.width() - f_width['x']),
               'y':     pspace.lb + np.random.rand() * (pspace.width() - f_width['y']),
               'theta': anglespace.lb + np.random.rand() * (anglespace.width())}
@@ -153,30 +153,33 @@ for numapplied in range(8000):
             random_errors[var] += 1
 
     numapplied += 1
-    
-    if numapplied % 1000 == 0:
+
+    if numapplied % 2000 == 0:
         dubins = (dubins_x | dubins_y | dubins_theta)
         iotrans = dubins.count_io(bittotal)
-        print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(numapplied, 
+        print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(numapplied,
                                                     100*iotrans/possible_transitions,
                                                     len(dubins.pred),
                                                     time.time() - abs_starttime))
+
+        # xdyn = mgr.exist(['v_0'],(dubins_x.pred) & mgr.var('v_0'))
+        # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
 
 dubins = (dubins_x | dubins_y | dubins_theta)
 
 csys = to_control_module(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')))
 
-# Declare reach set 
-target =  pspace.conc2pred(mgr, 'x', [0, .8], 6, innerapprox=False)
-target &= pspace.conc2pred(mgr, 'y', [-.8, 0], 6, innerapprox=False)
+# Declare reach set as [0.8] x [-.8, 0] box
+target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 6, innerapprox=False)
+target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 6, innerapprox=False)
 
 game = ReachGame(csys, target)
 starttime = time.time()
 basin, steps, controller = game.step()
-print("Solve Time:", time.time() - starttime)
-print("Reach Size:", dubins.mgr.count(basin, 18))
-print("Target Size:", dubins.mgr.count(target, 18))
-print("Game Steps:", steps)
+print("Solve Time:" , time.time() - starttime)
+print("Reach Size:" , dubins.mgr.count(basin, 18))
+print("Target Size:" , dubins.mgr.count(target, 18))
+print("Game Steps:" , steps)
 
 # # Plot reachable winning set
 # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), basin, 128)
@@ -188,3 +191,13 @@ print("Game Steps:", steps)
 # # Plot y transition relation for v = .5
 # ydyn = mgr.exist(['v_0'],(dubins_y.pred) & mgr.var('v_0'))
 # plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
+
+"""Simulate"""
+state = {'x': -1, 'y': .6, 'theta': -.2}
+for step in range(10):
+    print(step, state)
+    u = [i for i in controller.allows(state)][0]
+    state.update(u)
+    nextstate = dynamics(**state)
+    state = {'x': nextstate[0], 'y': nextstate[1], 'theta': nextstate[2]}
+
