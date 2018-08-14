@@ -6,6 +6,7 @@ Module container
 
 """
 
+from typing import Iterator, Dict
 import itertools
 
 import sydra.spaces as sp
@@ -81,7 +82,7 @@ class AbstractModule(object):
             raise ValueError("Variable does not exist")
         return self._in[var] if var in self._in else self._out[var]
 
-    def __eq__(self,other) -> bool:
+    def __eq__(self, other) -> bool:
         if not isinstance(other, AbstractModule):
             return False
         if self.mgr != other.mgr:
@@ -221,7 +222,7 @@ class AbstractModule(object):
 
         return True
 
-    def io_refined(self, concrete: dict, silent: bool=True, **kwargs):
+    def io_refined(self, concrete: dict, silent: bool=True, **kwargs) -> 'AbstractModule':
         r"""
         Get a module refined with input-output data.
 
@@ -350,7 +351,7 @@ class AbstractModule(object):
 
         return out_bdd
 
-    def input_iter(self, precision: dict):
+    def input_iter(self, precision: dict) -> Iterator:
         r"""
         Generate for exhaustive search over the concrete input grid.
 
@@ -406,7 +407,7 @@ class AbstractModule(object):
     def count_io_space(self, bits: int) -> float:
         return self.mgr.count(self.iospace(), bits)
 
-    def hide(self, elim_vars):
+    def hide(self, elim_vars) -> 'AbstractModule':
         r"""
         Hides an output variable and returns another module.
 
@@ -437,7 +438,7 @@ class AbstractModule(object):
                               self.mgr.exist(elim_bits, self.pred & self.iospace())
                               )
 
-    def __le__(self, other) -> bool:
+    def __le__(self, other: 'AbstractModule') -> bool:
         r"""
         Check for a feedback refinement relation between two modules.
         
@@ -448,6 +449,7 @@ class AbstractModule(object):
         -------
         bool:
             True if the feedback refinement relation holds.
+            False if there is a type or module port mismatch
 
         """
         #TODO: Checks between Dynamic and fixed partitions
@@ -470,7 +472,7 @@ class AbstractModule(object):
 
         return True
 
-    def coarsen(self, bits=dict(), **kwargs):
+    def coarsened(self, bits=dict(), **kwargs) -> 'AbstractModule':
         r"""Remove less significant bits and coarsen the system representation.
 
         Input bits are universally abstracted ("forall")
@@ -508,7 +510,7 @@ class AbstractModule(object):
         return AbstractModule(self.mgr, self.inputs, self.outputs,
                               pred=newpred, nonblocking=nb)
 
-    def __rshift__(self, other):
+    def __rshift__(self, other) -> 'AbstractModule':
         r"""
         Serial composition self >> other by feeding self's output into other's
         input. Also an output renaming operator
@@ -570,7 +572,7 @@ class AbstractModule(object):
         else:
             raise TypeError
 
-    def __rrshift__(self, other):
+    def __rrshift__(self, other) -> 'AbstractModule':
         r"""
         Input renaming operator via serial composition notation
 
@@ -601,13 +603,14 @@ class AbstractModule(object):
             raise TypeError
 
     # Parallel composition
-    def __or__(self, other):
+    def __or__(self, other: 'AbstractModule') -> 'AbstractModule':
         r"""
         Parallel composition of modules.
 
         Returns
         -------
-        AbstractModule
+        AbstractModule:
+            Parallel composition of two modules
 
         """
         if self.mgr != other.mgr:

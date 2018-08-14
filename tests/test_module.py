@@ -145,9 +145,9 @@ def test_refinement_and_coarsening():
         mod = newmod
 
         # Check abstract relation relative to coarsened module
-        assert mod.coarsen(x=5,y=5) <= mod
+        assert mod.coarsened(x=5,y=5) <= mod
          # Coarsen should do nothing because it keeps many bits
-        assert mod.coarsen({'x':10},y=10) == mod
+        assert mod.coarsened({'x':10},y=10) == mod
 
 
 # def test_identity_module():

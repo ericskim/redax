@@ -22,6 +22,7 @@ g = 9.8
 
 mgr = BDD()
 
+
 def dynamics(p, v, a):
     vsign = 1 if v > 0 else -1
     return p + v * ts, v + a*ts - vsign*k*(v**2)*ts - g*ts
@@ -56,8 +57,7 @@ possible_transitions = (pcomp | vcomp).count_io_space(bittotal)
 # Sample generator
 numapplied = 0
 abs_starttime = time.time()
-while(numapplied < 15000):
-
+while(numapplied < 2000):
 
     # Shrink window widths over time
     width = 18 * 1/np.log10(2*numapplied+10)
@@ -109,7 +109,9 @@ safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox=True)
 
 # Solve game and plot 2D invariant region
 game = SafetyGame(csys, safe)
+synth_starttime = time.time()
 inv, steps, controller = game.step()
+print("Solver Time: ", time.time() - synth_starttime)
 print("Safe Size:", system.mgr.count(safe, 12))
 print("Invariant Size:", system.mgr.count(inv, 12))
 # plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)

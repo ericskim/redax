@@ -1,24 +1,35 @@
+"""
+Utilities 
+"""
+
 from typing import Sequence, Iterable, List
 
 BitVector = Sequence[bool]
+
+
+def num_with_name(name: str, x) -> int:
+    return len([i for i in x if name in i])
 
 
 def flatten(l):
     """Flatten a singly nested list.
     
     Examples
-    -------
+    --------
     >>> flatten([[0,1,2], [4,5]])
     [0, 1, 2, 4, 5]
     """
     return [item for sublist in l for item in sublist]
+
 
 def int2bv(index: int, nbits: int) -> BitVector:
     """
     A really high nbits just right pads the bitvector with "False"
     """
 
-    return tuple(True if ((index >> i) % 2 == 1) else False for i in range(nbits - 1, -1, -1))
+    return tuple(True if ((index >> i) % 2 == 1) else False
+                 for i in range(nbits - 1, -1, -1)
+                 )
 
 
 def increment_index(index: int, increment: int, nbits=None, graycode=False):
@@ -31,7 +42,7 @@ def increment_index(index: int, increment: int, nbits=None, graycode=False):
         return index + increment
 
 
-def bv_interval(lb, ub, graycode = False) -> Iterable[BitVector]:
+def bv_interval(lb, ub, graycode=False) -> Iterable[BitVector]:
     assert len(lb) == len(ub)
     nbits = len(lb)
     if not graycode and lb > ub:
@@ -40,9 +51,8 @@ def bv_interval(lb, ub, graycode = False) -> Iterable[BitVector]:
     lb = bv2int(lb)
     ub = bv2int(ub)
 
-    # return map(lambda x: int2bv(x,nbits),
-    #                 index_interval(lb, ub, nbits, graycode))
     return (int2bv(x, nbits) for x in index_interval(lb, ub, nbits, graycode))
+
 
 def index_interval(lb: int, ub: int, nbits=None, graycode=False) -> List[int]:
     """Construct an integer interval that includes both ends lb and ub."""
@@ -61,10 +71,6 @@ def index_interval(lb: int, ub: int, nbits=None, graycode=False) -> List[int]:
     return window
 
 
-def num_with_name(name: str, x) -> int:
-    return len([i for i in x if name in i])
-
-
 def bv2pred(mgr, name: str, bv: BitVector):
     """Convert a variable precision bitvector into a predicate."""
 
@@ -73,7 +79,7 @@ def bv2pred(mgr, name: str, bv: BitVector):
     b = mgr.true
     for i in range(len(bv)):
         if bv[i]:
-            b &=  mgr.var(name + "_" + str(i))
+            b &= mgr.var(name + "_" + str(i))
         else:
             b &= ~mgr.var(name + "_" + str(i))
     return b
@@ -88,7 +94,7 @@ def increment_bv(bv, increment: int, graycode=False, saturate=False) -> BitVecto
     if graycode:
         index = graytobin(bv2int(bv))
         index = (index+increment) % 2**nbits
-        return int2bv( bintogray(index), nbits)
+        return int2bv(bintogray(index), nbits)
     else:
         if bv == tuple(True for i in range(nbits)) and increment > 0:
             if saturate:
@@ -140,7 +146,7 @@ def bvwindow(left: int, right: int, nbits: int) -> List[BitVector]:
     assert right >= 0
     assert right <= 2**nbits - 1
 
-    bvs = []
+    bvs: List[BitVector] = []
     # Empty window
     if right < left:
         return bvs 
@@ -179,7 +185,7 @@ def bvwindowgray(left: int, right: int, nbits: int) -> List[BitVector]:
     """
     Convert a window [left, right] inclusive into a list of variable precision bitvectors.
     """
-    bvs = []
+    bvs: List[BitVector] = []
 
     assert right <= 2**nbits - 1
     assert left <= 2**nbits - 1
@@ -197,12 +203,12 @@ def bvwindowgray(left: int, right: int, nbits: int) -> List[BitVector]:
             break
 
         # Catch left edge
-        if left % 4 in (1,3):
+        if left % 4 in (1, 3):
             bvs += [int2bv(bintogray(left), nbits)]
             left += 1
 
         # Catch right edge
-        if right % 4 in (0,2):
+        if right % 4 in (0, 2):
             bvs += [int2bv(bintogray(right), nbits)]
             right -= 1
 

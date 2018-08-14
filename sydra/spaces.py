@@ -1,6 +1,4 @@
 r"""
-.. module::spaces
-
 
 Nomenclature:
 bv = Bit vector \n
@@ -13,14 +11,13 @@ grid = a countable set of points embedded in continuous space \n
 import itertools
 import math
 from abc import abstractmethod
-from typing import Tuple, Iterable
-
-
-from sydra.utils import *
+from typing import Iterable, Tuple
 
 import numpy as np
 
-def find_nearest(array, value) -> int:
+from sydra.utils import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, bv2int, bintogray, graytobin, increment_bv, bv_interval
+
+def find_nearest_index(array, value) -> int:
     idx = np.searchsorted(array, value, side="left")
     if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):
         return idx-1
@@ -34,28 +31,20 @@ class SymbolicSet(object):
 
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
-
-    @abstractmethod
-    def pt2bv(self, point):
-        raise NotImplementedError
-
-    @abstractmethod
-    def conc2pred(self):
-        raise NotImplementedError
 
 
 class DiscreteSet(SymbolicSet):
     """
     Discrete set abstract class
     """
-    def __init__(self, num_vals):
+    def __init__(self, num_vals) -> None:
         SymbolicSet.__init__(self)
         self.num_vals = num_vals
         self.num_bits = math.ceil(math.log2(num_vals))
 
-    def pt2bv(self, point):
+    def pt2bv(self, point) -> BitVector:
         assert point < self.num_vals
         return int2bv(point, self.num_bits)
 
@@ -68,7 +57,7 @@ class DiscreteSet(SymbolicSet):
         s += "Bounds: [0,...,{0}]".format(str(self.num_vals-1))
         return s
 
-    def abs_space(self, mgr, name):
+    def abs_space(self, mgr, name: str):
         """
         Returns the predicate of the discrete set abstract space
 
@@ -108,7 +97,7 @@ class EmbeddedGrid(DiscreteSet):
 
     """
 
-    def __init__(self, left, right, num):
+    def __init__(self, left: float, right: float, num: int) -> None:
         if num <= 0:
             raise ValueError("Grid must have at least one point")
         if left > right:
@@ -122,7 +111,7 @@ class EmbeddedGrid(DiscreteSet):
         self.pts = np.linspace(self.left, self.right, self.num_vals)
 
 
-    def pt2index(self, pt, snap = False) -> int:
+    def pt2index(self, pt: float, snap=False) -> int:
         """
         Parameters
         ----------
@@ -137,14 +126,13 @@ class EmbeddedGrid(DiscreteSet):
 
         """
         if snap:
-            return find_nearest(self.pts, pt)
+            return find_nearest_index(self.pts, pt)
         elif pt in self.pts:
             return np.searchsorted(self.pts, pt)
         else:
             raise ValueError("Cannot find an exact match without snapping")
 
-
-    def conc2pred(self, mgr, name, concrete, snap = True):
+    def conc2pred(self, mgr, name: str, concrete, snap=True):
         """
         Translate from a concrete value to a the associated predicate.
 
@@ -173,7 +161,7 @@ class EmbeddedGrid(DiscreteSet):
         s = "Embedded Grid({0}, {1}, {2})".format(str(self.left), str(self.right), str(self.num_vals))
         return s
 
-    def bv2conc(self, bv) -> float:
+    def bv2conc(self, bv: BitVector) -> float:
         """
         Converts a bitvector into a concrete grid point
         """
@@ -183,7 +171,7 @@ class ContinuousCover(SymbolicSet):
     """
     Continuous Interval
     """
-    def __init__(self, lb, ub, periodic = False):
+    def __init__(self, lb, ub, periodic=False) -> None:
         assert ub - lb >= 0.0, "Upper bound is smaller than lower bound"
         SymbolicSet.__init__(self)
         self.periodic = periodic
@@ -197,16 +185,16 @@ class ContinuousCover(SymbolicSet):
     def width(self) -> float:
         return self.ub - self.lb
 
-    def _wrap(self, point):
+    def _wrap(self, point: float):
         """Helper function for periodic intervals."""
 
         if point == self.ub:
             return point
-        width = self.ub - self.lb 
+        width = self.ub - self.lb
         return ((point - self.lb) % width) + self.lb
 
     @abstractmethod
-    def pt2bv(self, point):
+    def pt2bv(self, point: float):
         raise NotImplementedError
 
     def __eq__(self, other) -> bool:
@@ -222,18 +210,13 @@ class ContinuousCover(SymbolicSet):
         """Concrete space."""
         return self.bounds
 
-    @abstractmethod
-    def abs_space(self):
-        """Abstract space predicate."""
-        raise NotImplementedError
-
 class DynamicCover(ContinuousCover):
     """
     Dynamically covers the space with a variable number of bits.
     Number of covers is always a power of two.
 
     """
-    def __init__(self, lb, ub, periodic = False):
+    def __init__(self, lb: float, ub: float, periodic=False) -> None:
         """
         Parameters
         ----------
@@ -247,19 +230,21 @@ class DynamicCover(ContinuousCover):
         ContinuousCover.__init__(self, lb, ub, periodic)
 
     def __repr__(self):
-        s = "DynamicCover({0:.4}, {1:.4}, periodic={2})".format(self.lb, self.ub, self.periodic)
+        s = "DynamicCover({0:.4}, {1:.4}, periodic={2})".format(self.lb,
+                                                                self.ub,
+                                                                self.periodic)
         # s += "Bounds: {0} ".format(str(self.bounds))
         # if self.periodic:
         #     s += ", Periodic"
         return s
 
-    def abs_space(self, mgr, name = None):
+    def abs_space(self, mgr, name:str):
         """
         Returns the predicate of the abstract space
         """
         return mgr.true
 
-    def pt2bv(self, point, nbits, tol = 0.0):
+    def pt2bv(self, point: float, nbits: int, tol=0.0):
         """
         Continuous point to a bitvector
 
@@ -286,9 +271,9 @@ class DynamicCover(ContinuousCover):
         if self.periodic:
             index = bintogray(index)
 
-        return int2bv(index,nbits)
+        return int2bv(index, nbits)
 
-    def pt2index(self, point, nbits, alignleft = True, tol = 0.0) -> int:
+    def pt2index(self, point: float, nbits: int, alignleft=True, tol=0.0) -> int:
         """Convert a floating point into an integer index of the cover the point lies in."""
         assert isinstance(nbits, int)
 
@@ -308,10 +293,10 @@ class DynamicCover(ContinuousCover):
 
         return index
 
-    def pt2bdd(self, mgr, name, pt, nbits, innerapprox = False, tol = .00001):
+    def pt2bdd(self, mgr, name, pt: float, nbits: int):
         return bv2pred(mgr, name, self.pt2bv(pt, nbits))
 
-    def bv2conc(self, bv) -> Tuple[float, float]:
+    def bv2conc(self, bv: BitVector) -> Tuple[float, float]:
         nbits = len(bv)
 
         if nbits == 0:
@@ -323,15 +308,15 @@ class DynamicCover(ContinuousCover):
             index = graytobin(index)
 
         eps = (self.ub - self.lb) / (2**nbits)
-        left  = self.lb + index * eps
+        left = self.lb + index * eps
         right = self.lb + (index+1) * eps
 
         return (left, right)
 
-    def pt2box(self, point, nbits):
-        return self.bv2conc(self.pt2bv(point, nbits = nbits))
+    def pt2box(self, point: float, nbits: int):
+        return self.bv2conc(self.pt2bv(point, nbits=nbits))
 
-    def box2bvs(self, box, nbits, innerapprox = False, tol = .0000001):
+    def box2bvs(self, box, nbits: int, innerapprox=False, tol=.0000001):
         """
         Returns a list of bitvectors corresponding to a box
 
@@ -352,25 +337,25 @@ class DynamicCover(ContinuousCover):
 
         if innerapprox:
             # Inner approximations move in the box
-            left_bv  = self.pt2bv(left - abs_tol, nbits, tol = abs_tol)
-            right_bv = self.pt2bv(right + abs_tol, nbits, tol = abs_tol)
-            if left_bv == right_bv: # In same box e.g. [.4,.6] <= [0,1]
+            left_bv = self.pt2bv(left - abs_tol, nbits, tol=abs_tol)
+            right_bv = self.pt2bv(right + abs_tol, nbits, tol=abs_tol)
+            if left_bv == right_bv:  # In same box e.g. [.4,.6] <= [0,1]
                 return []
-            left_bv = increment_bv(left_bv, 1, self.periodic, saturate = True)
-            if left_bv == right_bv: # Adjacent boxes [.4,.6] overlaps [0,.5] and [.5,1]
+            left_bv = increment_bv(left_bv, 1, self.periodic, saturate=True)
+            if left_bv == right_bv:  # Adjacent boxes [.4,.6] overlaps [0,.5] and [.5,1]
                 return []
-            right_bv = increment_bv(right_bv, -1, self.periodic, saturate = True)
+            right_bv = increment_bv(right_bv, -1, self.periodic, saturate=True)
         else:
-            left_bv  = self.pt2bv(left - abs_tol, nbits = nbits, tol = abs_tol)
-            right_bv = self.pt2bv(right + abs_tol, nbits = nbits, tol = abs_tol)
+            left_bv = self.pt2bv(left - abs_tol, nbits=nbits, tol=abs_tol)
+            right_bv = self.pt2bv(right + abs_tol, nbits=nbits, tol=abs_tol)
 
         if not self.periodic and (left_bv > right_bv):
-            raise ValueError("{0}: {1}\n{2}: {3}".format(left, left_bv,right, right_bv))
+            raise ValueError("{0}: {1}\n{2}: {3}".format(left, left_bv, right, right_bv))
 
         return bv_interval(left_bv, right_bv, self.periodic)
 
 
-    def box2indexwindow(self, box, nbits, innerapprox = False, tol = .0000001):
+    def box2indexwindow(self, box, nbits: int, innerapprox=False, tol=.0000001):
         """
         Returns
         -------
@@ -383,7 +368,7 @@ class DynamicCover(ContinuousCover):
         abs_tol = eps * tol
 
         if nbits == 0 and self.periodic:
-            return None if innerapprox else (0,0)
+            return None if innerapprox else (0, 0)
 
         if self.periodic:
             left = self._wrap(left)
@@ -421,7 +406,7 @@ class DynamicCover(ContinuousCover):
         return leftidx, rightidx
 
 
-    def conc2pred(self, mgr, name, box, nbits, innerapprox = False, tol = .00001):
+    def conc2pred(self, mgr, name: str, box, nbits: int, innerapprox=False, tol=.00001):
         predbox = mgr.false
 
         window = self.box2indexwindow(box, nbits, innerapprox, tol)
@@ -437,16 +422,16 @@ class DynamicCover(ContinuousCover):
                 predbox |= bv2pred(mgr, name, bv)
         return predbox
 
-    def conc2predold(self, mgr, name, box, nbits, innerapprox = False, tol = .00001):
+    def conc2predold(self, mgr, name: str, box, nbits: int, innerapprox=False, tol=.00001):
         """
         Overapproximation of a concrete box with its BDD.
 
         Parameters
         ----------
-            name
-            box
-            innerapprox -
-            tol - tolerance for numerical errors as a fraction of the grid size. Must lie within [0,1]
+        name
+        box
+        innerapprox -
+        tol - tolerance for numerical errors as a fraction of the grid size. Must lie within [0,1]
         """
         assert nbits >= 0
 
@@ -454,7 +439,7 @@ class DynamicCover(ContinuousCover):
         for bv in self.box2bvs(box, nbits, innerapprox, tol):
             predbox |= bv2pred(mgr, name, bv)
 
-        assert len(predbox.support) <= nbits, "Support " + str(predbox.support) + "exceeds " + nbits + " bits"
+        assert len(predbox.support) <= nbits, "Support " + str(predbox.support) + "exceeds " + str(nbits) + " bits"
         return predbox
 
     def __eq__(self, other):
@@ -466,11 +451,20 @@ class DynamicCover(ContinuousCover):
             return False
         return True
 
-    def conc_iter(self, prec):
+    def conc_iter(self, prec: int):
+        """
+        Generator for iterating over the space with fixed precision
+
+        Yields
+        ------
+        Tuple:
+            (left, right) box of floats 
+        """
         i = 0
         while(i < 2**prec):
             yield self.bv2conc(int2bv(i, prec))
             i += 1
+
 
 class FixedCover(ContinuousCover):
     """
@@ -493,7 +487,7 @@ class FixedCover(ContinuousCover):
     FixedCover(2, 10, 4, False) corresponds to the four bins
         [2, 4] [4,6] [6,8] [8,10]
     """
-    def __init__(self, lb: float, ub:float, bins: int, periodic = False):
+    def __init__(self, lb: float, ub: float, bins: int, periodic=False) -> None:
         # Interval spacing
         assert bins > 0, "Cannot have negative grid spacing"
         self.bins = bins
@@ -513,12 +507,12 @@ class FixedCover(ContinuousCover):
         s = "FixedCover({0}, {1}, bins = {2}, periodic={3})".format(self.lb, self.ub, self.bins, self.periodic)
         return s
 
-    def abs_space(self, mgr, name = None):
+    def abs_space(self, mgr, name: str):
         """
         Returns the predicate of the fixed cover abstract space
         """
-        left_bv =  int2bv(0, self.num_bits)
-        right_bv = int2bv(self.bins-1,self.num_bits)
+        left_bv = int2bv(0, self.num_bits)
+        right_bv = int2bv(self.bins - 1, self.num_bits)
         bvs = bv_interval(left_bv, right_bv)
         boxbdd = mgr.false
         for i in map(lambda x: bv2pred(mgr, name, x), bvs):
@@ -529,20 +523,20 @@ class FixedCover(ContinuousCover):
     def binwidth(self):
         return (self.ub-self.lb) / self.bins
 
-    def dividers(self, nbits):
+    def dividers(self, nbits: int):
         raise NotImplementedError
 
-    def pt2box(self, point):
+    def pt2box(self, point: float):
         return self.bv2conc(self.pt2bv(point))
 
-    def pt2bv(self, point, tol = 0.0):
+    def pt2bv(self, point: float, tol=0.0):
         """
         Maps a point to bitvector corresponding to the bin that contains it
         """
         index = self.pt2index(point, tol)
         return int2bv(index, self.num_bits)
 
-    def pt2index(self, point, alignleft = True, tol = 0.0):
+    def pt2index(self, point: float, alignleft=True, tol=0.0) -> int:
         if self.periodic:
             point = self._wrap(point)
 
@@ -558,7 +552,7 @@ class FixedCover(ContinuousCover):
 
         return index
 
-    def bv2conc(self, bv) -> Tuple[float, float]:
+    def bv2conc(self, bv: BitVector) -> Tuple[float, float]:
         if len(bv) == 0:
             return (self.lb, self.ub)
 
@@ -567,7 +561,7 @@ class FixedCover(ContinuousCover):
         right = left + self.binwidth
         return (left, right)
 
-    def box2bvs(self, box, innerapprox = False, tol = .0000001):
+    def box2bvs(self, box, innerapprox=False, tol=.0000001):
         left, right = box
 
         eps = self.binwidth
@@ -575,7 +569,7 @@ class FixedCover(ContinuousCover):
 
         # assert left <= right
 
-        left  = self.pt2index(left - abs_tol)
+        left = self.pt2index(left - abs_tol)
         right = self.pt2index(right + abs_tol)
         if innerapprox:
             # Inner approximations move in the box
@@ -585,10 +579,10 @@ class FixedCover(ContinuousCover):
             if self.periodic and left == self.bins-1 and right == 0:
                 return []
             else:
-                left  = (left + 1) % self.bins
+                left = (left + 1) % self.bins
                 right = (right - 1) % self.bins
 
-        left_bv  = int2bv( left, self.num_bits)
+        left_bv = int2bv(left, self.num_bits)
         right_bv = int2bv(right, self.num_bits)
 
         if self.periodic and left > right:
@@ -602,7 +596,7 @@ class FixedCover(ContinuousCover):
     def box2indexwindow(self, box, innerapprox=False, tol=.00001):
         left, right = box
         if self.bins == 1 and self.periodic:
-            return None if innerapprox else (0,0)
+            return None if innerapprox else (0, 0)
 
         if self.periodic:
             left = self._wrap(left)
@@ -630,23 +624,21 @@ class FixedCover(ContinuousCover):
             if flip and (leftidx + 1) == rightidx:
                 return (leftidx + 1) % self.bins, (rightidx-1) % self.bins
             if flip and leftidx == self.bins and rightidx == 0:
-                return (0,self.bins-1) # Entire interval
-
+                return (0, self.bins-1)  # Entire interval
 
         rightidx = (rightidx - 1) % self.bins
         leftidx = leftidx % self.bins
 
         return leftidx, rightidx
 
-    def conc2pred(self, mgr, name, box, innerapprox=False, tol=.00001):
+    def conc2pred(self, mgr, name: str, box, innerapprox=False, tol=.00001):
         predbox = mgr.false
 
         window = self.box2indexwindow(box, innerapprox, tol)
-        if window == None:
+        if window is None:
             return predbox
         leftidx, rightidx = window
 
-        
         if leftidx > rightidx:
             for bv in bvwindow(leftidx, self.bins-1, self.num_bits):
                 predbox |= bv2pred(mgr, name, bv)

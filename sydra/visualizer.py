@@ -80,11 +80,13 @@ def plot2D(mgr, xspace, yspace, pred, title=None, fname=None):
     ax.set_ylabel(yname)
     if title:
         ax.set_title(title)
-    if fname is not None and title:
+    if fname is not None:
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         fig.savefig(str(fname)+'.png', dpi=400, bbox_inches=extent.expanded(1.1, 1.2))
-    # plt.show()
-    return fig, ax
+    else:
+        plt.show()
+
+    # return fig, ax
 
 
 def plot3D(mgr, xspace, yspace, zspace, pred, 
@@ -140,10 +142,11 @@ def plot3D(mgr, xspace, yspace, zspace, pred,
         ax.view_init(view[0], view[1])
     if title:
         ax.set_title(title)
-    if fname is not None and title:
+    if fname is not None:
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         fig.savefig(str(fname)+'.png', dpi=400, bbox_inches=extent.expanded(1.1, 1.2))
-    # plt.show()
+    else:
+        plt.show()
 
     # return fig, ax
 

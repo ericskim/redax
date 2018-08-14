@@ -1,10 +1,13 @@
 import numpy as np
-
-from sydra.spaces import DynamicCover, FixedCover, EmbeddedGrid
-from sydra.utils import bv_interval, index_interval, bvwindow
-from dd.cudd import BDD
-
 from pytest import approx, raises
+
+from sydra.spaces import DynamicCover, EmbeddedGrid, FixedCover
+from sydra.utils import bv_interval, bvwindow, index_interval
+
+try:
+    from dd.cudd import BDD
+except ImportError:
+    from dd.autoref import BDD
 
 
 def test_helpers():
@@ -19,12 +22,10 @@ def test_helpers():
 def test_dynamic_regular():
     mgr = BDD() 
     x = DynamicCover(-2.0, 2.0)
-    # assert x.pt2bv(-2.0,3) == (False, False, False)
-    # assert x.pt2index(-2.0,3) == 0
-    # # assert x.pt2bv(2.0,3) == (True, True, True)
-    # assert x.pt2index(2.0,3) == 7
-    # # assert x.pt2bv(-1, 1) == (False,)
-    # assert x.pt2index(-1,1) == 0
+    assert x.pt2index(-2.0, 3) == 0
+    assert x.pt2index(2.0, 3) == 8 # TODO: 3 bits = 0-7 but need to return 8 b/c of the right/left align detection
+    assert x.pt2index(1.99, 3) == 7
+    assert x.pt2index(-1, 1) == 0
 
     assert x.pt2box(-.1, 3) == (approx(-.5), approx(0))
     assert x.pt2box(.6, 3) == (approx(.5), approx(1.0))
@@ -57,7 +58,6 @@ def test_dynamic_regular():
 
     # BDD creation
     assert x.conc2pred(mgr, "x", (.4, .6), 1, True) == mgr.false
-    # assert x.pt2bv(-2.000000000000001, 3) == (False, False, False)
     args = [mgr, "x", (.4, .6), 1, True]
     assert x.conc2predold(*args) == x.conc2pred(*args)
     args = [mgr, "x", (-.34, .65), 4, True]
@@ -74,14 +74,17 @@ def test_dynamic_regular():
 
     pspace = DynamicCover(-2, 2)
     assert pspace.box2indexwindow((0, .8), 6, False) == (32, 44)
-    # assert pspace.conc2pred(mgr, 'x', [.01, .8], 6, innerapprox=False) == pspace.conc2predold(mgr, 'x', [.01, .8], 6, innerapprox=False)
+
+    # Over and under approximations of boxes that align exactly with the grid are the same
+    assert pspace.conc2pred(mgr, 'x', (-1,1) , 4, innerapprox=False) == pspace.conc2pred(mgr, 'x', (-1,1) , 4, innerapprox=True) 
+    assert pspace.conc2pred(mgr, 'x', (-1.5,1.5) , 4, innerapprox=False) == pspace.conc2pred(mgr, 'x', (-1.5,1.5) , 4, innerapprox=True) 
 
 
 def test_dynamic_periodic():
     mgr = BDD()
     x = DynamicCover(0, 20, periodic=True)
-    # assert x.pt2bv(11,4) == (True, True, False, False)
-    # assert x.pt2bv(19+20,4) == (True, False, False, False)
+    # assert x.pt2bv(11, 4) == (True, True, False, False)
+    # assert x.pt2bv(19+20, 4) == (True, False, False, False)
 
     # Wrap around
     assert set(x.box2bvs((17, 7), 2, innerapprox=True)) == {(False, False)}
@@ -119,6 +122,12 @@ def test_dynamic_periodic():
     assert x.box2indexwindow((39.9, 39.8), 3, innerapprox=False) == (0, 7)  # total cover
     
 
+    # Over and under approximations of boxes that align exactly with the grid are the same
+    assert x.conc2pred(mgr, 'x', (5,15), 4, innerapprox=True) == x.conc2pred(mgr, 'x', (5,15), 4, innerapprox=False)
+    assert x.conc2pred(mgr, 'x', (0,5), 4, innerapprox=True) == x.conc2pred(mgr, 'x', (0,5), 4, innerapprox=False)
+    assert x.conc2pred(mgr, 'x', (15,5), 4, innerapprox=True) == x.conc2pred(mgr, 'x', (15,5), 4, innerapprox=False)
+    assert x.conc2pred(mgr, 'x', (0,20), 4, innerapprox=True) == x.conc2pred(mgr, 'x', (20,40), 4, innerapprox=False)
+
     # print("======= Random tests =======")
     # for i in range(100):
     #     bits = np.random.randint(0,4)
@@ -130,6 +139,7 @@ def test_dynamic_periodic():
     #     print(x.box2indexwindow(*args[2:]))
     #     print(list(x.box2bvs(*args[2:])), "\n\n")
     #     assert x.conc2predold(*args) == x.conc2pred(*args)
+
 
 def test_fixed_regular():
 
@@ -150,6 +160,7 @@ def test_fixed_regular():
                                              (False, True, False),
                                              (False, True, True)}
     assert set(y.box2bvs((3, 7), True)) == {(False, True, False)}
+
     # Inner-outer tests
     assert set(y.box2bvs((3, 3.5), True)) == set([])
     assert set(y.box2bvs((3, 3.5), False)) == {(False, False, True)}
@@ -158,7 +169,7 @@ def test_fixed_regular():
 
 
 def test_fixed_periodic():
-    from dd.cudd import BDD
+
     mgr = BDD()
 
     y = FixedCover(0, 10, 5, periodic=True)  # 5 bins
@@ -180,6 +191,7 @@ def test_fixed_periodic():
                                                (False, False, True)}
 
     z = FixedCover(0, 10, 5, periodic=True)
+    assert y == z
     assert z.box2indexwindow((9.9, .1), innerapprox=True) is None
     assert z.box2indexwindow((1.9, 2.1), innerapprox=True) is None
     assert z.box2indexwindow((9.9, .1), innerapprox=False) == (4, 0)
@@ -187,6 +199,9 @@ def test_fixed_periodic():
     assert z.box2indexwindow((9.9, 9.8), innerapprox=False) == (0, 4)
     assert z.conc2pred(mgr, 'z', (4.4, 4.3), innerapprox=False) == mgr.add_expr('~z_0 | (z_0 & ~z_1 & ~z_2)')
     assert z.box2indexwindow((19.9, 19.8), innerapprox=False) == (0, 4)
+
+    # Over and under approximations of boxes that align exactly with the grid are the same
+    assert z.conc2pred(mgr, 'z', (0,4), innerapprox=True) == z.conc2pred(mgr, 'z', (0,4), innerapprox=False)
 
 
 def test_discrete():
@@ -225,5 +240,3 @@ def test_utils():
                                                              (True, False), 
                                                              (True, True)}
     assert set(bv_interval([True, True], [False, True])) == set([])
-
-
