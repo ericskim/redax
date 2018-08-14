@@ -1,9 +1,14 @@
+
+
 import numpy as np
-from dd.cudd import BDD
+try:
+    from dd.cudd import BDD
+except ImportError:
+    from dd.autoref import BDD
 from pytest import approx, raises
 
-from vpax.module import AbstractModule
-from vpax.spaces import DynamicCover, EmbeddedGrid, FixedCover
+from sydra.module import AbstractModule
+from sydra.spaces import DynamicCover, EmbeddedGrid, FixedCover
 
 
 def test_dynamic_module():
@@ -29,12 +34,12 @@ def test_dynamic_module():
     
     assert g.count_io_space(bittotal) == approx(1024)
     assert g.count_io(bittotal) == approx(0)
-    g.apply_abstract_transitions( {'j': (2.9,10.1), 'y': (2.4,3.8), 'r': (2.1,3.1)}, nbits = precision)
+    g = g.io_refined( {'j': (2.9,10.1), 'y': (2.4,3.8), 'r': (2.1,3.1)}, nbits = precision)
     assert g.count_io(bittotal) == approx(42) # = 7 * 2 * 3
     
     # Adding approximately the same transitions twice does nothing due to quantization 
     oldpred = g.pred
-    g.apply_abstract_transitions( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,3.1)}, nbits = precision)
+    g = g.io_refined( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,3.1)}, nbits = precision)
     assert g.pred == oldpred 
 
     assert (g).pred.support == {'j_0', 'j_1', 'j_2', 'j_3',
@@ -60,14 +65,12 @@ def test_dynamic_module():
 
     # Out of bounds errors 
     with raises(AssertionError):
-        g.pred &= g.ioimplies2pred( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,4.6)}, nbits = precision)
+        g = g.io_refined( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,4.6)}, silent=False, nbits = precision)
     
 def test_mixed_module():
 
-    from dd.cudd import BDD
-
-    from vpax.module import AbstractModule
-    from vpax.spaces import DynamicCover, FixedCover
+    from sydra.module import AbstractModule
+    from sydra.spaces import DynamicCover, FixedCover
 
     mgr = BDD() 
     inputs = {'x': DynamicCover(0, 16),
@@ -83,8 +86,10 @@ def test_mixed_module():
     
     dubins = AbstractModule(mgr, inputs, outputs) 
 
-    dubins.ioimplies2pred( {'v': (3.6,3.7), 'theta': (6,-6), 'y': (2,3), 'ynext': (2.1,3.1)}, 
-                            nbits = {'theta': 3}) 
+    # Underspecified input-output
+    with raises(AssertionError):
+        dubins.io_refined( {'v': (3.6,3.7), 'theta': (6,-6), 'y': (2,3), 'ynext': (2.1,3.1)}, 
+                                nbits = {'theta': 3}) 
 
     # Test that fixed covers yield correct space cardinality
     assert mgr.count(dubins.inspace(), 4+4+4+3+2) == 16 * 10 * 16 * 5 * 4
@@ -92,10 +97,9 @@ def test_mixed_module():
 
     
 def test_embeddedgrid_module():
-    from dd.cudd import BDD
 
-    from vpax.module import AbstractModule
-    from vpax.spaces import EmbeddedGrid
+    from sydra.module import AbstractModule
+    from sydra.spaces import EmbeddedGrid
 
     mgr = BDD() 
     inputs = {'x': EmbeddedGrid(0,3,4)}
@@ -103,13 +107,48 @@ def test_embeddedgrid_module():
 
     m = AbstractModule(mgr, inputs, outputs)
 
-    assert m.ioimplies2pred({'x': 2, 'y':4}) == mgr.add_expr(r" ~( x_0 /\ ~x_1) | (~y_0 /\ ~y_1 /\ ~y_2)")
+    assert m.io_refined({'x': 2, 'y':4}).pred == mgr.add_expr(r"( x_0 /\ ~x_1)") & mgr.add_expr(r" ~( x_0 /\ ~x_1) | (~y_0 /\ ~y_1 /\ ~y_2)")
     
     assert len(mgr.vars) > 0 
 
-def test_identity_module():
-    from dd.cudd import BDD 
+def test_refinement_and_coarsening(): 
 
-    from vpax.module import AbstractModule
+    mgr = BDD()
+    from sydra.module import AbstractModule
+    from sydra.spaces import DynamicCover
 
-    
+    def conc(x):
+        return -3*x
+
+    x = DynamicCover(-10, 10)
+    y = DynamicCover(20, 20)
+
+    mod = AbstractModule(mgr, {'x': x}, {'y':y})
+
+    width = 15
+
+    for _ in range(50):
+        # Generate random input windows
+        f_width = {'x': np.random.rand()*width}
+        f_left  = {'x': -10 +  np.random.rand() * (20 - f_width['x'])}
+        f_right = {k: f_width[k] + f_left[k] for k in f_width}
+        iobox   = {k: (f_left[k], f_right[k]) for k in f_width}
+
+        # Generate output overapproximation
+        ur = conc(**f_left)
+        ll = conc(**f_right)
+        iobox['y'] = (ll, ur)
+
+        # Refine and check abstract relation
+        newmod = mod.io_refined(iobox, nbits = {'x': 8, 'y':8})
+        assert mod <= newmod
+        mod = newmod
+
+        # Check abstract relation relative to coarsened module
+        assert mod.coarsen(x=5,y=5) <= mod
+         # Coarsen should do nothing because it keeps many bits
+        assert mod.coarsen({'x':10},y=10) == mod
+
+
+# def test_identity_module():
+#     from sydra.module import AbstractModule

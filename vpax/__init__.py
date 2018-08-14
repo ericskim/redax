@@ -1,3 +1,0 @@
-"""
-PYDRA documentation here
-"""

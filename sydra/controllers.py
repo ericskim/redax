@@ -39,7 +39,7 @@ class MemorylessController(SupervisoryController):
         self.sys = sys
         self.C = allowed_controls
 
-    def allows(self, state):
+    def allows(self, state): # -> Generator[Dict[str, concretetype], None, None]
         """
         Compute the set of allowed inputs associated with a state.
 

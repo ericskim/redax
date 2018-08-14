@@ -5,13 +5,16 @@ Dubins vehicle example
 import time
 
 import numpy as np
-from dd.cudd import BDD
+try:
+    from dd.cudd import BDD
+except ImportError:
+    from dd.autoref import BDD
 
-from vpax.controlmodule import to_control_module
-from vpax.module import AbstractModule
-from vpax.spaces import DynamicCover, EmbeddedGrid, FixedCover
-from vpax.synthesis import ReachGame
-from vpax.visualizer import plot3D, plot3D_QT
+from sydra.controlmodule import to_control_module
+from sydra.module import AbstractModule
+from sydra.spaces import DynamicCover, EmbeddedGrid, FixedCover
+from sydra.synthesis import ReachGame
+from sydra.visualizer import plot3D, plot3D_QT
 
 """
 Specify dynamics and overapproximations
@@ -110,7 +113,7 @@ for iobox in dubins.input_iter(precision={'x': 4, 'y': 4, 'theta': 3}):
     # Add new inputs and constrain output nondeterminism
     for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
         filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
-        if not sys.apply_abstract_transitions(filtered_iobox, nbits=precision):
+        if not sys.refine_io(filtered_iobox, nbits=precision):
             coarse_errors[var] += 1
 
     coarseiter += 1
@@ -149,7 +152,7 @@ for numapplied in range(8000):
     # Add new inputs and constrain output nondeterminism for each subsystem
     for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
         filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
-        if not sys.apply_abstract_transitions(filtered_iobox, nbits=precision):
+        if not sys.refine_io(filtered_iobox, nbits=precision):
             random_errors[var] += 1
 
     numapplied += 1
@@ -193,10 +196,13 @@ print("Game Steps:" , steps)
 # plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
 
 """Simulate"""
-state = {'x': -1, 'y': .6, 'theta': -.2}
+state = {'x': -1, 'y': .6, 'theta': -.1}
 for step in range(10):
     print(step, state)
-    u = [i for i in controller.allows(state)][0]
+    u = [i for i in controller.allows(state)]
+    if len(u) == 0:
+        break
+    u = u[0]
     state.update(u)
     nextstate = dynamics(**state)
     state = {'x': nextstate[0], 'y': nextstate[1], 'theta': nextstate[2]}

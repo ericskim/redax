@@ -7,3 +7,5 @@ build/
 *.egg-info
 *.code-workspace
 docs/**
+**/*.png
+.mypy_cache/**

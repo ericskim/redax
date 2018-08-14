@@ -1,3 +1,6 @@
+from typing import Sequence, Iterable, List
+
+BitVector = Sequence[bool]
 
 
 def flatten(l):
@@ -10,7 +13,7 @@ def flatten(l):
     """
     return [item for sublist in l for item in sublist]
 
-def int2bv(index: int, nbits: int):
+def int2bv(index: int, nbits: int) -> BitVector:
     """
     A really high nbits just right pads the bitvector with "False"
     """
@@ -28,7 +31,7 @@ def increment_index(index: int, increment: int, nbits=None, graycode=False):
         return index + increment
 
 
-def bv_interval(lb, ub, graycode = False):
+def bv_interval(lb, ub, graycode = False) -> Iterable[BitVector]:
     assert len(lb) == len(ub)
     nbits = len(lb)
     if not graycode and lb > ub:
@@ -37,11 +40,11 @@ def bv_interval(lb, ub, graycode = False):
     lb = bv2int(lb)
     ub = bv2int(ub)
 
-    return map(lambda x: int2bv(x,nbits),
-                    index_interval(lb, ub, nbits, graycode))
+    # return map(lambda x: int2bv(x,nbits),
+    #                 index_interval(lb, ub, nbits, graycode))
+    return (int2bv(x, nbits) for x in index_interval(lb, ub, nbits, graycode))
 
-
-def index_interval(lb: int, ub: int, nbits=None, graycode=False):
+def index_interval(lb: int, ub: int, nbits=None, graycode=False) -> List[int]:
     """Construct an integer interval that includes both ends lb and ub."""
     if graycode:
         assert nbits is not None
@@ -58,11 +61,11 @@ def index_interval(lb: int, ub: int, nbits=None, graycode=False):
     return window
 
 
-def num_with_name(name: str, x):
+def num_with_name(name: str, x) -> int:
     return len([i for i in x if name in i])
 
 
-def bv2pred(mgr, name: str, bv):
+def bv2pred(mgr, name: str, bv: BitVector):
     """Convert a variable precision bitvector into a predicate."""
 
     for i in range(len(bv)):
@@ -76,7 +79,7 @@ def bv2pred(mgr, name: str, bv):
     return b
 
 
-def increment_bv(bv, increment: int, graycode=False, saturate=False):
+def increment_bv(bv, increment: int, graycode=False, saturate=False) -> BitVector:
     """
     Increment a bitvector's value +1 or -1.
     """
@@ -98,7 +101,7 @@ def increment_bv(bv, increment: int, graycode=False, saturate=False):
         return int2bv(bv2int(bv) + increment, nbits)
 
 
-def bv2int(bv):
+def bv2int(bv: BitVector) -> int:
     """
     Converts bitvector (list or tuple) with the standard binary encoding into an integer.
     """
@@ -109,7 +112,7 @@ def bv2int(bv):
             index += 2**(nbits - i - 1)
     return index
 
-def bintogray(x: int):
+def bintogray(x: int) -> int:
     """
     Convert a binary encoded positive integer into gray code.
     """
@@ -117,7 +120,7 @@ def bintogray(x: int):
     return x ^ (x >> 1)
 
 
-def graytobin(x: int):
+def graytobin(x: int) -> int:
     """
     Convert a gray code encoded positive integer into the standard binary encoding.
     """
@@ -129,9 +132,9 @@ def graytobin(x: int):
     return x
 
 
-def bvwindow(left: int, right: int, nbits: int):
+def bvwindow(left: int, right: int, nbits: int) -> List[BitVector]:
     """
-    Convert a window [left, right] inclusive into a collection of variable precision bitvectors
+    Convert a window [left, right] inclusive into a list of variable precision bitvectors.
     """
     assert left >= 0
     assert right >= 0
@@ -172,7 +175,10 @@ def bvwindow(left: int, right: int, nbits: int):
     return bvs
 
 
-def bvwindowgray(left: int, right: int, nbits: int):
+def bvwindowgray(left: int, right: int, nbits: int) -> List[BitVector]:
+    """
+    Convert a window [left, right] inclusive into a list of variable precision bitvectors.
+    """
     bvs = []
 
     assert right <= 2**nbits - 1

@@ -1,6 +1,6 @@
 
 from bidict import bidict
-from vpax.module import AbstractModule
+from sydra.module import AbstractModule
 
 
 
@@ -10,7 +10,7 @@ def to_control_module(mod, states):
 
     Parameters
     ----------
-        mod : vpax.AbstractModule
+        mod : sydra.AbstractModule
             Module
         states: Dictionary or tuple 
             Input-Output pairs signifying pre and post states.

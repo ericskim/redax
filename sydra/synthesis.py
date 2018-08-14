@@ -1,7 +1,7 @@
 from functools import reduce
 
-from vpax.controllers import MemorylessController
-from vpax.utils import flatten
+from sydra.controllers import MemorylessController
+from sydra.utils import flatten
 
 # flatten = lambda l: [item for sublist in l for item in sublist]
 

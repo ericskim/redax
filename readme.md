@@ -1,17 +1,22 @@
+# SYDRA: Control Synthesizer in Python with (Dynamic|Declarative|Robust) Abstractions
 
-PYDRA (A Python Implementation of Dynamic and Reusable Abstractions)
-=====
+SYDRA is a controller synthesis tool that constructs finite state machines that mimic continuous dynamics. We call the finite state machines *abstractions* because they abstract out low level state information.
 
-PYDRA is a controller synthesis tool that constructs finite state machines that mimic continuous dynamics. We call the finite state machines *abstractions* because they abstract out low level state information.
+## Table of Contents
+
+- [About](#About)
+- [Installation](#installation)
+- [Features](#Distinguishing-Features)
+- [Notes](#Notes)
+- [References](#References)
+
+## About
 
 Supports:
 
 - Nonlinear Discrete-Time Control Systems
 - Safety, Reachability, and Reach-Avoid Objectives
-
-Requires:
-
-- A method to safety overapproximate the set of open-loop reachable states from a hyperrectangle of initial states (this is necessary to ensure the outputted controller is sound and correct, but the tool may still yield useful results without it).
+- Requires a method to overapproximate the set of open-loop reachable states from a hyperrectangle of initial states to ensure the outputted controller is sound and correct, but the tool can still yield useful results without it.
 
 Ideally for:
 
@@ -19,45 +24,47 @@ Ideally for:
 - Objectives and systems that are of interest in a bounded set.
 - Controller synthesis problems approached by gridding a continuous space such as in dynamic programming.
 - Systems of moderate state dimensions (4-6).
-- Problems tackled by the following tools:
-  - [Level Set Toolbox](https://www.cs.ubc.ca/~mitchell/ToolboxLS/)
-  - [SCOTS control synthesis toolbox](https://gitlab.lrz.de/hcs/scots)
 
-Installation
-======
+## Installation
 
 Clone this repo and run the following commands:
 
 ```shellscript
-cd /location/of/pydra/here/
+# Setup script doesn't currently handle all dependency installation
+cd /location/of/sydra/here/
 pip install .
 ```
 
-Requirements
-------
+### Dependencies
 
-- python 3.6 or above
-- cudd with dd wrapper
-- numpy
-- bidict
+- Core
+  - python 3.6 or above
+  - cudd with dd wrapper
+  - numpy
+  - bidict
+- Secondary
+  - Visualization:
+    - matplotlib
+    - pyqtgraph
+  - Tests and Documentation:
+    - pytest
+    - sphinx
 
-Distinguishing Features
-=======
+## Distinguishing Features
 
 - **Extensible Abstraction Spaces**
 
   Abstracting a set means grouping together points and constructing a lower cardinality set. We support a number of methods such as:
 
-  - Fixed vs. dynamic precision covers: Union of rectangles where each one is uniquely identified by a bitvector. Throwing away lower precision bits implicitly makes the cover more coarse.
-  - Linear vs. periodic covers: use the traditional binary encoding to identify hyperrectangles in the grid. Periodic grids use [gray code](https://en.wikipedia.org/wiki/Gray_code).
+  - Fixed vs. dynamic precision covers: Union of rectangles where each one is uniquely identified by a bitvector. Throwing away lower precision bits implicitly makes the cover more coarse. Adding addtional bits implies higher precision.
+  - Linear vs. periodic covers: Use the traditional binary encoding to identify hyperrectangles in the grid. Periodic grids use [gray code](https://en.wikipedia.org/wiki/Gray_code).
   - Embedded grids: A grid of discrete points embedded in continuous space, like the integers.
-  - Your own space here!
 
   ```python
   # Declare continuous state spaces for a Dubins vehicle
   pspace      = DynamicCover(-2,2)
   anglespace  = DynamicCover(-np.pi, np.pi, periodic=True)
-  # Declare discrete control spaces for a Dubins vehicle
+  # Declare discrete values for control inputs
   vspace      = EmbeddedGrid(vmax/2, vmax, 2)
   angaccspace = EmbeddedGrid(-1.5, 1.5, 3)
   ```
@@ -78,19 +85,22 @@ Distinguishing Features
 
 - **Flexible Abstraction Construction**
 
-  Abstractions of modules are constructed by providing the following input-output data
+  Abstractions of modules are constructed by providing the following characterization of input-output pairs
 
   - [Input set] -> [Overapproximation of the set of possible outputs]
 
-  There are no further assumptions on the input-output data. The samples do NOT need disjoint input sets or have sets align with a grid. The controller synthesis results get better as sample quality and quantity increase.
+  The samples do NOT need disjoint input sets or have input-output sets align with a grid. The controller synthesis results get better as sample quality and quantity increase.
 
   ```python
   # Collections of input-output pairs can be generated any number of ways!
   collection = database/file or iterator or odesolver/simulator or random input generator
 
   # Anytime algorithm for abstraction construction
-  for in_out_pair in collection:
-    abstraction.apply_abstract_transitions(in_out_pair)
+  for io_pair in collection:
+    abstraction = abstraction.io_refined(io_pair)
+
+  # Refinement operations can be chained together
+  abstraction.io_refined(io_pair_1).io_refined(io_pair_2)
   ```
 
 - **Manipulate and Compose Modules**
@@ -98,9 +108,9 @@ Distinguishing Features
   Abstract systems can be manipulated with a collection of operations:
 
   ```python
-
   # Variable Renaming
-  dubins >> ('xnext', 'xnext')
+  dubins = dubins >> ('xnext', 'xnext')
+  dubins = ('z', 'x') >> dubins
 
   # Parallel composition is useful for constructing larger dimensional systems
   dubins = dubins_x | dubins_y | dubins_theta
@@ -112,56 +122,64 @@ Distinguishing Features
   Need a simpler example...
 
   # Future feature: Compute lower complexity abstractions keeping only the most significant bits
-  simple_model = model.coarsen(x=1, y=2)
+  simple_model = model.coarsen(x=3, y=4)
   ```
 
   Operations can also be chained together:
 
   ```python
-  simpler_dubins = dubins.hide('xnext')\
-                         .coarsen(x=5,y=4)\
-                         .rename(ynext = 'nextposition')
+  simpler_dubins = dubins.hidden('xnext')\
+                         .coarsened(x=5,y=4)\
+                         .renamed(ynext = 'nextposition')
   ```
 
 - **Extensible Symbolic Backend**
 
   We build on top of libraries for binary decision diagrams.
 
-Notes and References
-======
+## Notes
 
-References
--------
+### TODOs
 
-- [*Abstractions for Symbolic Controller Synthesis are Composable*, Eric S. Kim, Murat Arcak](https://arxiv.org/abs/1807.09973)
-
-TODOs
-------
-
+- Helper classes for different input-output overapproximation procedures
+  - Lipschitz
+  - Mixed monotone
+  - Random sampling in box with bloating
+  - Box corners
 - Tests for floating point inequalities for conc2abs method in continuous covers
-  - Iterators for the 2^n reduced grid traversal
+  - Iterators for the 2^N reduced grid traversal
+- Type annotations
 - Document more (especially class attributes)
-- FRR check across modules for dynamic grids
 - Custom errors for out of domain
-- Example
+- Examples
   - 3DOF ship
   - OpenAI lunar lander
   - Pair of dubins vehicles
 - Reinstall from scratch in a virtualenv
   - Upload to github and add code coverage, travis-ci banners
-- Test performance of an immutable AbstractModule and abstraction via a .io_refine() method.
 - Rewrite continuous cover grid to have an overlap parameter.
-- Rewrite safe/target predicates as source and sink modules and use series composition operator for synthesis.
+- (?) Rewrite safe/target predicates as source and sink modules and use series composition operator for synthesis.
 
-Future Features
-------
+### Future Features
 
 - Concrete executable functions associated with module dynamics
 - Support for disjoint union and product operations for spaces (thus adding support for switched and hybrid spaces)
+  - Will require a better predicate bit name generator
 - Control synthesizer that is aware of the control system structure. Options include:
-  1. Non-eager composition like in neural network packages. This is useful if we have concrete executables inside the module.
+  1. Non-eager composition like in neural network packages. Especially useful if we have concrete executables inside the module.
   2. Provide a collection of modules and have the synthesizer construct a DAG internally.
-- Generic wrapper for py-aiger and dd manipulation of predicates
+- Generic predicate manipulation wrapper around py-aiger and dd.
 
-Design Choices
-========
+## References 
+
+### Literature
+
+- [*Abstractions for Symbolic Controller Synthesis are Composable*, Eric S. Kim, Murat Arcak](https://arxiv.org/abs/1807.09973)
+
+### Similar tools for controller synthesis
+
+- [SCOTS](https://gitlab.lrz.de/hcs/scots)
+  - [MASCOT](https://github.com/hsukyle/mascot)
+- [PESSOA](https://sites.google.com/a/cyphylab.ee.ucla.edu/pessoa/)
+- [ARCS](https://github.com/pettni/abstr-refinement/)
+- [ROCS](https://git.uwaterloo.ca/hybrid-systems-lab/rocs)

@@ -4,8 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-from vpax.spaces import DynamicCover
-from vpax.utils import bv2int, graytobin
+from sydra.spaces import DynamicCover
+from sydra.utils import bv2int, graytobin
 
 
 def _name(i):
@@ -25,7 +25,6 @@ def centerspace(space):
     return space.lb + (space.ub - space.lb)/2.0
 
 
-
 def dynamicperiodic(space):
     if isinstance(space, DynamicCover) and space.periodic is True:
         return True
@@ -33,7 +32,7 @@ def dynamicperiodic(space):
 
 
 # Organize into bitvectors
-def plot2D(mgr, xspace, yspace, pred):
+def plot2D(mgr, xspace, yspace, pred, title=None, fname=None):
     """
     Plot a 2D set represented by a predicate.
 
@@ -79,14 +78,20 @@ def plot2D(mgr, xspace, yspace, pred):
     ax.set_xlabel(xname)
     ax.set_ylim(ygrid.lb, ygrid.ub)
     ax.set_ylabel(yname)
-
-    plt.show()
+    if title:
+        ax.set_title(title)
+    if fname is not None and title:
+        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        fig.savefig(str(fname)+'.png', dpi=400, bbox_inches=extent.expanded(1.1, 1.2))
+    # plt.show()
     return fig, ax
 
 
-def plot3D(mgr, xspace, yspace, zspace, pred, opacity=40):
+def plot3D(mgr, xspace, yspace, zspace, pred, 
+           opacity=40, view=None, title=None, fname=False):
     """Matplotlib based plotter with voxels"""
     voxelcolors = '#7A88CC' + format(opacity, "02x")
+    edgecolors = '#000000' + format(opacity // 3, "02x")
     xname, xgrid = xspace
     yname, ygrid = yspace
     zname, zgrid = zspace
@@ -127,13 +132,20 @@ def plot3D(mgr, xspace, yspace, zspace, pred, opacity=40):
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
-    ax.voxels(x, y, z, mask, facecolors=voxelcolors)
+    ax.voxels(x, y, z, mask, facecolors=voxelcolors, edgecolor=edgecolors)
     ax.set_xlabel(xname)
     ax.set_ylabel(yname)
     ax.set_zlabel(zname)
-    plt.show()
+    if view:
+        ax.view_init(view[0], view[1])
+    if title:
+        ax.set_title(title)
+    if fname is not None and title:
+        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        fig.savefig(str(fname)+'.png', dpi=400, bbox_inches=extent.expanded(1.1, 1.2))
+    # plt.show()
 
-    return fig, ax
+    # return fig, ax
 
 
 def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):

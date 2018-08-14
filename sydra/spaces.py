@@ -13,12 +13,14 @@ grid = a countable set of points embedded in continuous space \n
 import itertools
 import math
 from abc import abstractmethod
+from typing import Tuple, Iterable
 
-from vpax.utils import *
+
+from sydra.utils import *
 
 import numpy as np
 
-def find_nearest(array,value):
+def find_nearest(array, value) -> int:
     idx = np.searchsorted(array, value, side="left")
     if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):
         return idx-1
@@ -58,7 +60,7 @@ class DiscreteSet(SymbolicSet):
         return int2bv(point, self.num_bits)
 
     @property
-    def bounds(self):
+    def bounds(self) -> Tuple[float, float]:
         return (0, self.num_vals-1)
 
     def __repr__(self):
@@ -76,6 +78,7 @@ class DiscreteSet(SymbolicSet):
                 manager
             name: str
                 BDD variable name, e.g. "x" for names "x_1", "x_2", etc.
+
         """
         left_bv =  int2bv(0, self.num_bits)
         right_bv = int2bv(self.num_vals-1,self.num_bits)
@@ -119,7 +122,7 @@ class EmbeddedGrid(DiscreteSet):
         self.pts = np.linspace(self.left, self.right, self.num_vals)
 
 
-    def pt2index(self, pt, snap = False):
+    def pt2index(self, pt, snap = False) -> int:
         """
         Parameters
         ----------
@@ -160,7 +163,7 @@ class EmbeddedGrid(DiscreteSet):
         bv = int2bv(self.pt2index(concrete, snap), self.num_bits)
         return bv2pred(mgr, name, bv)
 
-    def conc_iter(self):
+    def conc_iter(self) -> Iterable:
         """
         Iterable of points
         """
@@ -170,7 +173,7 @@ class EmbeddedGrid(DiscreteSet):
         s = "Embedded Grid({0}, {1}, {2})".format(str(self.left), str(self.right), str(self.num_vals))
         return s
 
-    def bv2conc(self, bv):
+    def bv2conc(self, bv) -> float:
         """
         Converts a bitvector into a concrete grid point
         """
@@ -188,10 +191,10 @@ class ContinuousCover(SymbolicSet):
         self.ub = float(ub)
 
     @property
-    def bounds(self):
+    def bounds(self) -> Tuple[float, float]:
         return (self.lb, self.ub)
 
-    def width(self):
+    def width(self) -> float:
         return self.ub - self.lb
 
     def _wrap(self, point):
@@ -206,7 +209,7 @@ class ContinuousCover(SymbolicSet):
     def pt2bv(self, point):
         raise NotImplementedError
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         if self.periodic != other.periodic:
             return False
         if self.lb != other.lb:
@@ -215,7 +218,7 @@ class ContinuousCover(SymbolicSet):
             return False
         return True
 
-    def conc_space(self):
+    def conc_space(self) -> Tuple[float, float]:
         """Concrete space."""
         return self.bounds
 
@@ -285,7 +288,7 @@ class DynamicCover(ContinuousCover):
 
         return int2bv(index,nbits)
 
-    def pt2index(self, point, nbits, alignleft = True, tol = 0.0):
+    def pt2index(self, point, nbits, alignleft = True, tol = 0.0) -> int:
         """Convert a floating point into an integer index of the cover the point lies in."""
         assert isinstance(nbits, int)
 
@@ -308,7 +311,7 @@ class DynamicCover(ContinuousCover):
     def pt2bdd(self, mgr, name, pt, nbits, innerapprox = False, tol = .00001):
         return bv2pred(mgr, name, self.pt2bv(pt, nbits))
 
-    def bv2conc(self, bv):
+    def bv2conc(self, bv) -> Tuple[float, float]:
         nbits = len(bv)
 
         if nbits == 0:
@@ -555,7 +558,7 @@ class FixedCover(ContinuousCover):
 
         return index
 
-    def bv2conc(self, bv):
+    def bv2conc(self, bv) -> Tuple[float, float]:
         if len(bv) == 0:
             return (self.lb, self.ub)
 
@@ -596,7 +599,7 @@ class FixedCover(ContinuousCover):
         else:
             return bv_interval(left_bv, right_bv)
 
-    def box2indexwindow(self, box, innerapprox=False, tol = .00001):
+    def box2indexwindow(self, box, innerapprox=False, tol=.00001):
         left, right = box
         if self.bins == 1 and self.periodic:
             return None if innerapprox else (0,0)
