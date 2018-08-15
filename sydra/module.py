@@ -6,12 +6,11 @@ Module container
 
 """
 
-from typing import Iterator, Dict
+from typing import Dict, Generator, List, Union 
 import itertools
 
 import sydra.spaces as sp
 from sydra.utils import flatten
-
 
 class AbstractModule(object):
     r"""
@@ -52,11 +51,13 @@ class AbstractModule(object):
 
         """
         if not set(inputs).isdisjoint(outputs):
-            raise ValueError("A variable cannot be both an input and output")
+            both_io = set(inputs).intersection(outputs)
+            raise ValueError("Variables {0} cannot be both "
+                             "an input and output".format(str(both_io)))
 
         self._in = inputs
         self._out = outputs
-        self.mgr = mgr
+        self._mgr = mgr
 
         if any(var.isalnum() is False for var in self.vars):
             raise ValueError("Only alphanumeric strings are accepted as variable names")
@@ -100,6 +101,10 @@ class AbstractModule(object):
         return self.inspace() & self.outspace()
 
     @property
+    def mgr(self):
+        return self._mgr
+
+    @property
     def pred(self):
         return self._pred
 
@@ -116,7 +121,7 @@ class AbstractModule(object):
         return self._out
 
     @property
-    def pred_bitvars(self):
+    def pred_bitvars(self) -> Dict[str, List[str]]:
         r"""Get dictionary with variable name keys and BDD bit names as values."""
         s = self.pred.support
         allocbits = {v: [] for v in self.vars}
@@ -199,11 +204,11 @@ class AbstractModule(object):
         -------
         bool:
             False if the transition was not applied due to an out of domain
-            error.
+            error. True otherwise.
 
         See Also
         --------
-        io_refined: 
+        io_refined:
             Returns a new module instead of mutating it.
 
         """
@@ -283,7 +288,7 @@ class AbstractModule(object):
         # Check that there aren't any transitions with invalid inputs/outputs
         assert ~self.iospace() & self._pred == self.mgr.false
 
-    def concrete_input_to_abs(self, concrete, **kwargs):
+    def concrete_input_to_abs(self, concrete: dict, **kwargs):
         r"""Convert concrete inputs to abstract ones.
 
         Applies an underapproximation for inputs that live in a continuous 
@@ -317,7 +322,7 @@ class AbstractModule(object):
 
         return in_bdd
 
-    def concrete_output_to_abs(self, concrete, **kwargs):
+    def concrete_output_to_abs(self, concrete: dict, **kwargs):
         r"""Convert concrete outputs to abstract ones.
 
         Applies an overapproximation for outputs that live in a continuous 
@@ -351,7 +356,7 @@ class AbstractModule(object):
 
         return out_bdd
 
-    def input_iter(self, precision: dict) -> Iterator:
+    def input_iter(self, precision: dict) -> Generator:
         r"""
         Generate for exhaustive search over the concrete input grid.
 
@@ -407,7 +412,7 @@ class AbstractModule(object):
     def count_io_space(self, bits: int) -> float:
         return self.mgr.count(self.iospace(), bits)
 
-    def hide(self, elim_vars) -> 'AbstractModule':
+    def hidden(self, elim_vars) -> 'AbstractModule':
         r"""
         Hides an output variable and returns another module.
 
@@ -472,7 +477,7 @@ class AbstractModule(object):
 
         return True
 
-    def coarsened(self, bits=dict(), **kwargs) -> 'AbstractModule':
+    def coarsened(self, bits=None, **kwargs) -> 'AbstractModule':
         r"""Remove less significant bits and coarsen the system representation.
 
         Input bits are universally abstracted ("forall")
@@ -485,6 +490,7 @@ class AbstractModule(object):
             excluded variables aren't coarsened.
 
         """
+        bits = dict() if bits is None else bits
         bits.update(kwargs)
         if any(not isinstance(self[var], sp.DynamicCover) for var in bits):
             raise ValueError("Can only coarsen dynamic covers.")
@@ -503,39 +509,156 @@ class AbstractModule(object):
 
         # Shrink nonblocking set
         nb = self.mgr.forall(inbits, self.nonblock())
-        # Expand outputs in the 
+        # Expand outputs with respect to input coarseness
         newpred = self.mgr.exist(inbits, self._pred)
+        # Constrain outputs to align with nonblocking set
         newpred = self.mgr.exist(outbits, nb & newpred & self.outspace())
 
         return AbstractModule(self.mgr, self.inputs, self.outputs,
                               pred=newpred, nonblocking=nb)
 
-    def __rshift__(self, other) -> 'AbstractModule':
+    def renamed(self, names: Dict = None, **kwargs) -> 'AbstractModule':
+        """
+        Rename input and output ports
+
+        Parameters
+        ----------
+        names: dict, default = dict()
+            Keys are str of old names, values are str of new names
+        **kwargs:
+            Same dictionary format as names.
+        """
+
+        names = dict([]) if names is None else names
+        names.update(kwargs)
+
+        newoutputs = self._out.copy()
+        newinputs = self._in.copy()
+        swapbits = dict()
+
+        for oldname, newname in names.items():
+            if oldname not in self.vars:
+                raise ValueError("Cannot rename non-existent I/O " + oldname)
+            if newname in self.vars:
+                raise ValueError("Don't currently support renaming to an existing variable")
+
+            if oldname in self.outputs:
+                newoutputs[newname] = newoutputs.pop(oldname)
+            elif oldname in self.inputs:
+                newinputs[newname] = newinputs.pop(oldname)
+
+            newbits = [newname + '_' + i.split('_')[1] for i in self.pred_bitvars[oldname]]
+            self.mgr.declare(*newbits)
+            swapbits.update({i: j for i, j in zip(self.pred_bitvars[oldname], newbits)})
+
+        newpred = self.pred if swapbits == {} else self.mgr.let(swapbits, self.pred)
+
+        return AbstractModule(self.mgr, newinputs, newoutputs, newpred)
+
+    def composed_with(self, other: 'AbstractModule') -> 'AbstractModule':
+        """
+        Compose two modules.
+
+        Automatically detects if the composition is parallel or series composition.
+
+        mod1.composed_with(mod2) reduces to one of the following:\n
+        1) mod1 | mod2\n
+        2) mod1 >> mod2\n
+        3) mod2 >> mod1\n
+
+        Parameters
+        ----------
+        other: AbstractModule
+            Module to compose with.
+        
+        Returns
+        -------
+        AbstractModule:
+            Composed monolithic module
+
+        """
+
+        if self.mgr != other.mgr:
+            raise ValueError("Module managers do not match")
+        if not set(self._out).isdisjoint(other.outputs):
+            raise ValueError("Outputs are not disjoint")
+        
+        inout = set(other._out).intersection(self._in)
+        outin = set(other._in).intersection(self._out)
+        if len(inout) > 0 and len(outin) > 0:
+            raise ValueError("Feedback composition is disallowed")
+
+        # Identify upstream >> downstream modules, or if parallel comp
+        if len(inout) > 0:
+            upstream = other
+            downstream = self
+        if len(outin) > 0:
+            upstream = self
+            downstream = other
+        if len(outin) == 0 and len(inout) == 0:
+            upstream = self
+            downstream = other
+
+        # Outputs are the union of both module outputs
+        newoutputs = upstream._out.copy()
+        newoutputs.update(downstream.outputs)
+
+        # Compute inputs = (self.inputs union other.inputs) and check for differences
+        newinputs = upstream._in.copy()
+        for k in downstream.inputs:
+            # Common existing inputs must have same grid type
+            if k in newinputs and newinputs[k] != downstream.inputs[k]:
+                raise TypeError("Mismatch between input spaces {0}, {1}".format(newinputs[k], 
+                                                                                downstream.inputs[k]))
+            newinputs[k] = downstream.inputs[k]
+        
+        # Shared vars that are both inputs and outputs
+        overlapping_vars = set(upstream._out) & set(downstream._in)
+        for k in overlapping_vars:
+            newinputs.pop(k)
+
+        # Compute forall outputvars . (self.pred => other.nonblock())
+        nonblocking = ~upstream.outspace() | ~upstream.pred | downstream.nonblock()
+        elim_bits = set(flatten([upstream.pred_bitvars[k] for k in upstream._out]))
+        elim_bits |= set(flatten([downstream.pred_bitvars[k] for k in downstream._out]))
+        elim_bits &= nonblocking.support
+        nonblocking = upstream.mgr.forall(elim_bits, nonblocking)
+        return AbstractModule(upstream.mgr, newinputs, newoutputs,
+                                upstream.pred & downstream.pred & nonblocking)
+
+    def __rshift__(self, other: Union['AbstractModule', tuple]) -> 'AbstractModule':
         r"""
-        Serial composition self >> other by feeding self's output into other's
-        input. Also an output renaming operator
+        Series composition or output renaming operator.
 
-        TODO: Break apart to renaming and series composition use cases
+        Series composition reduces to parallel composition if no output variables
+        feed into the other module's input.
 
+        See Also
+        --------
+        __rrshift__:
+            Input renaming operator
+        composed_with:
+            Generic composition operator 
+
+        Parameters
+        ----------
+        other: Union['AbstractModule', tuple]
+            If AbstractModule then computes the composition self >> other.
+            If tuple(oldname: str, newname: str) then replaces output name.
+
+        Returns
+        -------
+        AbstractModule:
+            Either the series composition or 
+        
         """
         if isinstance(other, tuple):
             # Renaming an output
             oldname, newname = other
             if oldname not in self._out:
                 raise ValueError("Cannot rename non-existent output")
-            if newname in self.vars:
-                raise ValueError("Don't currently support renaming to an existing variable")
 
-            newoutputs = self._out.copy()
-            newoutputs[newname] = newoutputs.pop(oldname)
-
-            newbits = [newname + '_' + i.split('_')[1] for i in self.pred_bitvars[oldname]]
-            self.mgr.declare(*newbits)
-            newvars = {i: j for i, j in zip(self.pred_bitvars[oldname], newbits)}
-
-            newpred = self.pred if newvars == {} else self.mgr.let(newvars, self.pred)
-
-            return AbstractModule(self.mgr, self._in, newoutputs, newpred)
+            return self.renamed({oldname: newname})
 
         elif isinstance(other, AbstractModule):
             if self.mgr != other.mgr:
@@ -545,6 +668,7 @@ class AbstractModule(object):
             if not set(other._out).isdisjoint(self._in):
                 raise ValueError("Downstream outputs feedback composed with upstream inputs")
 
+            # Outputs are the union of both module outputs
             newoutputs = self._out.copy()
             newoutputs.update(other.outputs)
 
@@ -554,8 +678,11 @@ class AbstractModule(object):
             for k in other.inputs:
                 # Common existing inputs must have same grid type
                 if k in newinputs and newinputs[k] != other.inputs[k]:
-                    raise TypeError("Mismatch between input spaces {0}, {1}".format(newinputs[k], other.inputs[k]))
+                    raise TypeError("Mismatch between input spaces {0}, {1}".format(newinputs[k], 
+                                                                                    other.inputs[k]))
                 newinputs[k] = other.inputs[k]
+            
+            # Variables that are both inputs and outputs
             overlapping_vars = set(self._out) & set(other._in)
             for k in overlapping_vars:
                 newinputs.pop(k)
@@ -583,19 +710,8 @@ class AbstractModule(object):
             newname, oldname = other
             if oldname not in self._in:
                 raise ValueError("Cannot rename non-existent input")
-            if newname in self.vars:
-                raise ValueError("Don't currently support renaming to an existing variable")
 
-            newinputs = self._in.copy()
-            newinputs[newname] = newinputs.pop(oldname)
-
-            newbits = [newname + '_' + i.split('_')[1] for i in self.pred_bitvars[oldname]]
-            self.mgr.declare(*newbits)
-            newvars = {i: j for i, j in zip(self.pred_bitvars[oldname], newbits)}
-
-            newpred = self.pred if newvars == {} else self.mgr.let(newvars, self.pred)
-
-            return AbstractModule(self.mgr, newinputs, self._out, newpred)
+            return self.renamed({oldname: newname})
 
         elif isinstance(other, AbstractModule):
             raise RuntimeError("__rshift__ should be called instead of __rrshift__")

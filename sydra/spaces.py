@@ -17,12 +17,6 @@ import numpy as np
 
 from sydra.utils import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, bv2int, bintogray, graytobin, increment_bv, bv_interval
 
-def find_nearest_index(array, value) -> int:
-    idx = np.searchsorted(array, value, side="left")
-    if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):
-        return idx-1
-    else:
-        return idx
 
 
 class SymbolicSet(object):
@@ -110,6 +104,12 @@ class EmbeddedGrid(DiscreteSet):
         self.right = right
         self.pts = np.linspace(self.left, self.right, self.num_vals)
 
+    def find_nearest_index(self, array, value) -> int:
+        idx = np.searchsorted(array, value, side="left")
+        if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):
+            return idx-1
+        else:
+            return idx
 
     def pt2index(self, pt: float, snap=False) -> int:
         """
@@ -126,7 +126,7 @@ class EmbeddedGrid(DiscreteSet):
 
         """
         if snap:
-            return find_nearest_index(self.pts, pt)
+            return self.find_nearest_index(self.pts, pt)
         elif pt in self.pts:
             return np.searchsorted(self.pts, pt)
         else:
@@ -487,7 +487,7 @@ class FixedCover(ContinuousCover):
     FixedCover(2, 10, 4, False) corresponds to the four bins
         [2, 4] [4,6] [6,8] [8,10]
     """
-    def __init__(self, lb: float, ub: float, bins: int, periodic=False) -> None:
+    def __init__(self, lb: float, ub: float, bins: int, periodic: bool=False) -> None:
         # Interval spacing
         assert bins > 0, "Cannot have negative grid spacing"
         self.bins = bins

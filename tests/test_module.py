@@ -28,6 +28,7 @@ def test_dynamic_module():
     g = ('j', 'x') >> h >> ('z', 'r')
     assert set(g.inputs) == {'j','y'}
     assert set(g.outputs) == {'r'}
+    assert g == h.renamed(x='j', z='r')
 
     precision = {'j': 4, 'y': 3, 'r': 3}
     bittotal = sum(precision.values()) 
@@ -50,7 +51,7 @@ def test_dynamic_module():
                                                      'z_0', 'z_1', 'z_2'}
 
     assert g.nonblock() == g.concrete_input_to_abs({'j': (3.,10.), 'y': (2.5,3.8)}, nbits = precision) # No inputs block
-    assert g.nonblock() == (g.hide(g.outputs).pred) 
+    assert g.nonblock() == (g.hidden(g.outputs).pred) 
 
     # Identity test for input and output renaming 
     assert ((g  >> ('r', 'z') ) >> ('z','r')) == g
@@ -61,7 +62,10 @@ def test_dynamic_module():
     assert set((g | h).inputs) == {'x','y','j'}
 
     # Series composition with disjoint I/O yields parallel composition 
-    assert (g >> h) == (g | h) 
+    assert (g >> h) == (g | h)
+    assert (g >> h) == g.composed_with(h)
+    assert (g >> h) == h.composed_with(g)
+    assert (g | h) == h.composed_with(g)
 
     # Out of bounds errors 
     with raises(AssertionError):
@@ -98,9 +102,6 @@ def test_mixed_module():
     
 def test_embeddedgrid_module():
 
-    from sydra.module import AbstractModule
-    from sydra.spaces import EmbeddedGrid
-
     mgr = BDD() 
     inputs = {'x': EmbeddedGrid(0,3,4)}
     outputs = {'y': EmbeddedGrid(4,11,8)}
@@ -111,11 +112,31 @@ def test_embeddedgrid_module():
     
     assert len(mgr.vars) > 0 
 
+def test_module_composition():
+    mgr = BDD()
+
+    x = DynamicCover(0,10)
+
+    m1 = AbstractModule(mgr, {'a': x}, {'b': x, 'c': x})
+    m2 = AbstractModule(mgr, {'i': x, 'j': x}, {'k': x})
+
+    m12 = (m1 >> m2.renamed(i = 'c'))
+    assert set(m12.inputs) == set(['a', 'j'])
+    assert set(m12.outputs) == set(['c', 'b', 'k'])
+    assert m12 == m2.renamed(i = 'c').composed_with(m1)
+    assert m12 == (('c', 'i') >> m2 ).composed_with(m1)
+
+    # Renaming is left associative
+    assert m12 == m1 >> (('c', 'i') >> m2 )
+    assert m12 != (m1 >> ('c', 'i')) >> m2
+    assert m12 == ((m1.renamed(c = 'i') >> m2)).renamed(i = 'c')
+    assert m12 == ((m1 >> ('c', 'i') >> m2)).renamed(i = 'c')
+    assert m12 == m1.renamed(c = 'i').composed_with(m2).renamed(i = 'c')
+    assert m12 == m1.renamed(c = 'i').composed_with(m2) >> ('i', 'c')
+
 def test_refinement_and_coarsening(): 
 
     mgr = BDD()
-    from sydra.module import AbstractModule
-    from sydra.spaces import DynamicCover
 
     def conc(x):
         return -3*x
@@ -123,7 +144,7 @@ def test_refinement_and_coarsening():
     x = DynamicCover(-10, 10)
     y = DynamicCover(20, 20)
 
-    mod = AbstractModule(mgr, {'x': x}, {'y':y})
+    linmod = AbstractModule(mgr, {'x': x}, {'y':y})
 
     width = 15
 
@@ -140,15 +161,14 @@ def test_refinement_and_coarsening():
         iobox['y'] = (ll, ur)
 
         # Refine and check abstract relation
-        newmod = mod.io_refined(iobox, nbits = {'x': 8, 'y':8})
-        assert mod <= newmod
-        mod = newmod
+        newmod = linmod.io_refined(iobox, nbits = {'x': 8, 'y':8})
+        assert linmod <= newmod
+        linmod = newmod
 
         # Check abstract relation relative to coarsened module
-        assert mod.coarsened(x=5,y=5) <= mod
+        assert linmod.coarsened(x=5,y=5) <= linmod
+        assert linmod.coarsened(x=5) <= linmod
+        assert linmod.coarsened(y=5) <= linmod        
          # Coarsen should do nothing because it keeps many bits
-        assert mod.coarsened({'x':10},y=10) == mod
+        assert linmod.coarsened({'x':10},y=10) == linmod
 
-
-# def test_identity_module():
-#     from sydra.module import AbstractModule

@@ -1,10 +1,12 @@
 
+from typing import Union, Dict, Tuple
+
 from bidict import bidict
 from sydra.module import AbstractModule
 
 
 
-def to_control_module(mod, states):
+def to_control_module(mod: AbstractModule, states) -> 'ControlSystem':
     """
     Construct a control system module from a generic input-output module.
 
@@ -21,7 +23,7 @@ def to_control_module(mod, states):
     except: # Tuple or list
         prepost = [(pre,post) for pre,post in states]
     finally:
-        pass 
+        raise TypeError 
 
     # Check pre/post state domain equality
     if not {post for pre,post in prepost}.issubset(mod.outputs):
@@ -44,7 +46,7 @@ def to_control_module(mod, states):
 class ControlSystem(AbstractModule):
     """ControlSystem module."""
 
-    def __init__(self, mgr, states, control, pred):
+    def __init__(self, mgr, states, control, pred) -> None:
         r"""
         ControlSystem constructor.
 
@@ -109,4 +111,15 @@ class ControlSystem(AbstractModule):
             space &= self.poststate[var].abs_space(self.mgr, var)
         return space
 
-    
+    def time_downsample(self, steps: int) -> 'ControlSystem':
+        """
+        Change the time horizon to be over multiple time steps.
+
+        Composes this system with itself and constrains inputs to be constant over the extended time horizon.
+
+        Parameters
+        ----------
+        steps: int
+            Times to compose the system with itself
+        """
+        raise NotImplementedError
