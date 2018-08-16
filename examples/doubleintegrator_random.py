@@ -105,13 +105,14 @@ system = pcomp | vcomp
 csys = to_control_module(system, (('p', 'pnext'), ('v', 'vnext')))
 
 # Declare safe set
-safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox=True) 
+safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox=True)
 
 # Solve game and plot 2D invariant region
 game = SafetyGame(csys, safe)
 synth_starttime = time.time()
-inv, steps, controller = game.step()
+inv, steps, controller = game.run()
 print("Solver Time: ", time.time() - synth_starttime)
+print("Solver Steps: ", steps)
 print("Safe Size:", system.mgr.count(safe, 12))
 print("Invariant Size:", system.mgr.count(inv, 12))
 # plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)

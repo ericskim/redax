@@ -248,7 +248,7 @@ class AbstractModule(object):
 
         See Also
         --------
-        refine_io: 
+        refine_io:
             Mutates the module instead of returning a new one.
 
         """
@@ -608,7 +608,7 @@ class AbstractModule(object):
         for k in downstream.inputs:
             # Common existing inputs must have same grid type
             if k in newinputs and newinputs[k] != downstream.inputs[k]:
-                raise TypeError("Mismatch between input spaces {0}, {1}".format(newinputs[k], 
+                raise TypeError("Mismatch between input spaces {0}, {1}".format(newinputs[k],
                                                                                 downstream.inputs[k]))
             newinputs[k] = downstream.inputs[k]
         

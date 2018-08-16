@@ -21,7 +21,7 @@ class ControlPre():
         self.nonblock = controlsys.nonblock()
 
         prebits = flatten([self.sys.pred_bitvars[state] for state in self.sys.prestate])
-        self.postbits = [self.sys.pre_to_post[_name(i)] + '_' + _idx(i) for i in prebits]
+        self.postbits = tuple(self.sys.pre_to_post[_name(i)] + '_' + _idx(i) for i in prebits)
         self.swapstates = {i: j for i, j in zip(prebits, self.postbits)}
 
     def elimcontrol(self, bits, pred):
@@ -65,7 +65,7 @@ class SafetyGame():
     Attributes
     ----------
     sys: ControlSystem
-        Control system to synthesize for
+        Control system that needs to satisfy safety/invariance property.
     safe: bdd
         Safe region predicate
 
@@ -76,14 +76,14 @@ class SafetyGame():
         self.sys  = sys
         self.safe = safeset # TODO: Check if a subset of the state space
 
-    def step(self, steps=None, winning=None):
+    def run(self, steps=None, winning=None):
         """
         Run a safety game until reaching a fixed point or a maximum number of steps.
 
         Parameters
         ----------
         steps: int
-            Maximum number of game steps to run 
+            Maximum number of game steps to run
         winning: int
             Currently winning region
 
@@ -111,7 +111,7 @@ class SafetyGame():
                 break
             zz = z
             C = self.cpre(zz) & self.safe
-            ubits = [k for k in C.support if _name(k) in self.sys.control.keys()]
+            ubits = tuple(k for k in C.support if _name(k) in self.sys.control.keys())
             i += 1
             z = self.sys.mgr.exist(ubits , C)
 
@@ -137,7 +137,7 @@ class ReachGame():
         self.sys = sys
 
 
-    def step(self, steps = None, winning=None):
+    def run(self, steps = None, winning=None):
         """
         Run a reachability game until reaching a fixed point or a maximum number of steps.
 
@@ -161,7 +161,7 @@ class ReachGame():
         if steps is not None:
             assert steps >= 0
 
-        C = self.sys.mgr.false 
+        C = self.sys.mgr.false
 
         z = self.sys.mgr.false if winning is None else winning
         zz = self.sys.mgr.true
@@ -173,7 +173,7 @@ class ReachGame():
 
             zz = z
             z = self.cpre(zz) | self.target # state-input pairs
-            ubits = [k for k in z.support if _name(k) in self.sys.control.keys()]
+            ubits = tuple(k for k in z.support if _name(k) in self.sys.control.keys())
             C = C | (z & (~self.sys.mgr.exist(ubits , C))) # Add new state-input pairs to controller            
             z = self.sys.mgr.exist(ubits , z)
             i += 1
@@ -240,9 +240,15 @@ class ReachAvoidGame():
             zz = z
             # z = (zz | self.cpre(zz, no_inputs = True) | self.target) & self.safe 
             z = (self.cpre(zz) & self.safe) | self.target # State input pairs
-            ubits = [k for k in z.support if _name(k) in self.sys.control.keys()]
+            ubits = tuple(k for k in z.support if _name(k) in self.sys.control.keys())
             C = C | (z & (~self.sys.mgr.exist(ubits , C))) # Add new state-input pairs to controller
             i += 1
             z = self.sys.mgr.exist(ubits , z)
 
         return z, i, MemorylessController(self.sys, C)
+
+
+"""
+def fp_iter(operation, starting, steps):
+
+"""

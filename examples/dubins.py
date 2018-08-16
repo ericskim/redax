@@ -178,11 +178,11 @@ target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 6, innerapprox=False)
 
 game = ReachGame(csys, target)
 starttime = time.time()
-basin, steps, controller = game.step()
-print("Solve Time:" , time.time() - starttime)
-print("Reach Size:" , dubins.mgr.count(basin, 18))
-print("Target Size:" , dubins.mgr.count(target, 18))
-print("Game Steps:" , steps)
+basin, steps, controller = game.run()
+print("Solve Time:", time.time() - starttime)
+print("Reach Size:", dubins.mgr.count(basin, 18))
+print("Target Size:", dubins.mgr.count(target, 18))
+print("Game Steps:", steps)
 
 # # Plot reachable winning set
 # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), basin, 128)

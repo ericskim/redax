@@ -14,16 +14,18 @@ def to_control_module(mod: AbstractModule, states) -> 'ControlSystem':
     ----------
         mod : sydra.AbstractModule
             Module
-        states: Dictionary or tuple 
+        states: iterable of (str, str) tuples
             Input-Output pairs signifying pre and post states.
 
     """
-    try: # Dictionary 
-        prepost = [(k,v) for k,v in states.items()]
-    except: # Tuple or list
-        prepost = [(pre,post) for pre,post in states]
-    finally:
-        raise TypeError 
+
+    prepost = [(prepost[0], prepost[1]) for prepost in states]
+    # try: # Dictionary 
+    #     prepost = [(k,v) for k, v in states.items()]
+    # except: # Tuple or list
+    #     prepost = [(prepost[0], prepost[1]) for prepost in states]
+    # finally:
+    #     raise TypeError 
 
     # Check pre/post state domain equality
     if not {post for pre,post in prepost}.issubset(mod.outputs):
@@ -110,6 +112,9 @@ class ControlSystem(AbstractModule):
         for var in self.poststate:
             space &= self.poststate[var].abs_space(self.mgr, var)
         return space
+
+    def composed_with(self, other):
+        raise NotImplementedError
 
     def time_downsample(self, steps: int) -> 'ControlSystem':
         """
