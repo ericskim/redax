@@ -11,6 +11,7 @@ import itertools
 
 import sydra.spaces as sp
 from sydra.utils import flatten
+from sydra.spaces import OutOfDomainError
 
 class AbstractModule(object):
     r"""
@@ -252,20 +253,23 @@ class AbstractModule(object):
             Mutates the module instead of returning a new one.
 
         """
-        assert set(concrete) == set(self.inputs) | set(self.outputs)
+        assert set(concrete) >= set(self.inputs).union(set(self.outputs))
 
         try:
             inputs = {k: v for k, v in concrete.items() if k in self.inputs}
             outputs = {k: v for k, v in concrete.items() if k in self.outputs}
             inpred = self.concrete_input_to_abs(inputs, **kwargs)
             outpred = self.concrete_output_to_abs(outputs, **kwargs)
-        except:  # TODO: Should catch a custom out of boundaries error
+        except OutOfDomainError:  # TODO: Should catch a custom out of boundaries error
             if silent:
                 return self
-            else:
-                raise
+            raise
+        except:
+            raise
 
-        return AbstractModule(self.mgr, self.inputs, self.outputs,
+        return AbstractModule(self.mgr, 
+                              self.inputs,
+                              self.outputs,
                               ((~self._nb & inpred & self.inspace()) | self.pred) & (~inpred | outpred),
                               self._nb | inpred)
 
@@ -284,9 +288,9 @@ class AbstractModule(object):
             return bit.split("_")[0]
 
         # Variable support check
-        assert {varname(bit) for bit in self._pred.support} <= self.vars
+        assert {varname(bit) for bit in self.pred.support} <= self.vars
         # Check that there aren't any transitions with invalid inputs/outputs
-        assert ~self.iospace() & self._pred == self.mgr.false
+        assert ~self.iospace() & self.pred == self.mgr.false
 
     def concrete_input_to_abs(self, concrete: dict, **kwargs):
         r"""Convert concrete inputs to abstract ones.
@@ -471,8 +475,8 @@ class AbstractModule(object):
         if (~self._nb | other._nb != self.mgr.true):
             return False
 
-        # Abstract system outputs must be overapproximations 
-        if (~(self._nb & other._pred) | self.pred) != self.mgr.true:
+        # Abstract system outputs must be overapproximations
+        if (~(self._nb & other.pred) | self.pred) != self.mgr.true:
             return False
 
         return True
@@ -510,7 +514,7 @@ class AbstractModule(object):
         # Shrink nonblocking set
         nb = self.mgr.forall(inbits, self.nonblock())
         # Expand outputs with respect to input coarseness
-        newpred = self.mgr.exist(inbits, self._pred)
+        newpred = self.mgr.exist(inbits, self.pred)
         # Constrain outputs to align with nonblocking set
         newpred = self.mgr.exist(outbits, nb & newpred & self.outspace())
 
@@ -754,3 +758,7 @@ class AbstractModule(object):
 
         return AbstractModule(self.mgr, newinputs, newoutputs,
                               self.pred & other.pred)
+
+
+class CompositeModule(object): 
+    raise NotImplementedError

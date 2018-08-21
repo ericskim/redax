@@ -57,7 +57,7 @@ possible_transitions = (pcomp | vcomp).count_io_space(bittotal)
 # Sample generator
 numapplied = 0
 abs_starttime = time.time()
-while(numapplied < 2000):
+while(numapplied < 10000):
 
     # Shrink window widths over time
     width = 18 * 1/np.log10(2*numapplied+10)
@@ -111,22 +111,22 @@ safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox=True)
 game = SafetyGame(csys, safe)
 synth_starttime = time.time()
 inv, steps, controller = game.run()
+
 print("Solver Time: ", time.time() - synth_starttime)
 print("Solver Steps: ", steps)
 print("Safe Size:", system.mgr.count(safe, 12))
 print("Invariant Size:", system.mgr.count(inv, 12))
 # plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
-
 # plot3D_QT(system.mgr, ('p', vspace), ('v', aspace), ('pnext', vspace), pcomp.pred, 128)
 # plot3D_QT(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
 
 """Simulate"""
 # state = {'p': -4, 'v': 2}
 # for step in range(10):
-#     u = [i for i in controller.allows(state)]  # Pick first allowed control
+#     u = [i for i in controller.allows(state)]  
 #     if len(u) == 0:
 #         break
-#     u = {'a': u[0]['a'][0]}
+#     u = {'a': u[0]['a'][0]} # Pick lower bound of first allowed control voxel
 #     state.update(u)
 #     print(step, state)
 #     nextstate = dynamics(**state)
