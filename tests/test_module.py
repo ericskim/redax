@@ -8,7 +8,7 @@ except ImportError:
 from pytest import approx, raises
 
 from sydra.module import AbstractModule
-from sydra.spaces import DynamicCover, EmbeddedGrid, FixedCover
+from sydra.spaces import DynamicCover, EmbeddedGrid, FixedCover, OutOfDomainError
 
 
 def test_dynamic_module():
@@ -68,7 +68,7 @@ def test_dynamic_module():
     assert (g | h) == h.composed_with(g)
 
     # Out of bounds errors 
-    with raises(AssertionError):
+    with raises(OutOfDomainError):
         g = g.io_refined( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,4.6)}, silent=False, nbits = precision)
     
 def test_mixed_module():

@@ -49,7 +49,7 @@ bounds = {'p': [-10,10], 'v': [-16,16]}
 system = pcomp | vcomp
 
 # Declare grid precision
-precision = {'p': 6, 'v': 6, 'a': 6, 'pnext': 6, 'vnext': 6}
+precision = {'p': 7, 'v': 7, 'a': 7, 'pnext': 7, 'vnext': 7}
 bittotal = sum(precision.values())
 outorder = {0: 'pnext', 1: 'vnext'}
 possible_transitions = (pcomp | vcomp).count_io_space(bittotal)
@@ -57,7 +57,7 @@ possible_transitions = (pcomp | vcomp).count_io_space(bittotal)
 # Sample generator
 numapplied = 0
 abs_starttime = time.time()
-while(numapplied < 2000):
+while(numapplied < 8000):
 
     # Shrink window widths over time
     width = 18 * 1/np.log10(2*numapplied+10)
@@ -102,31 +102,33 @@ while(numapplied < 2000):
 system = pcomp | vcomp
 
 # Control system declaration
-csys = to_control_module(system, (('p', 'pnext'), ('v', 'vnext')))
+for nbits in [5,6,7]:
+    csys = to_control_module(system.coarsened(p=nbits, v=nbits, a=nbits, pnext=nbits, vnext=nbits) , (('p', 'pnext'), ('v', 'vnext')))
 
-# Declare safe set
-safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox=True)
+    # Declare safe set
+    safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox=True)
 
-# Solve game and plot 2D invariant region
-game = SafetyGame(csys, safe)
-synth_starttime = time.time()
-inv, steps, controller = game.run()
-print("Solver Time: ", time.time() - synth_starttime)
-print("Solver Steps: ", steps)
-print("Safe Size:", system.mgr.count(safe, 12))
-print("Invariant Size:", system.mgr.count(inv, 12))
-# plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
+    # Solve game and plot 2D invariant region
+    game = SafetyGame(csys, safe)
+    synth_starttime = time.time()
+    inv, steps, controller = game.run()
 
+    print("Bits: ", nbits)
+    print("Solver Time: ", time.time() - synth_starttime)
+    print("Solver Steps: ", steps)
+    print("Safe Size:", system.mgr.count(safe, 14))
+    print("Invariant Size:", system.mgr.count(inv, 14))
+    # plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
 # plot3D_QT(system.mgr, ('p', vspace), ('v', aspace), ('pnext', vspace), pcomp.pred, 128)
 # plot3D_QT(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
 
 """Simulate"""
 # state = {'p': -4, 'v': 2}
 # for step in range(10):
-#     u = [i for i in controller.allows(state)]  # Pick first allowed control
+#     u = [i for i in controller.allows(state)]  
 #     if len(u) == 0:
 #         break
-#     u = {'a': u[0]['a'][0]}
+#     u = {'a': u[0]['a'][0]} # Pick lower bound of first allowed control voxel
 #     state.update(u)
 #     print(step, state)
 #     nextstate = dynamics(**state)

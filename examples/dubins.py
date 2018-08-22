@@ -196,7 +196,7 @@ print("Game Steps:", steps)
 # plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
 
 """Simulate"""
-state = {'x': -1, 'y': .6, 'theta': -.1}
+state = {'x': -1, 'y': .6, 'theta': -.2}
 for step in range(10):
     print(step, state)
     u = [i for i in controller.allows(state)]

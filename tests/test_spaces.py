@@ -1,7 +1,7 @@
 import numpy as np
 from pytest import approx, raises
 
-from sydra.spaces import DynamicCover, EmbeddedGrid, FixedCover
+from sydra.spaces import DynamicCover, EmbeddedGrid, FixedCover, OutOfDomainError
 from sydra.utils import bv_interval, bvwindow, index_interval
 
 try:
@@ -36,7 +36,7 @@ def test_dynamic_regular():
     # No bits yields the entire interval
     assert x.pt2box(1, 0) == (approx(-2), approx(2))
 
-    with raises(AssertionError):
+    with raises(OutOfDomainError):
         x.pt2bv(3, 1)
 
     # Inner approximation tests
@@ -211,6 +211,19 @@ def test_embedded_grid():
 
     EmbeddedGrid(10, 10, 1)
 
+def test_embedded_grid_periodic():
+    x = EmbeddedGrid(-np.pi, np.pi, 4, periodic=True)
+    assert x.width() == approx(2*np.pi)
+    assert len(x.pts) == 4
+    assert all(i == j for i,j in zip(x.pts, [approx(-np.pi), approx(-np.pi/2), 0, approx(np.pi/2)]))
+    assert x.find_nearest_index(x.pts, -3.2) == 0
+    assert x.pt2index(-3.2, snap=True) == 0
+    for s in np.random.randint(0, 400, 50):
+        s = s * .1
+        assert x.pt2index(s, snap=True) == x.pt2index(s + 2*np.pi, snap=True)
+    assert x.pt2index(0) == 2
+    assert x.pt2index(3.0, snap=True) == 0
+    assert x.pt2index(1.6, snap=True) == 3
 
 def test_utils():
     # Regular intervals 
