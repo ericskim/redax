@@ -235,11 +235,13 @@ def test_embedded_grid():
 
 def test_embedded_grid_periodic():
     x = EmbeddedGrid(-np.pi, np.pi, 4, periodic=True)
+    assert x.width() == approx(2*np.pi)
     assert len(x.pts) == 4
     assert all(i == j for i,j in zip(x.pts, [approx(-np.pi), approx(-np.pi/2), 0, approx(np.pi/2)]))
     assert x.find_nearest_index(x.pts, -3.2) == 0
     assert x.pt2index(-3.2, snap=True) == 0
     for s in np.random.randint(0, 400, 50):
+        s = s * .1
         assert x.pt2index(s, snap=True) == x.pt2index(s + 2*np.pi, snap=True)
     assert x.pt2index(0) == 2
     assert x.pt2index(3.0, snap=True) == 0

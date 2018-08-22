@@ -17,6 +17,8 @@ import numpy as np
 
 from sydra.utils import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, bv2int, bintogray, graytobin, increment_bv, bv_interval
 
+class OutOfDomainError(Exception):
+    pass
 
 
 class SymbolicSet(object):
@@ -91,7 +93,7 @@ class EmbeddedGrid(DiscreteSet):
 
     """
 
-    def __init__(self, left: float, right: float, num: int) -> None:
+    def __init__(self, left: float, right: float, num: int, periodic:bool = False) -> None:
         if num <= 0:
             raise ValueError("Grid must have at least one point")
         if left > right:
@@ -101,11 +103,35 @@ class EmbeddedGrid(DiscreteSet):
 
         DiscreteSet.__init__(self, num)
         self.left = left
-        self.right = right
-        self.pts = np.linspace(self.left, self.right, self.num_vals)
+
+        self.periodic = periodic
+        if periodic:
+            self.right = right - (right-left)/num
+            self.pts = np.linspace(self.left, self.right, num)
+        else:
+            self.right = right
+            self.pts = np.linspace(self.left, self.right, self.num_vals)
+
+    def width(self):
+        if self.periodic:
+            return self.num_vals*(self.right - self.left)/(self.num_vals-1)
+        else:
+            return self.right - self.left
+
+    def _wrap(self, val):
+        return self.left + (val - self.left) % self.width()
 
     def find_nearest_index(self, array, value) -> int:
+        if self.periodic:
+            value = self._wrap(value)
+
         idx = np.searchsorted(array, value, side="left")
+
+        if self.periodic and idx in (self.num_vals, self.num_vals-1):
+            w = self.width()
+            if math.fabs(value - w - self.left) < math.fabs(value - self.right):
+                return 0
+
         if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):
             return idx-1
         else:
@@ -280,8 +306,12 @@ class DynamicCover(ContinuousCover):
         if self.periodic:
             point = self._wrap(point)
 
-        assert point <= self.ub + tol, "Point {0} exceeds upper bound {1}".format(point, self.ub + tol)
-        assert point >= self.lb - tol, "Point {0} exceeds lower bound {1}".format(point, self.lb - tol)
+        if point > self.ub + tol:
+            raise OutOfDomainError
+        if point < self.lb - tol:
+            raise OutOfDomainError
+        # assert point <= self.ub + tol, "Point {0} exceeds upper bound {1}".format(point, self.ub + tol)
+        # assert point >= self.lb - tol, "Point {0} exceeds lower bound {1}".format(point, self.lb - tol)
 
         bucket_fraction = 2**nbits * (point - self.lb) / (self.ub - self.lb)
 

@@ -40,7 +40,7 @@ def to_control_module(mod: AbstractModule, states) -> 'ControlSystem':
     pres = [i for i in zip(*prepost)][0]
     control = {k:v for k,v in mod.inputs.items() if k not in pres}
     
-    return ControlSystem(mod.mgr, 
+    return ControlSystem(mod.mgr,
                          {i: mod.inputs[i[0]] for i in prepost}, 
                          control,
                          mod.pred)
@@ -56,9 +56,9 @@ class ControlSystem(AbstractModule):
         ----------
             mgr: dd manager
             states: dict. 
-                keys: (pre,post) tuples, values: symbolic type  
+                keys: (pre,post) tuples, values: symbolic type
             control: dict
-                keys: input variable names, values: input space type 
+                keys: input variable names, values: input space type
             pred: bdd
                 Finite abstract system's predicate
 
