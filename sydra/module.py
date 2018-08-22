@@ -9,6 +9,8 @@ Module container
 from typing import Dict, Generator, List, Union 
 import itertools
 
+import toposort
+
 import sydra.spaces as sp
 from sydra.utils import flatten
 from sydra.spaces import OutOfDomainError
@@ -141,7 +143,7 @@ class AbstractModule(object):
         bdd: 
             Predicate corresponding to the Cartesian product of each
             input space.
-        
+
         """
         space = self.mgr.true
         for var in self.inputs:
@@ -760,5 +762,17 @@ class AbstractModule(object):
                               self.pred & other.pred)
 
 
-class CompositeModule(object): 
-    raise NotImplementedError
+class CompositeModule(object):
+    def __init__(self, modules) -> None:
+        raise NotImplementedError
+        
+        # Construct a dependency graph
+
+        # Topological sort
+    
+    def io_refined(self, concrete, **kwargs) -> 'CompositeModule':
+        raise NotImplementedError
+
+    def __setattr__(self, name, value):
+        raise NotImplementedError
+

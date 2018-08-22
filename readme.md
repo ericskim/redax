@@ -1,6 +1,6 @@
-# SYDRA: Control Synthesizer in Python with (Dynamic|Declarative|Robust) Abstractions
+# REDAX: Control Synthesizer in Python with (Dynamic|Declarative|Robust) Abstractions
 
-SYDRA is a controller synthesis tool that constructs finite state machines that mimic continuous dynamics. We call the finite state machines *abstractions* because they abstract out low level state information.
+REDAX is a controller synthesis tool that constructs finite state machines that mimic continuous dynamics. We call the finite state machines *abstractions* because they abstract out low level state information.
 
 ## Table of Contents
 
@@ -141,6 +141,9 @@ pip install .
 
 ### TODOs
 
+- Put control and state variable assignments in the cpre or the game solvers instead of a module
+- Recursive fixed points
+- Lazy composition
 - Helper classes for different input-output overapproximation procedures
   - Lipschitz
   - Mixed monotone
@@ -148,12 +151,10 @@ pip install .
   - Box corners
 - Tests for floating point inequalities for conc2abs method in continuous covers
   - Iterators for the 2^N reduced grid traversal
-- Type annotations
 - Document more (especially class attributes)
-- Custom errors for out of domain
+  - Type annotations
 - Examples
   - 3DOF ship
-  - OpenAI lunar lander
   - Pair of dubins vehicles
 - Reinstall from scratch in a virtualenv
   - Upload to github and add code coverage, travis-ci banners
@@ -162,6 +163,7 @@ pip install .
 
 ### Future Features
 
+- Assume guarantee encodings of systems
 - Concrete executable functions associated with module dynamics
 - Support for disjoint union and product operations for spaces (thus adding support for switched and hybrid spaces)
   - Will require a better predicate bit name generator
@@ -170,7 +172,7 @@ pip install .
   2. Provide a collection of modules and have the synthesizer construct a DAG internally.
 - Generic predicate manipulation wrapper around py-aiger and dd.
 
-## References 
+## References
 
 ### Literature
 
