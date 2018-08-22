@@ -138,14 +138,14 @@ class EmbeddedGrid(DiscreteSet):
 
         Parameters
         ----------
-            mgr (dd mgr):
-            name:
-            concrete:
-            snap:
+        mgr (dd mgr):
+        name:
+        concrete:
+        snap:
 
         Returns
         -------
-            bdd:
+        bdd:
 
         """
         bv = int2bv(self.pt2index(concrete, snap), self.num_bits)
@@ -166,6 +166,15 @@ class EmbeddedGrid(DiscreteSet):
         Converts a bitvector into a concrete grid point
         """
         return self.pts[bv2int(bv)]
+
+    def __eq__(self, other):
+        if self.periodic != other.periodic:
+            return False
+        if self.lb != other.lb:
+            return False
+        if self.ub != other.ub:
+            return False
+        return True
 
 class ContinuousCover(SymbolicSet):
     """
@@ -193,9 +202,6 @@ class ContinuousCover(SymbolicSet):
         width = self.ub - self.lb
         return ((point - self.lb) % width) + self.lb
 
-    @abstractmethod
-    def pt2bv(self, point: float):
-        raise NotImplementedError
 
     def __eq__(self, other) -> bool:
         if self.periodic != other.periodic:
@@ -422,25 +428,6 @@ class DynamicCover(ContinuousCover):
                 predbox |= bv2pred(mgr, name, bv)
         return predbox
 
-    def conc2predold(self, mgr, name: str, box, nbits: int, innerapprox=False, tol=.00001):
-        """
-        Overapproximation of a concrete box with its BDD.
-
-        Parameters
-        ----------
-        name
-        box
-        innerapprox -
-        tol - tolerance for numerical errors as a fraction of the grid size. Must lie within [0,1]
-        """
-        assert nbits >= 0
-
-        predbox = mgr.false
-        for bv in self.box2bvs(box, nbits, innerapprox, tol):
-            predbox |= bv2pred(mgr, name, bv)
-
-        assert len(predbox.support) <= nbits, "Support " + str(predbox.support) + "exceeds " + str(nbits) + " bits"
-        return predbox
 
     def __eq__(self, other):
         if type(self) != type(other):
@@ -649,13 +636,20 @@ class FixedCover(ContinuousCover):
                 predbox |= bv2pred(mgr, name, bv)
         return predbox
 
-    def conc2predold(self, mgr, name, box, innerapprox=False, tol=.0000001):
 
-        # left, right = box
+class NamedSpace(object):
+    r"""
+    Assigns a name to a space for reuse.
+    """
 
-        b = self.box2bvs(box, innerapprox, tol)
-        boxbdd = mgr.false
-        for i in map(lambda x: bv2pred(mgr, name, x), b):
-            boxbdd |= i
+    def __init__(self, name: str, space: SymbolicSet) -> None:
+        self.name = name
+        self.space = space
 
-        return boxbdd
+    def __eq__(self, other: 'NamedSpace'):
+        try:
+            if self.name == other.name and self.space == other.space:
+                return True
+            return False
+        except:
+            return False

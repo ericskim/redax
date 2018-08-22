@@ -59,18 +59,8 @@ def test_dynamic_regular():
     # BDD creation
     assert x.conc2pred(mgr, "x", (.4, .6), 1, True) == mgr.false
     args = [mgr, "x", (.4, .6), 1, True]
-    assert x.conc2predold(*args) == x.conc2pred(*args)
     args = [mgr, "x", (-.34, .65), 4, True]
-    assert x.conc2predold(*args) == x.conc2pred(*args), x.box2indexwindow(*args[2:])
     assert x.box2indexwindow(*args[2:]) == (7, 9)
-    
-    for i in range(50):
-        bits = np.random.randint(0,4)
-        left = np.random.rand() * 4 - 2
-        right = np.random.rand() * (2-left) + left
-        inner = False  # if np.random.randint(2) == 1 else False
-        args = [mgr, "x", (left, right), bits, inner]
-        assert x.conc2predold(*args) == x.conc2pred(*args), [i, args, x.box2indexwindow(*args[2:])]
 
     pspace = DynamicCover(-2, 2)
     assert pspace.box2indexwindow((0, .8), 6, False) == (32, 44)
@@ -127,18 +117,6 @@ def test_dynamic_periodic():
     assert x.conc2pred(mgr, 'x', (0,5), 4, innerapprox=True) == x.conc2pred(mgr, 'x', (0,5), 4, innerapprox=False)
     assert x.conc2pred(mgr, 'x', (15,5), 4, innerapprox=True) == x.conc2pred(mgr, 'x', (15,5), 4, innerapprox=False)
     assert x.conc2pred(mgr, 'x', (0,20), 4, innerapprox=True) == x.conc2pred(mgr, 'x', (20,40), 4, innerapprox=False)
-
-    # print("======= Random tests =======")
-    # for i in range(100):
-    #     bits = np.random.randint(0,4)
-    #     left = np.random.rand() * 20
-    #     right = np.random.rand() * 20 + left
-    #     inner = True # if np.random.randint(2) == 1 else False
-    #     args = [mgr, "x", (left,right), bits, inner]
-    #     print(i, args)
-    #     print(x.box2indexwindow(*args[2:]))
-    #     print(list(x.box2bvs(*args[2:])), "\n\n")
-    #     assert x.conc2predold(*args) == x.conc2pred(*args)
 
 
 def test_fixed_regular():

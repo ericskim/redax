@@ -6,8 +6,10 @@ Module container
 
 """
 
-from typing import Dict, Generator, List, Union 
+from typing import Dict, Generator, List, Union, Collection
 import itertools
+
+import toposort
 
 import sydra.spaces as sp
 from sydra.utils import flatten
@@ -140,7 +142,7 @@ class AbstractModule(object):
         bdd: 
             Predicate corresponding to the Cartesian product of each
             input space.
-        
+
         """
         space = self.mgr.true
         for var in self.inputs:
@@ -217,8 +219,8 @@ class AbstractModule(object):
         try:
             inputs = {k: v for k, v in concrete.items() if k in self.inputs}
             outputs = {k: v for k, v in concrete.items() if k in self.outputs}
-            inpred = self.concrete_input_to_abs(inputs, **kwargs)
-            outpred = self.concrete_output_to_abs(outputs, **kwargs)
+            inpred = self.input_to_abs(inputs, **kwargs)
+            outpred = self.output_to_abs(outputs, **kwargs)
         except:  # TODO: Should catch a custom out of boundaries error
             return False
 
@@ -234,7 +236,7 @@ class AbstractModule(object):
         Parameters
         ----------
         concrete: dict(Variable str: concrete values)
-            Each abstract variable is
+            
         silent: bool, optional
             If true, does not raise an error out of bounds errors
             If false, raises an error.
@@ -257,8 +259,8 @@ class AbstractModule(object):
         try:
             inputs = {k: v for k, v in concrete.items() if k in self.inputs}
             outputs = {k: v for k, v in concrete.items() if k in self.outputs}
-            inpred = self.concrete_input_to_abs(inputs, **kwargs)
-            outpred = self.concrete_output_to_abs(outputs, **kwargs)
+            inpred = self.input_to_abs(inputs, **kwargs)
+            outpred = self.output_to_abs(outputs, **kwargs)
         except:  # TODO: Should catch a custom out of boundaries error
             if silent:
                 return self
@@ -288,7 +290,7 @@ class AbstractModule(object):
         # Check that there aren't any transitions with invalid inputs/outputs
         assert ~self.iospace() & self._pred == self.mgr.false
 
-    def concrete_input_to_abs(self, concrete: dict, **kwargs):
+    def input_to_abs(self, concrete: dict, **kwargs):
         r"""Convert concrete inputs to abstract ones.
 
         Applies an underapproximation for inputs that live in a continuous 
@@ -322,7 +324,7 @@ class AbstractModule(object):
 
         return in_bdd
 
-    def concrete_output_to_abs(self, concrete: dict, **kwargs):
+    def output_to_abs(self, concrete: dict, **kwargs):
         r"""Convert concrete outputs to abstract ones.
 
         Applies an overapproximation for outputs that live in a continuous 
@@ -754,3 +756,57 @@ class AbstractModule(object):
 
         return AbstractModule(self.mgr, newinputs, newoutputs,
                               self.pred & other.pred)
+
+
+class CompositeModule(object):
+    def __init__(self, modules: Collection[AbstractModule]) -> None:
+
+        # Topological sort
+        self.children = set(modules)
+        
+    def dependencies(self):
+        raise NotImplementedError
+    
+    def dag(self):
+        """
+        Compute a directed acyclic graph of modules from I/O dependencies.
+        """
+
+        # Cannot hash modules, need to use indices
+
+        # Map indices back to modules
+        raise NotImplementedError
+
+    def inputs(self):
+        raise NotImplementedError
+
+    def outputs(self):
+        raise NotImplementedError
+
+    def hidden(self, var):
+        raise NotImplementedError
+
+    def io_refined(self, concrete, **kwargs) -> 'CompositeModule':
+        """
+        Refines interior modules.
+
+        Minimizes redundant computations.
+        """
+        raise NotImplementedError
+
+        newmods = []
+
+        # Refine each module individually
+        for mod in self.children:
+            
+            # Relevant kwargs
+            #newmods.append
+            pass
+
+        return CompositeModule(newmods)
+
+    def collapse(self) -> AbstractModule:
+        raise NotImplementedError
+    
+    def split(self) -> Collection[AbstractModule]:
+        raise NotImplementedError

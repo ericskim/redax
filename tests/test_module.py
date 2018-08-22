@@ -50,7 +50,7 @@ def test_dynamic_module():
                                                      'y_0', 'y_1', 'y_2',
                                                      'z_0', 'z_1', 'z_2'}
 
-    assert g.nonblock() == g.concrete_input_to_abs({'j': (3.,10.), 'y': (2.5,3.8)}, nbits = precision) # No inputs block
+    assert g.nonblock() == g.input_to_abs({'j': (3.,10.), 'y': (2.5,3.8)}, nbits = precision) # No inputs block
     assert g.nonblock() == (g.hidden(g.outputs).pred) 
 
     # Identity test for input and output renaming 
