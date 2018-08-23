@@ -28,7 +28,7 @@ def to_control_module(mod: AbstractModule, states) -> 'ControlSystem':
     #     raise TypeError 
 
     # Check pre/post state domain equality
-    if not {post for pre,post in prepost}.issubset(mod.outputs):
+    if not {post for pre, post in prepost}.issubset(mod.outputs):
         raise ValueError("Unknown post state")
     if not {pre for pre,post in prepost}.issubset(mod.inputs):
         raise ValueError("Unknown pre state")
@@ -56,7 +56,7 @@ class ControlSystem(AbstractModule):
         ----------
             mgr: dd manager
             states: dict. 
-                keys: (pre,post) tuples, values: symbolic type
+                keys: (pre,post) tuples, values: symbolic space
             control: dict
                 keys: input variable names, values: input space type
             pred: bdd

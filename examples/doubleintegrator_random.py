@@ -13,7 +13,7 @@ except ImportError:
 from sydra.controlmodule import to_control_module
 from sydra.module import AbstractModule
 from sydra.spaces import DynamicCover
-from sydra.synthesis import SafetyGame
+from sydra.synthesis import SafetyGame, ControlPre
 from sydra.visualizer import plot2D, plot3D, plot3D_QT
 
 ts = .2
@@ -57,7 +57,7 @@ possible_transitions = (pcomp | vcomp).count_io_space(bittotal)
 # Sample generator
 numapplied = 0
 abs_starttime = time.time()
-while(numapplied < 8000):
+while(numapplied < 3000):
 
     # Shrink window widths over time
     width = 18 * 1/np.log10(2*numapplied+10)
@@ -102,14 +102,15 @@ while(numapplied < 8000):
 system = pcomp | vcomp
 
 # Control system declaration
-for nbits in [5,6,7]:
-    csys = to_control_module(system.coarsened(p=nbits, v=nbits, a=nbits, pnext=nbits, vnext=nbits) , (('p', 'pnext'), ('v', 'vnext')))
+for nbits in [6]:
+
+    cpre = ControlPre(system, (('p', 'pnext'), ('v', 'vnext')), ('a'))
 
     # Declare safe set
     safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox=True)
 
     # Solve game and plot 2D invariant region
-    game = SafetyGame(csys, safe)
+    game = SafetyGame(cpre, safe)
     synth_starttime = time.time()
     inv, steps, controller = game.run()
 
@@ -123,13 +124,13 @@ for nbits in [5,6,7]:
 # plot3D_QT(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
 
 """Simulate"""
-# state = {'p': -4, 'v': 2}
-# for step in range(10):
-#     u = [i for i in controller.allows(state)]  
-#     if len(u) == 0:
-#         break
-#     u = {'a': u[0]['a'][0]} # Pick lower bound of first allowed control voxel
-#     state.update(u)
-#     print(step, state)
-#     nextstate = dynamics(**state)
-#     state = {'p': nextstate[0], 'v': nextstate[1]}
+state = {'p': -4, 'v': 2}
+for step in range(200):
+    u = [i for i in controller.allows(state)]  
+    if len(u) == 0:
+        break
+    u = {'a': u[0]['a'][0]} # Pick lower bound of first allowed control voxel
+    state.update(u)
+    print(step, state)
+    nextstate = dynamics(**state)
+    state = {'p': nextstate[0], 'v': nextstate[1]}

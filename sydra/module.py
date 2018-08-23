@@ -766,7 +766,7 @@ class CompositeModule(object):
     def __init__(self, modules: Collection[AbstractModule]) -> None:
 
         # Topological sort
-        self.children = set(modules)
+        self.children = tuple(modules)
         
     def dependencies(self):
         raise NotImplementedError
@@ -800,10 +800,19 @@ class CompositeModule(object):
 
         newmods = []
 
+        inner_preds = dict()
+        outer_preds = dict()
+
         # Refine each module individually
         for mod in self.children:
             
             # Relevant kwargs
+            
+
+            # Check for reusable predicates or compute it
+            
+
+            # Refine and append
             #newmods.append
             pass
 

@@ -13,7 +13,7 @@ except ImportError:
 from sydra.controlmodule import to_control_module
 from sydra.module import AbstractModule
 from sydra.spaces import DynamicCover, EmbeddedGrid, FixedCover
-from sydra.synthesis import ReachGame
+from sydra.synthesis import ReachGame, ControlPre
 from sydra.visualizer import plot3D, plot3D_QT
 
 """
@@ -170,13 +170,15 @@ for numapplied in range(8000):
 
 dubins = (dubins_x | dubins_y | dubins_theta)
 
-csys = to_control_module(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')))
+# csys = to_control_module(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')))
+
+cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
 
 # Declare reach set as [0.8] x [-.8, 0] box
 target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 6, innerapprox=False)
 target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 6, innerapprox=False)
 
-game = ReachGame(csys, target)
+game = ReachGame(cpre, target)
 starttime = time.time()
 basin, steps, controller = game.run()
 print("Solve Time:", time.time() - starttime)

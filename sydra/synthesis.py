@@ -1,5 +1,7 @@
 from functools import reduce
 
+from bidict import bidict
+
 from sydra.controllers import MemorylessController
 from sydra.utils import flatten
 
@@ -14,23 +16,90 @@ def _idx(i):
 
 
 class ControlPre():
-    """Controlled Predecessor Computer."""
+    r"""Controlled Predecessors.
+    
+    """
 
-    def __init__(self, controlsys):
-        self.sys = controlsys
-        self.nonblock = controlsys.nonblock()
+    def __init__(self, mod, states, control) -> None:
+        """
+        Constructor
 
-        prebits = flatten([self.sys.pred_bitvars[state] for state in self.sys.prestate])
-        self.postbits = tuple(self.sys.pre_to_post[_name(i)] + '_' + _idx(i) for i in prebits)
-        self.swapstates = {i: j for i, j in zip(prebits, self.postbits)}
+        Parameters
+        ----------
+        mod: sydra.AbstractModule
+            Module
+        states: iterable of (str, str) tuples
+            (pre state name, post state name)
+        control: Collection of str
 
-    def elimcontrol(self, bits, pred):
+        """
+        self.sys = mod
+
+        prepost = [(prepost[0], prepost[1]) for prepost in states]
+        
+        if not {post for pre, post in prepost}.issubset(mod.outputs):
+            raise ValueError("Unknown post state")
+        if not {pre for pre, post in prepost}.issubset(mod.inputs):
+            raise ValueError("Unknown pre state")
+        if not {ctrl for ctrl in control}.issubset(mod.inputs):
+            raise ValueError("Unknown control input")
+        if not {ctrl for ctrl in control}.isdisjoint(flatten(prepost)):
+            raise ValueError("Variable cannot be both state and control")
+        if any(mod.inputs[pre] != mod.outputs[post] for pre, post in prepost):
+            raise ValueError("Pre and post state domains do not match")
+
+        self.prestate = {i[0]: mod[i[0]] for i in states}
+        self.poststate = {i[1]: mod[i[1]] for i in states}
+        self.control = {i: mod[i] for i in control}
+        self.pre_to_post = bidict({k[0]: k[1] for k in states})
+
+    def controlspace(self):
+        """Predicate for the control space."""
+        space = self.sys.mgr.true
+        for var in self.control:
+            space &= self.control[var].abs_space(self.sys.mgr, var)
+        return space
+
+    def prespace(self):
+        """Predicate for the current state space."""
+        space = self.sys.mgr.true
+        for var in self.prestate:
+            space &= self.prestate[var].abs_space(self.sys.mgr, var)
+        return space
+
+    def postspace(self):
+        """Predicate for the successor/post state space."""
+        space = self.sys.mgr.true
+        for var in self.poststate:
+            space &= self.poststate[var].abs_space(self.sys.mgr, var)
+        return space
+
+    def elimcontrol(self, pred):
         r"""Existentially eliminate control bits from a predicate."""
-        return self.sys.mgr.exist(bits, pred & self.sys.controlspace())
+        pred_in_space = pred & self.controlspace()
+        elimbits = tuple(i for i in pred_in_space.support if _name(i) in self.control)
+        return self.sys.mgr.exist(elimbits, pred_in_space)
 
-    def elimpost(self, bits, pred): 
+    def elimprestate(self, pred):
+        r"""Existentially eliminate state bits from a predicate."""
+        pred_in_space = pred & self.prespace()
+        elimbits = tuple(i for i in pred_in_space.support if _name(i) in self.prestate)
+        return self.sys.mgr.exist(elimbits, pred_in_space)
+
+    def elimpost(self, pred):
         r"""Universally eliminate post state bits from a predicate."""
-        return self.sys.mgr.forall(bits, ~self.sys.outspace() | pred)
+        implies_pred = ~self.postspace() | pred
+        elimbits = tuple(i for i in implies_pred.support if _name(i) in self.poststate)
+        return self.sys.mgr.forall(elimbits, implies_pred)
+
+    def swappedstates(self, Z):
+        r"""
+        Swaps bit variables between predecessor and post states
+        """
+        bits = Z.support
+
+        postbits = tuple(self.pre_to_post[_name(i)] + '_' + _idx(i) for i in bits)
+        return {pre: post for pre, post in zip(bits, postbits)}
 
     def __call__(self, Z, no_inputs = False):
         r"""
@@ -47,16 +116,16 @@ class ControlPre():
 
         """
         # Exchange Z's pre state variables for post state variables
-        Z = self.sys.mgr.let(self.swapstates, Z)
+        swapvars = self.swappedstates(Z)
+        if len(swapvars) > 0:
+            Z = self.sys.mgr.let(self.swappedstates(Z), Z)
         # Compute implication
         Z = (~self.sys.pred | Z)
-        # Eliminate x' and return
+        # Eliminate post states and return
         if no_inputs:
-            controlbits = flatten([self.sys.pred_bitvars[c] for c in self.sys.control])
-            return self.elimcontrol(controlbits, (self.nonblock & self.elimpost(self.postbits, Z)))
+            return self.elimcontrol(self.sys._nb & self.elimpost(Z))
         else:
-            return self.nonblock & self.elimpost(self.postbits, Z)
-
+            return self.sys._nb & self.elimpost(Z)
 
 class SafetyGame():
     """
@@ -71,9 +140,8 @@ class SafetyGame():
 
     """
 
-    def __init__(self, sys, safeset):
-        self.cpre = ControlPre(sys)
-        self.sys  = sys
+    def __init__(self, cpre, safeset):
+        self.cpre = cpre
         self.safe = safeset # TODO: Check if a subset of the state space
 
     def run(self, steps=None, winning=None):
@@ -100,10 +168,10 @@ class SafetyGame():
         if steps is not None:
             assert steps >= 0
 
-        C = self.sys.mgr.false
+        C = self.cpre.sys.mgr.false
 
-        z = self.sys.statespace() if winning is None else winning
-        zz = self.sys.mgr.false
+        z = self.cpre.prespace() if winning is None else winning
+        zz = self.cpre.sys.mgr.false
 
         i = 0
         while (z != zz):
@@ -111,11 +179,10 @@ class SafetyGame():
                 break
             zz = z
             C = self.cpre(zz) & self.safe
-            ubits = tuple(k for k in C.support if _name(k) in self.sys.control.keys())
-            i += 1
-            z = self.sys.mgr.exist(ubits , C)
+            z = self.cpre.elimcontrol(C)
+            i  = i + 1
 
-        return z, i, MemorylessController(self.sys, C)
+        return z, i, MemorylessController(self.cpre, C)
 
 
 class ReachGame():
@@ -131,11 +198,9 @@ class ReachGame():
 
     """
 
-    def __init__(self, sys, target):
-        self.cpre = ControlPre(sys)
+    def __init__(self, cpre, target):
+        self.cpre = cpre
         self.target = target # TODO: Check if a subset of the state space
-        self.sys = sys
-
 
     def run(self, steps = None, winning=None):
         """
@@ -161,10 +226,10 @@ class ReachGame():
         if steps is not None:
             assert steps >= 0
 
-        C = self.sys.mgr.false
+        C = self.cpre.sys.mgr.false
 
-        z = self.sys.mgr.false if winning is None else winning
-        zz = self.sys.mgr.true
+        z = self.cpre.sys.mgr.false if winning is None else winning
+        zz = self.cpre.sys.mgr.true
 
         i = 0
         while (z != zz):
@@ -173,12 +238,11 @@ class ReachGame():
 
             zz = z
             z = self.cpre(zz) | self.target # state-input pairs
-            ubits = tuple(k for k in z.support if _name(k) in self.sys.control.keys())
-            C = C | (z & (~self.sys.mgr.exist(ubits , C))) # Add new state-input pairs to controller            
-            z = self.sys.mgr.exist(ubits , z)
+            C = C | (z & (~self.cpre.elimcontrol(C))) # Add new state-input pairs to controller
+            z = self.cpre.elimcontrol(z)
             i += 1
 
-        return z, i, MemorylessController(self.sys, C)
+        return z, i, MemorylessController(self.cpre, C)
 
 class ReachAvoidGame():
     """
@@ -198,6 +262,7 @@ class ReachAvoidGame():
     """
     
     def __init__(self, sys, safe, target):
+        raise NotImplementedError("Needs to be refactored to take controllable predecessors")
         self.cpre = ControlPre(sys)
         self.target = target  # TODO: Check if a subset of the state space
         self.safe = safe

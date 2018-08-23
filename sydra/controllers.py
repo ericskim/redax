@@ -34,9 +34,9 @@ class MemorylessController(SupervisoryController):
 
     """
 
-    def __init__(self, sys, allowed_controls):
+    def __init__(self, cpre, allowed_controls):
         SupervisoryController.__init__(self)
-        self.sys = sys
+        self.cpre = cpre
         self.C = allowed_controls
 
     def allows(self, state): # -> Generator[Dict[str, concretetype], None, None]
@@ -55,34 +55,31 @@ class MemorylessController(SupervisoryController):
 
         """
 
-        assert (state.keys() == self.sys.prestate.keys())
+        assert (state.keys() == self.cpre.prestate.keys())
 
         # Convert concrete state to BDD
-        pt_bdd = self.sys.mgr.true
+        pt_bdd = self.cpre.sys.mgr.true
         forall_bits = []  # Post state bits
         exists_bits = []  # Pre state bits
         for k, v in state.items():
-            poststate = self.sys.pre_to_post[k]
-            forall_bits += self.sys.pred_bitvars[poststate]
-            exists_bits += self.sys.pred_bitvars[k]
-            nbits = len(self.sys.pred_bitvars[k])
-            pt_bdd &= self.sys.prestate[k].pt2bdd(self.sys.mgr, k, v, nbits)
+            nbits = len(self.cpre.sys.pred_bitvars[k])
+            pt_bdd &= self.cpre.prestate[k].pt2bdd(self.cpre.sys.mgr, k, v, nbits)
 
         # Safe state-input pairs
         xu = pt_bdd & self.C
 
         # Safe control inputs
-        u = self.sys.mgr.exist(exists_bits, xu)
+        u = self.cpre.elimprestate(xu)
 
         # Generate allowed controls
-        for u_assignment in self.sys.mgr.pick_iter(u):
+        for u_assignment in self.cpre.sys.mgr.pick_iter(u):
             # Translate BDD assignment into concrete counterpart
             uval = dict()
-            for uvar in self.sys.control.keys():
+            for uvar in self.cpre.control:
                 ubits = [k for k in u_assignment if _name(k) == uvar]
                 ubits.sort()
                 bv = [u_assignment[bit] for bit in ubits]
-                uval[uvar] = self.sys.control[uvar].bv2conc(bv)
+                uval[uvar] = self.cpre.control[uvar].bv2conc(bv)
             yield uval
 
 

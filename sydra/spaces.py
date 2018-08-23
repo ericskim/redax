@@ -38,7 +38,10 @@ class DiscreteSet(SymbolicSet):
     def __init__(self, num_vals) -> None:
         SymbolicSet.__init__(self)
         self.num_vals = num_vals
-        self.num_bits = math.ceil(math.log2(num_vals))
+
+    @property
+    def num_bits(self):
+        return math.ceil(math.log2(self.num_vals))
 
     def pt2bv(self, point) -> BitVector:
         assert point < self.num_vals
@@ -516,6 +519,7 @@ class FixedCover(ContinuousCover):
             if self.bins == other.bins:
                 return True
         return False
+
     @property
     def num_bits(self):
         return math.ceil(math.log2(self.bins))
