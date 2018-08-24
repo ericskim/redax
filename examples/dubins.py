@@ -10,11 +10,11 @@ try:
 except ImportError:
     from dd.autoref import BDD
 
-from sydra.controlmodule import to_control_module
-from sydra.module import AbstractModule
-from sydra.spaces import DynamicCover, EmbeddedGrid, FixedCover
-from sydra.synthesis import ReachGame, ControlPre
-from sydra.visualizer import plot3D, plot3D_QT
+from redax.controlmodule import to_control_module
+from redax.module import AbstractModule
+from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover
+from redax.synthesis import ReachGame, ControlPre
+from redax.visualizer import plot3D, plot3D_QT
 
 """
 Specify dynamics and overapproximations
@@ -83,8 +83,9 @@ mgr = BDD()
 pspace      = DynamicCover(-2,2)
 anglespace  = DynamicCover(-np.pi, np.pi, periodic=True)
 # Declare discrete control spaces
-vspace      = EmbeddedGrid(vmax/2, vmax, 2)
-angaccspace = EmbeddedGrid(-1.5, 1.5, 3)
+vspace      = EmbeddedGrid(2, vmax/2, vmax)
+angaccspace = EmbeddedGrid(3, -1.5, 1.5)
+
 
 # Declare modules
 dubins_x        = AbstractModule(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace}, 

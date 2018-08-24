@@ -31,7 +31,7 @@ Clone this repo and run the following commands:
 
 ```shellscript
 # Setup script doesn't currently handle all dependency installation
-cd /location/of/sydra/here/
+cd /location/of/redax/here/
 pip install .
 ```
 
@@ -141,14 +141,12 @@ pip install .
 
 ### TODOs
 
-- Put control and state variable assignments in the cpre or the game solvers instead of a module
 - Recursive fixed points
-- Lazy composition
 - Helper classes for different input-output overapproximation procedures
   - Lipschitz
   - Mixed monotone
   - Random sampling in box with bloating
-  - Box corners
+  - Box corners with bloating
 - Tests for floating point inequalities for conc2abs method in continuous covers
   - Iterators for the 2^N reduced grid traversal
 - Document more (especially class attributes)
@@ -160,13 +158,19 @@ pip install .
   - Upload to github and add code coverage, travis-ci banners
 - Rewrite continuous cover grid to have an overlap parameter.
 - (?) Rewrite safe/target predicates as source and sink modules and use series composition operator for synthesis.
+- Class for named spaces so we don't refer to variables via strings.
 
 ### Future Features
 
-- Assume guarantee encodings of systems
 - Concrete executable functions associated with module dynamics
-- Support for disjoint union and product operations for spaces (thus adding support for switched and hybrid spaces)
+- Support for disjoint union and product operations for spaces (thus adding support for hybrid spaces)
   - Will require a better predicate bit name generator
+- Lazy composition
+  - Refine internal modules
+  - Support methods: Collapse to monolithic, split and give a collection, or something in the middle
+  - Atomic module vs composite. Existing one is atomic.
+  - hide certain outputs
+  - compose.py helper functions
 - Control synthesizer that is aware of the control system structure. Options include:
   1. Non-eager composition like in neural network packages. Especially useful if we have concrete executables inside the module.
   2. Provide a collection of modules and have the synthesizer construct a DAG internally.

@@ -7,8 +7,8 @@ except ImportError:
     from dd.autoref import BDD
 from pytest import approx, raises
 
-from sydra.module import AbstractModule
-from sydra.spaces import DynamicCover, EmbeddedGrid, FixedCover, OutOfDomainError
+from redax.module import AbstractModule
+from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover, OutOfDomainError
 
 
 def test_dynamic_module():
@@ -73,8 +73,8 @@ def test_dynamic_module():
     
 def test_mixed_module():
 
-    from sydra.module import AbstractModule
-    from sydra.spaces import DynamicCover, FixedCover
+    from redax.module import AbstractModule
+    from redax.spaces import DynamicCover, FixedCover
 
     mgr = BDD() 
     inputs = {'x': DynamicCover(0, 16),
@@ -103,8 +103,8 @@ def test_mixed_module():
 def test_embeddedgrid_module():
 
     mgr = BDD() 
-    inputs = {'x': EmbeddedGrid(0,3,4)}
-    outputs = {'y': EmbeddedGrid(4,11,8)}
+    inputs = {'x': EmbeddedGrid(4, 0, 3)}
+    outputs = {'y': EmbeddedGrid(8, 4, 11)}
 
     m = AbstractModule(mgr, inputs, outputs)
 
@@ -172,3 +172,27 @@ def test_refinement_and_coarsening():
          # Coarsen should do nothing because it keeps many bits
         assert linmod.coarsened({'x':10},y=10) == linmod
 
+
+def test_composite_module():
+
+    from redax.module import CompositeModule
+
+    mgr = BDD()
+
+    x = DynamicCover(0,10)
+
+    m1 = AbstractModule(mgr, {'a': x}, {'b': x, 'i': x})
+    m2 = AbstractModule(mgr, {'i': x, 'j': x}, {'k': x})
+
+
+    m12 = CompositeModule([m1, m2])
+    assert m12.sorted_mods() == ((m1,), (m2,))
+    assert set(m12.outputs) == {'k', 'b', 'i'}
+    assert set(m12.inputs) == {'a', 'j'}
+    assert set(m12.latent) == {'i'}
+
+    m3 = AbstractModule(mgr, {'k': x, 'b': x}, {})
+
+    m123 = CompositeModule([m1,m2,m3])
+    assert m123.sorted_mods() == ((m1,), (m2,), (m3,))
+    assert set(m123.outputs) == {'b','i','k'}

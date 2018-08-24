@@ -1,6 +1,6 @@
 from pytest import approx, raises
 
-from  sydra.utils import bvwindow, bvwindowgray
+from  redax.utils import bvwindow, bvwindowgray
 
 def test_bvwindow():
     assert set(bvwindow(0,3,3)) == set([(False,)])

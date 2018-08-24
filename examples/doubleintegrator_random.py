@@ -10,11 +10,11 @@ try:
 except ImportError:
     from dd.autoref import BDD
 
-from sydra.controlmodule import to_control_module
-from sydra.module import AbstractModule
-from sydra.spaces import DynamicCover
-from sydra.synthesis import SafetyGame, ControlPre
-from sydra.visualizer import plot2D, plot3D, plot3D_QT
+from redax.controlmodule import to_control_module
+from redax.module import AbstractModule, CompositeModule
+from redax.spaces import DynamicCover
+from redax.synthesis import SafetyGame, ControlPre
+from redax.visualizer import plot2D, plot3D, plot3D_QT
 
 ts = .2
 k = .1
@@ -101,6 +101,9 @@ while(numapplied < 3000):
 
 system = pcomp | vcomp
 
+compsys = CompositeModule([pcomp, vcomp])
+
+
 # Control system declaration
 for nbits in [6]:
 
@@ -114,7 +117,7 @@ for nbits in [6]:
     synth_starttime = time.time()
     inv, steps, controller = game.run()
 
-    print("Bits: ", nbits)
+    print("Solving Bits: ", nbits)
     print("Solver Time: ", time.time() - synth_starttime)
     print("Solver Steps: ", steps)
     print("Safe Size:", system.mgr.count(safe, 14))
@@ -125,7 +128,7 @@ for nbits in [6]:
 
 """Simulate"""
 state = {'p': -4, 'v': 2}
-for step in range(200):
+for step in range(10):
     u = [i for i in controller.allows(state)]  
     if len(u) == 0:
         break

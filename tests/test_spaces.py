@@ -1,8 +1,8 @@
 import numpy as np
 from pytest import approx, raises
 
-from sydra.spaces import DynamicCover, EmbeddedGrid, FixedCover, OutOfDomainError
-from sydra.utils import bv_interval, bvwindow, index_interval
+from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover, OutOfDomainError
+from redax.utils import bv_interval, bvwindow, index_interval
 
 try:
     from dd.cudd import BDD
@@ -187,7 +187,7 @@ def test_discrete():
 
 
 def test_embedded_grid():
-    x = EmbeddedGrid(10, 50, 21)
+    x = EmbeddedGrid(21, 10, 50)
     assert x.num_bits == 5
     assert x.pt2index(24) == 7  # (24-10)/2
     assert x.pt2index(22.9, snap=True) == 6
@@ -199,20 +199,20 @@ def test_embedded_grid():
     with raises(ValueError):
         x.pt2index(23)
     with raises(ValueError):
-        EmbeddedGrid(40, 50, 0)
+        EmbeddedGrid(0, 40, 50)
     with raises(ValueError):
-        EmbeddedGrid(50, 40, 3)
+        EmbeddedGrid(3, 50, 40)
     with raises(ValueError):
-        EmbeddedGrid(40, 50, 1)
+        EmbeddedGrid(1, 40, 50)
 
     # Snapping to nearest from out of range
     assert x.pt2index(9, snap=True) == 0
     assert x.pt2index(60, snap=True) == 20
 
-    EmbeddedGrid(10, 10, 1)
+    EmbeddedGrid(1, 10, 10)
 
 def test_embedded_grid_periodic():
-    x = EmbeddedGrid(-np.pi, np.pi, 4, periodic=True)
+    x = EmbeddedGrid(4, -np.pi, np.pi, periodic=True)
     assert x.width() == approx(2*np.pi)
     assert len(x.pts) == 4
     assert all(i == j for i,j in zip(x.pts, [approx(-np.pi), approx(-np.pi/2), 0, approx(np.pi/2)]))

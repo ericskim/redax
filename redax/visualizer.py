@@ -4,8 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-from sydra.spaces import DynamicCover
-from sydra.utils import bv2int, graytobin
+from redax.spaces import DynamicCover
+from redax.utils import bv2int, graytobin
 
 
 def _name(i):

@@ -6,14 +6,16 @@ Module container
 
 """
 
+from __future__ import annotations
+
 from typing import Dict, Generator, List, Union, Collection
 import itertools
 
-import toposort
+from toposort import toposort
 
-import sydra.spaces as sp
-from sydra.utils import flatten
-from sydra.spaces import OutOfDomainError
+import redax.spaces as sp
+from redax.utils import flatten
+from redax.spaces import OutOfDomainError
 
 class AbstractModule(object):
     r"""
@@ -43,9 +45,9 @@ class AbstractModule(object):
         ----------
         mgr: bdd manager
 
-        inputs: dict(str: sydra.spaces.SymbolicSet)
+        inputs: dict(str: redax.spaces.SymbolicSet)
             Input variable name, SymbolicSet type
-        outputs: dict(str: sydra.spaces.SymbolicSet)
+        outputs: dict(str: redax.spaces.SymbolicSet)
             Output variable name, SymbolicSet type
         pred: bdd
             Predicate to initialize the input-output map
@@ -72,12 +74,16 @@ class AbstractModule(object):
         if len(self.vars) > 0:
             maxvarlen = max(len(v) for v in self.vars)
             maxvarlen = max(maxvarlen, 20) + 4
-        s = "{0:{1}}{2}\n".format("==Input Names==", maxvarlen, "==Input Spaces==")
-        s += "\n".join(["{0:{1}}".format(k,maxvarlen) + v.__repr__() for k,v in self._in.items()])
-        s += "\n"
-        s += "{0:{1}}{2}\n".format("==Output Names==", maxvarlen, "==Output Spaces==")
-        s += "\n".join(["{0:{1}}".format(k,maxvarlen) + v.__repr__() for k,v in self._out.items()])
-        s += "\n"
+        s = "AbstractModule(inputs={"
+        s += ", ".join(["{0}: ".format(k) + v.__repr__() for k,v in self._in.items()]) + "}"
+        s += ", outputs={"
+        s += ", ".join(["{0}: ".format(k) + v.__repr__() for k,v in self._in.items()]) + "})"
+        # s = "{0:{1}}{2}\n".format("==Input Names==", maxvarlen, "==Input Spaces==")
+        # s += "\n".join(["{0:{1}}".format(k,maxvarlen) + v.__repr__() for k,v in self._in.items()])
+        # s += "\n"
+        # s += "{0:{1}}{2}\n".format("==Output Names==", maxvarlen, "==Output Spaces==")
+        # s += "\n".join(["{0:{1}}".format(k,maxvarlen) + v.__repr__() for k,v in self._out.items()])
+        # s += "\n"
         return s
 
     def __getitem__(self, var):
@@ -230,7 +236,7 @@ class AbstractModule(object):
 
         return True
 
-    def io_refined(self, concrete: dict, silent: bool=True, **kwargs) -> 'AbstractModule':
+    def io_refined(self, concrete: dict, silent: bool=True, **kwargs) -> AbstractModule:
         r"""
         Get a module refined with input-output data.
 
@@ -418,7 +424,7 @@ class AbstractModule(object):
     def count_io_space(self, bits: int) -> float:
         return self.mgr.count(self.iospace(), bits)
 
-    def hidden(self, elim_vars) -> 'AbstractModule':
+    def hidden(self, elim_vars) -> AbstractModule:
         r"""
         Hides an output variable and returns another module.
 
@@ -449,7 +455,7 @@ class AbstractModule(object):
                               self.mgr.exist(elim_bits, self.pred & self.iospace())
                               )
 
-    def __le__(self, other: 'AbstractModule') -> bool:
+    def __le__(self, other: AbstractModule) -> bool:
         r"""
         Check for a feedback refinement relation between two modules.
         
@@ -483,7 +489,7 @@ class AbstractModule(object):
 
         return True
 
-    def coarsened(self, bits=None, **kwargs) -> 'AbstractModule':
+    def coarsened(self, bits=None, **kwargs) -> AbstractModule:
         r"""Remove less significant bits and coarsen the system representation.
 
         Input bits are universally abstracted ("forall")
@@ -523,7 +529,7 @@ class AbstractModule(object):
         return AbstractModule(self.mgr, self.inputs, self.outputs,
                               pred=newpred, nonblocking=nb)
 
-    def renamed(self, names: Dict = None, **kwargs) -> 'AbstractModule':
+    def renamed(self, names: Dict = None, **kwargs) -> AbstractModule:
         """
         Rename input and output ports
 
@@ -561,7 +567,7 @@ class AbstractModule(object):
 
         return AbstractModule(self.mgr, newinputs, newoutputs, newpred)
 
-    def composed_with(self, other: 'AbstractModule') -> 'AbstractModule':
+    def composed_with(self, other: AbstractModule) -> AbstractModule:
         """
         Compose two modules.
 
@@ -632,7 +638,7 @@ class AbstractModule(object):
         return AbstractModule(upstream.mgr, newinputs, newoutputs,
                                 upstream.pred & downstream.pred & nonblocking)
 
-    def __rshift__(self, other: Union['AbstractModule', tuple]) -> 'AbstractModule':
+    def __rshift__(self, other: Union[AbstractModule, tuple]) -> AbstractModule:
         r"""
         Series composition or output renaming operator.
 
@@ -705,7 +711,7 @@ class AbstractModule(object):
         else:
             raise TypeError
 
-    def __rrshift__(self, other) -> 'AbstractModule':
+    def __rrshift__(self, other) -> AbstractModule:
         r"""
         Input renaming operator via serial composition notation
 
@@ -725,7 +731,7 @@ class AbstractModule(object):
             raise TypeError
 
     # Parallel composition
-    def __or__(self, other: 'AbstractModule') -> 'AbstractModule':
+    def __or__(self, other: AbstractModule) -> AbstractModule:
         r"""
         Parallel composition of modules.
 
@@ -761,40 +767,109 @@ class AbstractModule(object):
         return AbstractModule(self.mgr, newinputs, newoutputs,
                               self.pred & other.pred)
 
+class IOTopology(object):
+    pass
 
 class CompositeModule(object):
+    r"""
+    Container for a collection of modules.
+    """
     def __init__(self, modules: Collection[AbstractModule]) -> None:
 
-        # Topological sort
         self.children = tuple(modules)
-        
-    def dependencies(self):
-        raise NotImplementedError
-    
-    def dag(self):
-        """
-        Compute a directed acyclic graph of modules from I/O dependencies.
-        """
 
-        # Cannot hash modules, need to use indices
+        self._var_io = dict()
+        self._inputs = dict() # Inputs to at least one module
+        self._outputs = dict() # Inputs to at least one module
 
-        # Map indices back to modules
-        raise NotImplementedError
+        # Populate hidden attributes
+        #TODO: Clean this up...
+        for idx, mod in enumerate(self.children):
+            for var in mod.inputs:
+                if var in self._inputs:
+                    assert self._inputs[var] == mod.inputs[var]
+                self._inputs[var] = mod.inputs[var]
 
+                if var not in self._var_io:
+                    self._var_io[var] = {'i': [], 'o': []}
+                self._var_io[var]['i'].append(idx)
+
+            for var in mod.outputs:
+                if var in self._outputs:
+                    assert self._outputs[var] == mod.outputs[var]
+                if var in self._inputs:
+                    assert self._inputs[var] == mod.outputs[var]
+                self._outputs[var] = mod.outputs[var]
+
+                if var not in self._var_io:
+                    self._var_io[var] = {'i': [], 'o':[]}
+                self._var_io[var]['o'].append(idx)
+
+                # Cannot have output defined by multiple modules
+                if len(self._var_io[var]['o']) > 1:
+                    raise ValueError
+
+        self._sorted = self.sorted_mods()
+
+    # def _var_io(self):
+    #     pass 
+
+    @property
     def inputs(self):
+        invars = (var for var, io in self._var_io.items() if len(io['o']) == 0)
+        return {var: self._inputs[var] for var in invars}
+
+    @property
+    def outputs(self):
+        outvars = (var for var, io in self._var_io.items() if len(io['o']) > 0)
+        return {var: self._outputs[var] for var in outvars}
+
+    @property
+    def latent(self):
+        r"""
+        Note: All latent variables are also output variables from self.outputs
+        """
+        latentvars = set(self._inputs).intersection(self._outputs)
+        return {var: self._outputs[var] for var in latentvars}
+
+    def inspace(self):
         raise NotImplementedError
 
-    def outputs(self):
+    def outspace(self):
         raise NotImplementedError
+
+    def sorted_mods(self):
+
+        # Pass to declare dependencies
+        deps = {idx: set() for idx, _ in enumerate(self.children)}
+        for var, io in self._var_io.items():
+            for inmods in io['i']:
+                if len(io['o']) > 0:
+                    deps[inmods].add(io['o'][0])
+        
+        # Toposort requires that elements are hashable.
+        # self.children[i] converts from an index back to a module
+        return tuple(tuple(self.children[i] for i in mod_indices) for mod_indices in toposort(deps))
 
     def hidden(self, var):
+        raise NotImplementedError
+
+    def check(self):
+        # Check consistency of children
+        try:
+            for child in self.children:
+                child.check()
+        except:
+            raise
+
+        # Check validity of dependency graph
         raise NotImplementedError
 
     def io_refined(self, concrete, **kwargs) -> 'CompositeModule':
         """
         Refines interior modules.
 
-        Minimizes redundant computations.
+        Minimizes redundant computations of predicates by memoizing.
         """
         raise NotImplementedError
 
@@ -807,10 +882,9 @@ class CompositeModule(object):
         for mod in self.children:
             
             # Relevant kwargs
-            
 
             # Check for reusable predicates or compute it
-            
+
 
             # Refine and append
             #newmods.append
@@ -818,8 +892,7 @@ class CompositeModule(object):
 
         return CompositeModule(newmods)
 
-    def collapse(self) -> AbstractModule:
+    def atomize(self) -> AbstractModule:
         raise NotImplementedError
-    
-    def split(self) -> Collection[AbstractModule]:
-        raise NotImplementedError
+        
+

@@ -59,8 +59,6 @@ class MemorylessController(SupervisoryController):
 
         # Convert concrete state to BDD
         pt_bdd = self.cpre.sys.mgr.true
-        forall_bits = []  # Post state bits
-        exists_bits = []  # Pre state bits
         for k, v in state.items():
             nbits = len(self.cpre.sys.pred_bitvars[k])
             pt_bdd &= self.cpre.prestate[k].pt2bdd(self.cpre.sys.mgr, k, v, nbits)

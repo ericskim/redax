@@ -1,7 +1,7 @@
 from setuptools import find_packages, setup
 
 setup(
-    name='sydra',
+    name='redax',
     version='0.0.1',
     description='Control Synthesizer in Python with (Dynamic|Declarative|Robust) Abstractions',
     author='Eric S. Kim',
@@ -13,7 +13,10 @@ setup(
     install_requires=[
         'bidict',
         'dd',
-        'numpy'
+        'numpy',
+        'toposort',
+        'pyqtgraph',
+        'pyopengl'
     ],
     packages=find_packages(),
 )

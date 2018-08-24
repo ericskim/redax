@@ -13,31 +13,30 @@ import math
 from abc import abstractmethod
 from typing import Iterable, Tuple
 
+from dataclasses import dataclass, InitVar, field
+
 import numpy as np
 
-from sydra.utils import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, bv2int, bintogray, graytobin, increment_bv, bv_interval
+from redax.utils import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, bv2int, bintogray, graytobin, increment_bv, bv_interval
 
 class OutOfDomainError(Exception):
     pass
 
 
+@dataclass(frozen=True)
 class SymbolicSet(object):
     """
     Abstract class for representing a concrete underlying space and handling translation to symbolic encodings.
 
     """
+    pass
 
-    def __init__(self) -> None:
-        pass
-
-
+@dataclass(frozen=True)
 class DiscreteSet(SymbolicSet):
     """
     Discrete set abstract class
     """
-    def __init__(self, num_vals) -> None:
-        SymbolicSet.__init__(self)
-        self.num_vals = num_vals
+    num_vals : int
 
     @property
     def num_bits(self):
@@ -50,11 +49,6 @@ class DiscreteSet(SymbolicSet):
     @property
     def bounds(self) -> Tuple[float, float]:
         return (0, self.num_vals-1)
-
-    def __repr__(self):
-        s = "Discrete Set, "
-        s += "Bounds: [0,...,{0}]".format(str(self.num_vals-1))
-        return s
 
     def abs_space(self, mgr, name: str):
         """
@@ -76,50 +70,49 @@ class DiscreteSet(SymbolicSet):
             boxbdd |= i
         return boxbdd
 
-
+@dataclass(frozen=True)
 class EmbeddedGrid(DiscreteSet):
     """
     A discrete grid of points embedded in continuous space.
 
     Parameters
     ----------
+        num_vals : int
+            Number of points in the grid
         left : float
             Left point (inclusive)
         right : float
             Right point (inclusive)
-        num : int
-            Number of points in the grid
 
     Example
     -------
-    EmbeddedGrid(-2,2,4) corresponds with points [-2, -2/3, 2/3, 2]
+    EmbeddedGrid(4,-2,2) corresponds with points [-2, -2/3, 2/3, 2]
 
     """
 
-    def __init__(self, left: float, right: float, num: int, periodic:bool = False) -> None:
-        if num <= 0:
+    lb: float
+    ub: float
+    periodic: bool = False
+
+    def __post_init__(self):
+
+        if self.num_vals <= 0:
             raise ValueError("Grid must have at least one point")
-        if left > right:
+        if self.lb > self.ub:
             raise ValueError("Left point is greater than right")
-        if num == 1 and left != right:
+        if self.num_vals == 1 and self.lb != self.ub:
             raise ValueError("Single point but left and right are not equal")
 
-        DiscreteSet.__init__(self, num)
-        self.lb = left
-
-        self.periodic = periodic
-        if periodic:
-            self.ub = right - (right-left)/num
-            self.pts = np.linspace(self.lb, self.ub, num)
+    @property 
+    def pts(self):
+        if self.periodic:
+            right = self.ub - (self.ub-self.lb)/self.num_vals
+            return np.linspace(self.lb, right, self.num_vals)
         else:
-            self.ub = right
-            self.pts = np.linspace(self.lb, self.ub, self.num_vals)
+            return np.linspace(self.lb, self.ub, self.num_vals)
 
     def width(self):
-        if self.periodic:
-            return self.num_vals*(self.ub - self.lb)/(self.num_vals-1)
-        else:
-            return self.ub - self.lb
+        return self.ub - self.lb
 
     def _wrap(self, val):
         return self.lb + (val - self.lb) % self.width()
@@ -131,8 +124,8 @@ class EmbeddedGrid(DiscreteSet):
         idx = np.searchsorted(array, value, side="left")
 
         if self.periodic and idx in (self.num_vals, self.num_vals-1):
-            w = self.width()
-            if math.fabs(value - w - self.lb) < math.fabs(value - self.ub):
+            right = self.ub - self.width()/self.num_vals
+            if math.fabs(value - self.width() - self.lb) < math.fabs(value - right):
                 return 0
 
         if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):
@@ -186,35 +179,24 @@ class EmbeddedGrid(DiscreteSet):
         """
         return self.pts
 
-    def __repr__(self):
-        s = "Embedded Grid({0}, {1}, {2})".format(str(self.lb), str(self.ub), str(self.num_vals))
-        return s
-
     def bv2conc(self, bv: BitVector) -> float:
         """
         Converts a bitvector into a concrete grid point
         """
         return self.pts[bv2int(bv)]
 
-    def __eq__(self, other):
-        if self.periodic != other.periodic:
-            return False
-        if self.lb != other.lb:
-            return False
-        if self.ub != other.ub:
-            return False
-        return True
 
+@dataclass(frozen=True)
 class ContinuousCover(SymbolicSet):
     """
     Continuous Interval
     """
-    def __init__(self, lb, ub, periodic=False) -> None:
-        assert ub - lb >= 0.0, "Upper bound is smaller than lower bound"
-        SymbolicSet.__init__(self)
-        self.periodic = periodic
-        self.lb = float(lb)
-        self.ub = float(ub)
+
+    lb: float
+    ub: float
+    
+    def __post_init__(self):
+        assert self.ub - self.lb >= 0.0, "Upper bound is smaller than lower bound"
 
     @property
     def bounds(self) -> Tuple[float, float]:
@@ -223,6 +205,20 @@ class ContinuousCover(SymbolicSet):
     def width(self) -> float:
         return self.ub - self.lb
 
+    def conc_space(self) -> Tuple[float, float]:
+        """Concrete space."""
+        return self.bounds
+
+@dataclass(frozen=True)
+class DynamicCover(ContinuousCover):
+    """
+    Dynamically covers the space with a variable number of bits.
+    Number of covers is always a power of two.
+
+    """
+
+    periodic: bool = False
+
     def _wrap(self, point: float):
         """Helper function for periodic intervals."""
 
@@ -230,48 +226,6 @@ class ContinuousCover(SymbolicSet):
             return point
         width = self.ub - self.lb
         return ((point - self.lb) % width) + self.lb
-
-
-    def __eq__(self, other) -> bool:
-        if self.periodic != other.periodic:
-            return False
-        if self.lb != other.lb:
-            return False
-        if self.ub != other.ub:
-            return False
-        return True
-
-    def conc_space(self) -> Tuple[float, float]:
-        """Concrete space."""
-        return self.bounds
-
-class DynamicCover(ContinuousCover):
-    """
-    Dynamically covers the space with a variable number of bits.
-    Number of covers is always a power of two.
-
-    """
-    def __init__(self, lb: float, ub: float, periodic=False) -> None:
-        """
-        Parameters
-        ----------
-        lb : float
-            Lower bound of interval being covered
-        ub : float
-            Upper bound of interval being covered
-        periodic : bool
-            If true, uses gray code encoding.
-        """
-        ContinuousCover.__init__(self, lb, ub, periodic)
-
-    def __repr__(self):
-        s = "DynamicCover({0:.4}, {1:.4}, periodic={2})".format(self.lb,
-                                                                self.ub,
-                                                                self.periodic)
-        # s += "Bounds: {0} ".format(str(self.bounds))
-        # if self.periodic:
-        #     s += ", Periodic"
-        return s
 
     def abs_space(self, mgr, name:str):
         """
@@ -319,8 +273,6 @@ class DynamicCover(ContinuousCover):
             raise OutOfDomainError
         if point < self.lb - tol:
             raise OutOfDomainError
-        # assert point <= self.ub + tol, "Point {0} exceeds upper bound {1}".format(point, self.ub + tol)
-        # assert point >= self.lb - tol, "Point {0} exceeds lower bound {1}".format(point, self.lb - tol)
 
         bucket_fraction = 2**nbits * (point - self.lb) / (self.ub - self.lb)
 
@@ -462,15 +414,6 @@ class DynamicCover(ContinuousCover):
         return predbox
 
 
-    def __eq__(self, other):
-        if type(self) != type(other):
-            return False
-        if self.periodic != other.periodic:
-            return False
-        if self.lb != other.lb or self.ub != other.ub:
-            return False
-        return True
-
     def conc_iter(self, prec: int):
         """
         Generator for iterating over the space with fixed precision
@@ -485,7 +428,7 @@ class DynamicCover(ContinuousCover):
             yield self.bv2conc(int2bv(i, prec))
             i += 1
 
-
+@dataclass(frozen=True)
 class FixedCover(ContinuousCover):
     """
     There are some assignments to bits that are not valid for this set
@@ -507,18 +450,20 @@ class FixedCover(ContinuousCover):
     FixedCover(2, 10, 4, False) corresponds to the four bins
         [2, 4] [4,6] [6,8] [8,10]
     """
-    def __init__(self, lb: float, ub: float, bins: int, periodic: bool=False) -> None:
-        # Interval spacing
-        assert bins > 0, "Cannot have negative grid spacing"
-        self.bins = bins
 
-        ContinuousCover.__init__(self, lb, ub, periodic)
+    bins: int
+    periodic: bool = False
 
-    def __eq__(self, other):
-        if ContinuousCover.__eq__(self, other):
-            if self.bins == other.bins:
-                return True
-        return False
+    def __post_init__(self):
+        assert self.bins > 0
+
+    def _wrap(self, point: float):
+        """Helper function for periodic intervals."""
+
+        if point == self.ub:
+            return point
+        width = self.ub - self.lb
+        return ((point - self.lb) % width) + self.lb
 
     @property
     def num_bits(self):

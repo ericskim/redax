@@ -2,8 +2,8 @@ from functools import reduce
 
 from bidict import bidict
 
-from sydra.controllers import MemorylessController
-from sydra.utils import flatten
+from redax.controllers import MemorylessController
+from redax.utils import flatten
 
 # flatten = lambda l: [item for sublist in l for item in sublist]
 
@@ -26,7 +26,7 @@ class ControlPre():
 
         Parameters
         ----------
-        mod: sydra.AbstractModule
+        mod: redax.AbstractModule
             Module
         states: iterable of (str, str) tuples
             (pre state name, post state name)
@@ -120,7 +120,7 @@ class ControlPre():
         if len(swapvars) > 0:
             Z = self.sys.mgr.let(self.swappedstates(Z), Z)
         # Compute implication
-        Z = (~self.sys.pred | Z)
+        Z = ~self.sys.pred | Z
         # Eliminate post states and return
         if no_inputs:
             return self.elimcontrol(self.sys._nb & self.elimpost(Z))
@@ -133,8 +133,8 @@ class SafetyGame():
 
     Attributes
     ----------
-    sys: ControlSystem
-        Control system that needs to satisfy safety/invariance property.
+    sys: ControlPre
+        Control predecessor of system that needs to satisfy safety/invariance property.
     safe: bdd
         Safe region predicate
 
@@ -191,8 +191,8 @@ class ReachGame():
 
     Attributes
     ----------
-    sys: ControlSystem
-        Control system to synthesize for
+    sys: ControlPre
+        Control predecessor of system that needs to satisfy reach property.
     target: bdd
         Target region predicate
 

@@ -2,7 +2,7 @@
 from typing import Union, Dict, Tuple
 
 from bidict import bidict
-from sydra.module import AbstractModule
+from redax.module import AbstractModule
 
 
 
@@ -12,7 +12,7 @@ def to_control_module(mod: AbstractModule, states) -> 'ControlSystem':
 
     Parameters
     ----------
-        mod : sydra.AbstractModule
+        mod : redax.AbstractModule
             Module
         states: iterable of (str, str) tuples
             Input-Output pairs signifying pre and post states.
