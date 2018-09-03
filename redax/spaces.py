@@ -8,6 +8,8 @@ cover = \n
 grid = a countable set of points embedded in continuous space \n
 """
 
+from __future__ import annotations
+
 import itertools
 import math
 from abc import abstractmethod
@@ -17,7 +19,7 @@ from dataclasses import dataclass, InitVar, field
 
 import numpy as np
 
-from redax.utils import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, bv2int, bintogray, graytobin, increment_bv, bv_interval
+from redax.bvutils import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, bv2int, bintogray, graytobin, increment_bv, bv_interval
 
 class OutOfDomainError(Exception):
     pass
@@ -25,41 +27,36 @@ class OutOfDomainError(Exception):
 
 @dataclass(frozen=True)
 class SymbolicSet(object):
-    """
-    Abstract class for representing a concrete underlying space and handling translation to symbolic encodings.
-
-    """
+    """Abstract class for representing a concrete underlying space and handling translation to symbolic encodings."""
     pass
 
 @dataclass(frozen=True)
 class DiscreteSet(SymbolicSet):
-    """
-    Discrete set abstract class
-    """
+    r"""Discrete set abstract class."""
     num_vals : int
 
     @property
     def num_bits(self):
         return math.ceil(math.log2(self.num_vals))
 
-    def pt2bv(self, point) -> BitVector:
-        assert point < self.num_vals
-        return int2bv(point, self.num_bits)
-
     @property
     def bounds(self) -> Tuple[float, float]:
         return (0, self.num_vals-1)
 
+    def pt2bv(self, point) -> BitVector:
+        assert point < self.num_vals
+        return int2bv(point, self.num_bits)
+
     def abs_space(self, mgr, name: str):
         """
-        Returns the predicate of the discrete set abstract space
+        Return the predicate of the discrete set abstract space.
 
         Parameters
         ----------
-            mgr: bdd 
-                manager
-            name: str
-                BDD variable name, e.g. "x" for names "x_1", "x_2", etc.
+        mgr: bdd
+            manager
+        name: str
+            BDD variable name, e.g. "x" for names "x_1", "x_2", etc.
 
         """
         left_bv =  int2bv(0, self.num_bits)
@@ -69,6 +66,25 @@ class DiscreteSet(SymbolicSet):
         for i in map(lambda x: bv2pred(mgr, name, x), bvs):
             boxbdd |= i
         return boxbdd
+
+    def conc2pred(self, mgr, name: str, concrete):
+        """
+        Translate from a concrete value to a the associated predicate.
+
+        Parameters
+        ----------
+        mgr (dd mgr):
+        name:
+        concrete:
+
+        Returns
+        -------
+        bdd:
+
+        """
+        assert concrete >= 0 and concrete < self.num_vals
+        bv = int2bv(concrete, self.num_bits)
+        return bv2pred(mgr, name, bv)
 
 @dataclass(frozen=True)
 class EmbeddedGrid(DiscreteSet):
@@ -174,9 +190,7 @@ class EmbeddedGrid(DiscreteSet):
         return bv2pred(mgr, name, bv)
 
     def conc_iter(self) -> Iterable:
-        """
-        Iterable of points
-        """
+        """Iterable of points"""
         return self.pts
 
     def bv2conc(self, bv: BitVector) -> float:
@@ -474,9 +488,7 @@ class FixedCover(ContinuousCover):
         return s
 
     def abs_space(self, mgr, name: str):
-        """
-        Returns the predicate of the fixed cover abstract space
-        """
+        """Return the predicate of the fixed cover abstract space."""
         left_bv = int2bv(0, self.num_bits)
         right_bv = int2bv(self.bins - 1, self.num_bits)
         bvs = bv_interval(left_bv, right_bv)
@@ -497,7 +509,7 @@ class FixedCover(ContinuousCover):
 
     def pt2bv(self, point: float, tol=0.0):
         """
-        Maps a point to bitvector corresponding to the bin that contains it
+        Map a point to bitvector corresponding to the bin that contains it.
         """
         index = self.pt2index(point, tol)
         return int2bv(index, self.num_bits)
@@ -585,7 +597,6 @@ class FixedCover(ContinuousCover):
         else:
             leftidx = self.pt2index(left, alignleft=True)
             rightidx = self.pt2index(right, alignleft=False)
-            print(leftidx, right, rightidx)
             # Contained in same interval but bloating 
             if flip and (leftidx + 1) == rightidx:
                 return (leftidx + 1) % self.bins, (rightidx-1) % self.bins
@@ -616,16 +627,14 @@ class FixedCover(ContinuousCover):
         return predbox
 
 
-class NamedSpace(object):
-    r"""
-    Assigns a name to a space for reuse.
-    """
+class NamedSpace():
+    r"""Assign a name to a space for reuse."""
 
     def __init__(self, name: str, space: SymbolicSet) -> None:
         self.name = name
         self.space = space
 
-    def __eq__(self, other: 'NamedSpace'):
+    def __eq__(self, other: NamedSpace):
         try:
             if self.name == other.name and self.space == other.space:
                 return True

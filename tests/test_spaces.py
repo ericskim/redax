@@ -1,8 +1,8 @@
 import numpy as np
 from pytest import approx, raises
 
-from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover, OutOfDomainError
-from redax.utils import bv_interval, bvwindow, index_interval
+from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover, DiscreteSet, OutOfDomainError
+from redax.bvutils import bv_interval, bvwindow, index_interval
 
 try:
     from dd.cudd import BDD
@@ -183,7 +183,15 @@ def test_fixed_periodic():
 
 
 def test_discrete():
-    pass
+
+    mgr = BDD()
+    x = DiscreteSet(5)
+    x.conc2pred(mgr, 'x', 2) # Declares variables x_0, x_1, x_2 in manager
+    assert x.conc2pred(mgr, 'x', 2) == mgr.add_expr('~x_0 & x_1 & ~x_2')
+    assert x.abs_space(mgr, 'x') == mgr.add_expr('x_0 & ~x_1 & ~x_2') | mgr.add_expr('~x_0')
+
+    with raises(AssertionError):
+        x.conc2pred(mgr, 'x', -1)
 
 
 def test_embedded_grid():

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 from redax.spaces import DynamicCover
-from redax.utils import bv2int, graytobin
+from redax.bvutils import bv2int, graytobin
 
 
 def _name(i):

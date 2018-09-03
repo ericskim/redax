@@ -3,9 +3,11 @@ from functools import reduce
 from bidict import bidict
 
 from redax.controllers import MemorylessController
-from redax.utils import flatten
+from redax.bvutils import flatten
+from redax.module import AbstractModule, CompositeModule
 
 # flatten = lambda l: [item for sublist in l for item in sublist]
+
 
 def _name(i):
     return i.split('_')[0]
@@ -16,9 +18,7 @@ def _idx(i):
 
 
 class ControlPre():
-    r"""Controlled Predecessors.
-    
-    """
+    r"""Controlled predecessors calculator."""
 
     def __init__(self, mod, states, control) -> None:
         """
@@ -36,7 +36,7 @@ class ControlPre():
         self.sys = mod
 
         prepost = [(prepost[0], prepost[1]) for prepost in states]
-        
+
         if not {post for pre, post in prepost}.issubset(mod.outputs):
             raise ValueError("Unknown post state")
         if not {pre for pre, post in prepost}.issubset(mod.inputs):
@@ -53,55 +53,57 @@ class ControlPre():
         self.control = {i: mod[i] for i in control}
         self.pre_to_post = bidict({k[0]: k[1] for k in states})
 
+    @property
+    def mgr(self):
+        return self.sys.mgr
+
     def controlspace(self):
         """Predicate for the control space."""
-        space = self.sys.mgr.true
+        space = self.mgr.true
         for var in self.control:
-            space &= self.control[var].abs_space(self.sys.mgr, var)
+            space &= self.control[var].abs_space(self.mgr, var)
         return space
 
     def prespace(self):
         """Predicate for the current state space."""
-        space = self.sys.mgr.true
+        space = self.mgr.true
         for var in self.prestate:
-            space &= self.prestate[var].abs_space(self.sys.mgr, var)
+            space &= self.prestate[var].abs_space(self.mgr, var)
         return space
 
     def postspace(self):
         """Predicate for the successor/post state space."""
-        space = self.sys.mgr.true
+        space = self.mgr.true
         for var in self.poststate:
-            space &= self.poststate[var].abs_space(self.sys.mgr, var)
+            space &= self.poststate[var].abs_space(self.mgr, var)
         return space
 
     def elimcontrol(self, pred):
         r"""Existentially eliminate control bits from a predicate."""
         pred_in_space = pred & self.controlspace()
         elimbits = tuple(i for i in pred_in_space.support if _name(i) in self.control)
-        return self.sys.mgr.exist(elimbits, pred_in_space)
+        return self.mgr.exist(elimbits, pred_in_space)
 
     def elimprestate(self, pred):
         r"""Existentially eliminate state bits from a predicate."""
         pred_in_space = pred & self.prespace()
         elimbits = tuple(i for i in pred_in_space.support if _name(i) in self.prestate)
-        return self.sys.mgr.exist(elimbits, pred_in_space)
+        return self.mgr.exist(elimbits, pred_in_space)
 
     def elimpost(self, pred):
         r"""Universally eliminate post state bits from a predicate."""
         implies_pred = ~self.postspace() | pred
         elimbits = tuple(i for i in implies_pred.support if _name(i) in self.poststate)
-        return self.sys.mgr.forall(elimbits, implies_pred)
+        return self.mgr.forall(elimbits, implies_pred)
 
     def swappedstates(self, Z):
-        r"""
-        Swaps bit variables between predecessor and post states
-        """
+        r"""Swaps bit variables between predecessor and post states."""
         bits = Z.support
 
         postbits = tuple(self.pre_to_post[_name(i)] + '_' + _idx(i) for i in bits)
         return {pre: post for pre, post in zip(bits, postbits)}
 
-    def __call__(self, Z, no_inputs = False):
+    def __call__(self, Z, no_inputs=False):
         r"""
         Compute controllable predecessor for target next state set.
 
@@ -118,7 +120,7 @@ class ControlPre():
         # Exchange Z's pre state variables for post state variables
         swapvars = self.swappedstates(Z)
         if len(swapvars) > 0:
-            Z = self.sys.mgr.let(self.swappedstates(Z), Z)
+            Z = self.mgr.let(self.swappedstates(Z), Z)
         # Compute implication
         Z = ~self.sys.pred | Z
         # Eliminate post states and return
@@ -126,6 +128,58 @@ class ControlPre():
             return self.elimcontrol(self.sys._nb & self.elimpost(Z))
         else:
             return self.sys._nb & self.elimpost(Z)
+
+class DecompCPre(ControlPre):
+
+    def __init__(self, mod: CompositeModule, states, control) -> None:
+        
+        if len(mod.sorted_mods()) > 2:
+            raise NotImplementedError("Only implemented for parallel composed modules.")
+
+        ControlPre.__init__(self, mod, states, control)
+    
+    @property
+    def mgr(self):
+        return self.sys.children[0].mgr
+
+    def postspaceslice(self, postvar):
+        """Predicate for the successor/post state space."""
+        return self.poststate[postvar].abs_space(self.mgr, postvar)
+
+    def elimpostslice(self, pred, postvar):
+        r"""Universally eliminate post state bits from a predicate."""
+        implies_pred = ~self.postspaceslice(postvar) | pred
+        elimbits = tuple(i for i in implies_pred.support if _name(i) == postvar)
+        return self.mgr.forall(elimbits, implies_pred)
+
+    def __call__(self, Z, no_inputs=False):
+        swapvars = self.swappedstates(Z)
+        if len(swapvars) > 0:
+            Z = self.mgr.let(self.swappedstates(Z), Z)
+
+        to_elim_post = [i for i in self.poststate]
+
+        while(len(to_elim_post) > 0):
+            var = to_elim_post.pop()
+            # elimbits = tuple(i for i in implies_pred.support if _name(i) == var)
+
+            # Partition into modules that do/don't depend on var
+            dep_mods = [mod for mod in self.sys.children if var in mod.outputs]
+            # indep_mods = [mod for mod in self.sys.children if var not in mod.outputs]
+
+            # Aggregate implication and construct nonblocking
+            nb = self.mgr.true
+            for mod in dep_mods:
+                Z = ~mod.pred | Z
+                nb = nb & mod._nb
+
+            Z = nb & self.elimpostslice(Z, var)
+
+        # Eliminate
+        if no_inputs:
+            return self.elimcontrol(Z)
+        else:
+            return Z
 
 class SafetyGame():
     """
@@ -142,9 +196,9 @@ class SafetyGame():
 
     def __init__(self, cpre, safeset):
         self.cpre = cpre
-        self.safe = safeset # TODO: Check if a subset of the state space
+        self.safe = safeset  # TODO: Check if a subset of the state space
 
-    def run(self, steps=None, winning=None):
+    def run(self, steps=None, winning=None, verbose=False):
         """
         Run a safety game until reaching a fixed point or a maximum number of steps.
 
@@ -154,6 +208,8 @@ class SafetyGame():
             Maximum number of game steps to run
         winning: int
             Currently winning region
+        verbose: bool, False
+            If True (not default), then print out intermediate statistics.
 
         Returns
         -------
@@ -168,10 +224,10 @@ class SafetyGame():
         if steps is not None:
             assert steps >= 0
 
-        C = self.cpre.sys.mgr.false
+        C = self.cpre.mgr.false
 
         z = self.cpre.prespace() if winning is None else winning
-        zz = self.cpre.sys.mgr.false
+        zz = self.cpre.mgr.false
 
         i = 0
         while (z != zz):
@@ -180,7 +236,10 @@ class SafetyGame():
             zz = z
             C = self.cpre(zz) & self.safe
             z = self.cpre.elimcontrol(C)
-            i  = i + 1
+            i = i + 1
+
+            if verbose:
+                print("Step: ", i)
 
         return z, i, MemorylessController(self.cpre, C)
 
@@ -202,14 +261,14 @@ class ReachGame():
         self.cpre = cpre
         self.target = target # TODO: Check if a subset of the state space
 
-    def run(self, steps = None, winning=None):
+    def run(self, steps=None, winning=None):
         """
         Run a reachability game until reaching a fixed point or a maximum number of steps.
 
         Parameters
         ----------
         steps: int
-            Maximum number of game steps to run 
+            Maximum number of game steps to run
         winning: int
             Currently winning region
 
@@ -226,10 +285,10 @@ class ReachGame():
         if steps is not None:
             assert steps >= 0
 
-        C = self.cpre.sys.mgr.false
+        C = self.cpre.mgr.false
 
-        z = self.cpre.sys.mgr.false if winning is None else winning
-        zz = self.cpre.sys.mgr.true
+        z = self.cpre.mgr.false if winning is None else winning
+        zz = self.cpre.mgr.true
 
         i = 0
         while (z != zz):
@@ -243,6 +302,7 @@ class ReachGame():
             i += 1
 
         return z, i, MemorylessController(self.cpre, C)
+
 
 class ReachAvoidGame():
     """
@@ -292,10 +352,10 @@ class ReachAvoidGame():
         if steps:
             assert steps >= 0
 
-        C = self.sys.mgr.false
+        C = self.mgr.false
 
-        z = self.sys.mgr.false
-        zz = self.sys.mgr.true
+        z = self.mgr.false
+        zz = self.mgr.true
 
         i = 0
         while (z != zz):
@@ -306,9 +366,9 @@ class ReachAvoidGame():
             # z = (zz | self.cpre(zz, no_inputs = True) | self.target) & self.safe 
             z = (self.cpre(zz) & self.safe) | self.target # State input pairs
             ubits = tuple(k for k in z.support if _name(k) in self.sys.control.keys())
-            C = C | (z & (~self.sys.mgr.exist(ubits , C))) # Add new state-input pairs to controller
+            C = C | (z & (~self.cpre.mgr.exist(ubits , C))) # Add new state-input pairs to controller
             i += 1
-            z = self.sys.mgr.exist(ubits , z)
+            z = self.cpre.mgr.exist(ubits , z)
 
         return z, i, MemorylessController(self.sys, C)
 

@@ -135,13 +135,21 @@ pip install .
 
 - **Extensible Symbolic Backend**
 
-  We build on top of libraries for binary decision diagrams.
+  We build on top of libraries for symbolically representing sets and relations. The current implementation uses binary decision diagrams but we plan on supporting aiger circuits as well.
 
 ## Notes
 
+### Development status
+
+The core foundations are working and providing meaningful results on some test examples but the API is fluctuating rapidly.
+
 ### TODOs
 
-- Recursive fixed points
+- Examples
+  - lunar lander
+  - 3DOF ship
+  - Pair of dubins vehicles
+- (?) Recursive fixed points
 - Helper classes for different input-output overapproximation procedures
   - Lipschitz
   - Mixed monotone
@@ -149,28 +157,24 @@ pip install .
   - Box corners with bloating
 - Tests for floating point inequalities for conc2abs method in continuous covers
   - Iterators for the 2^N reduced grid traversal
-- Document more (especially class attributes)
-  - Type annotations
-- Examples
-  - 3DOF ship
-  - Pair of dubins vehicles
-- Reinstall from scratch in a virtualenv
-  - Upload to github and add code coverage, travis-ci banners
+- Upload to github and add code coverage, travis-ci banners
 - Rewrite continuous cover grid to have an overlap parameter.
-- (?) Rewrite safe/target predicates as source and sink modules and use series composition operator for synthesis.
+- source/sink module tests
 - Class for named spaces so we don't refer to variables via strings.
+- Lazy composition
+  - Refine internal modules
+    - Memoization and method to directly generate in-out predicates
+  - conjoin information about modules
+  - Support methods: Collapse to monolithic, split and give a collection, or something in the middle
+  - Atomic module vs composite. Existing one is atomic.
+  - hide certain outputs
+  - compose.py helper functions
 
 ### Future Features
 
 - Concrete executable functions associated with module dynamics
 - Support for disjoint union and product operations for spaces (thus adding support for hybrid spaces)
-  - Will require a better predicate bit name generator
-- Lazy composition
-  - Refine internal modules
-  - Support methods: Collapse to monolithic, split and give a collection, or something in the middle
-  - Atomic module vs composite. Existing one is atomic.
-  - hide certain outputs
-  - compose.py helper functions
+  - Requires a better predicate bit name generator
 - Control synthesizer that is aware of the control system structure. Options include:
   1. Non-eager composition like in neural network packages. Especially useful if we have concrete executables inside the module.
   2. Provide a collection of modules and have the synthesizer construct a DAG internally.

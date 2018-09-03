@@ -58,10 +58,10 @@ class MemorylessController(SupervisoryController):
         assert (state.keys() == self.cpre.prestate.keys())
 
         # Convert concrete state to BDD
-        pt_bdd = self.cpre.sys.mgr.true
+        pt_bdd = self.cpre.mgr.true
         for k, v in state.items():
             nbits = len(self.cpre.sys.pred_bitvars[k])
-            pt_bdd &= self.cpre.prestate[k].pt2bdd(self.cpre.sys.mgr, k, v, nbits)
+            pt_bdd &= self.cpre.prestate[k].pt2bdd(self.cpre.mgr, k, v, nbits)
 
         # Safe state-input pairs
         xu = pt_bdd & self.C
@@ -70,7 +70,7 @@ class MemorylessController(SupervisoryController):
         u = self.cpre.elimprestate(xu)
 
         # Generate allowed controls
-        for u_assignment in self.cpre.sys.mgr.pick_iter(u):
+        for u_assignment in self.cpre.mgr.pick_iter(u):
             # Translate BDD assignment into concrete counterpart
             uval = dict()
             for uvar in self.cpre.control:

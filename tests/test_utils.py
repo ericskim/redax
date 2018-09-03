@@ -1,6 +1,6 @@
 from pytest import approx, raises
 
-from  redax.utils import bvwindow, bvwindowgray
+from  redax.bvutils import bvwindow, bvwindowgray
 
 def test_bvwindow():
     assert set(bvwindow(0,3,3)) == set([(False,)])

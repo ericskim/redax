@@ -4,6 +4,8 @@ Double integrator example where the abstraction is constructed via random sampli
 
 import time
 
+init_time = time.time()
+
 import numpy as np
 try:
     from dd.cudd import BDD
@@ -13,7 +15,7 @@ except ImportError:
 from redax.controlmodule import to_control_module
 from redax.module import AbstractModule, CompositeModule
 from redax.spaces import DynamicCover
-from redax.synthesis import SafetyGame, ControlPre
+from redax.synthesis import SafetyGame, ControlPre, DecompCPre
 from redax.visualizer import plot2D, plot3D, plot3D_QT
 
 ts = .2
@@ -22,6 +24,7 @@ g = 9.8
 
 mgr = BDD()
 
+mgr.configure(reordering=True)
 
 def dynamics(p, v, a):
     vsign = 1 if v > 0 else -1
@@ -48,16 +51,22 @@ bounds = {'p': [-10,10], 'v': [-16,16]}
 # Monolithic system
 system = pcomp | vcomp
 
+# Composite system
+composite = CompositeModule((pcomp, vcomp))
+
 # Declare grid precision
 precision = {'p': 7, 'v': 7, 'a': 7, 'pnext': 7, 'vnext': 7}
 bittotal = sum(precision.values())
 outorder = {0: 'pnext', 1: 'vnext'}
 possible_transitions = (pcomp | vcomp).count_io_space(bittotal)
 
+print("Setup time: ", time.time() - init_time)
+
 # Sample generator
 numapplied = 0
 abs_starttime = time.time()
-while(numapplied < 3000):
+np.random.seed(1336)
+while(numapplied < 1200):
 
     # Shrink window widths over time
     width = 18 * 1/np.log10(2*numapplied+10)
@@ -82,6 +91,11 @@ while(numapplied < 3000):
     pcomp = pcomp.io_refined({k: v for k, v in iobox.items() if k in pcomp.vars}, nbits=precision)
     vcomp = vcomp.io_refined({k: v for k, v in iobox.items() if k in vcomp.vars}, nbits=precision)
 
+    composite = composite.io_refined(iobox, nbits = precision)
+
+    assert composite.children[0] == pcomp
+    assert composite.children[1] == vcomp
+
     numapplied += 1
 
     if numapplied % 1000 == 0:
@@ -95,19 +109,19 @@ while(numapplied < 3000):
                                                    time.time() - abs_starttime)
              )
         name = "{0} samples".format(numapplied)
-        # plot3D(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 
+        # plot3D(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred,
         #         opacity=100, view=(25,-100), title=name, fname=name)
 
+print("Abstraction Time: ", time.time() - abs_starttime)
 
 system = pcomp | vcomp
-
-compsys = CompositeModule([pcomp, vcomp])
 
 
 # Control system declaration
 for nbits in [6]:
 
     cpre = ControlPre(system, (('p', 'pnext'), ('v', 'vnext')), ('a'))
+    dcpre = DecompCPre(composite, (('p', 'pnext'), ('v', 'vnext')), ('a'))
 
     # Declare safe set
     safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox=True)
@@ -116,9 +130,15 @@ for nbits in [6]:
     game = SafetyGame(cpre, safe)
     synth_starttime = time.time()
     inv, steps, controller = game.run()
+    print("Solver Time: ", time.time() - synth_starttime)
+
+    dgame = SafetyGame(dcpre, safe)
+    dsynth_starttime = time.time()
+    dinv, steps, _ = dgame.run()
+    print("Dsolver: ", time.time() - dsynth_starttime)
+    assert dinv == inv
 
     print("Solving Bits: ", nbits)
-    print("Solver Time: ", time.time() - synth_starttime)
     print("Solver Steps: ", steps)
     print("Safe Size:", system.mgr.count(safe, 14))
     print("Invariant Size:", system.mgr.count(inv, 14))
@@ -126,14 +146,16 @@ for nbits in [6]:
 # plot3D_QT(system.mgr, ('p', vspace), ('v', aspace), ('pnext', vspace), pcomp.pred, 128)
 # plot3D_QT(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
 
+sim_starttime = time.time()
 """Simulate"""
 state = {'p': -4, 'v': 2}
 for step in range(10):
-    u = [i for i in controller.allows(state)]  
+    u = [i for i in controller.allows(state)]
     if len(u) == 0:
         break
-    u = {'a': u[0]['a'][0]} # Pick lower bound of first allowed control voxel
-    state.update(u)
+    picked_u = {'a': u[0]['a'][0]} # Pick lower bound of first allowed control voxel
+    state.update(picked_u)
     print(step, state)
     nextstate = dynamics(**state)
     state = {'p': nextstate[0], 'v': nextstate[1]}
+print("Simulation Time: ", time.time() - sim_starttime)

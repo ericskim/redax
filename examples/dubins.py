@@ -1,5 +1,5 @@
-"""
-Dubins vehicle example
+r"""
+Dubins vehicle example.
 """
 
 import time
@@ -11,9 +11,9 @@ except ImportError:
     from dd.autoref import BDD
 
 from redax.controlmodule import to_control_module
-from redax.module import AbstractModule
+from redax.module import AbstractModule, CompositeModule
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover
-from redax.synthesis import ReachGame, ControlPre
+from redax.synthesis import ReachGame, ControlPre, DecompCPre
 from redax.visualizer import plot3D, plot3D_QT
 
 """
@@ -78,6 +78,7 @@ Declare modules
 """
 
 mgr = BDD()
+mgr.configure(reordering=True)
 
 # Declare continuous state spaces
 pspace      = DynamicCover(-2,2)
@@ -96,6 +97,7 @@ dubins_theta    = AbstractModule(mgr, {'theta': anglespace, 'v': vspace, 'omega'
                                       {'thetanext': anglespace})
 
 dubins = (dubins_x | dubins_y | dubins_theta)
+composite = CompositeModule([dubins_x, dubins_y, dubins_theta])
 
 precision = {'x': 6, 'y':6, 'theta': 6,
              'xnext': 6, 'ynext': 6, 'thetanext': 6}
@@ -112,22 +114,29 @@ for iobox in dubins.input_iter(precision={'x': 4, 'y': 4, 'theta': 3}):
     iobox['thetanext'] = thetawindow(**{k: v for k, v in iobox.items() if k in dubins_theta.inputs})
 
     # Add new inputs and constrain output nondeterminism
-    for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
-        filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
-        if not sys.refine_io(filtered_iobox, nbits=precision):
-            coarse_errors[var] += 1
+    # for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
+    #     filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
+    #     if not sys.refine_io(filtered_iobox, nbits=precision):
+    #         coarse_errors[var] += 1
+
+    composite = composite.io_refined(iobox, nbits=precision)
+    # assert composite.children[0] == dubins_x
+    # assert composite.children[1] == dubins_y
+    # assert composite.children[2] == dubins_theta
 
     coarseiter += 1
-    if coarseiter % 2000 == 0:
-        dubins = (dubins_x | dubins_y | dubins_theta)
-        iotrans = dubins.count_io(bittotal)
-        print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(coarseiter,
-                                                    100*iotrans/possible_transitions,
-                                                    len(dubins.pred),
-                                                    time.time() - abs_starttime))
+    # if coarseiter % 2000 == 0:
+    #     # dubins = (dubins_x | dubins_y | dubins_theta)
+    #     dubins = composite.children[0] | composite.children[1] | composite.children[2]
+    #     iotrans = dubins.count_io(bittotal)
+    #     print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(coarseiter,
+    #                                                 100*iotrans/possible_transitions,
+    #                                                 len(dubins.pred),
+    #                                                 time.time() - abs_starttime))
 
 # Sample generator
 random_errors = {'x': 0, 'y': 0, 'theta': 0}
+np.random.seed(1337)
 for numapplied in range(8000):
 
     # Shrink window widths over time
@@ -151,29 +160,39 @@ for numapplied in range(8000):
     iobox['thetanext'] = thetawindow(**{k: v for k, v in iobox.items() if k in dubins_theta.inputs})
 
     # Add new inputs and constrain output nondeterminism for each subsystem
-    for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
-        filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
-        if not sys.refine_io(filtered_iobox, nbits=precision):
-            random_errors[var] += 1
+    # for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
+    #     filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
+    #     if not sys.refine_io(filtered_iobox, nbits=precision):
+    #         random_errors[var] += 1
+
+    composite = composite.io_refined(iobox, nbits=precision)
+    # assert composite.children[0] == dubins_x
+    # assert composite.children[1] == dubins_y
+    # assert composite.children[2] == dubins_theta
 
     numapplied += 1
 
-    if numapplied % 2000 == 0:
-        dubins = (dubins_x | dubins_y | dubins_theta)
-        iotrans = dubins.count_io(bittotal)
-        print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(numapplied,
-                                                    100*iotrans/possible_transitions,
-                                                    len(dubins.pred),
-                                                    time.time() - abs_starttime))
+    # if numapplied % 2000 == 0:
+    #     # dubins = (dubins_x | dubins_y | dubins_theta)
+    #     dubins = composite.children[0] | composite.children[1] | composite.children[2]
+    #     iotrans = dubins.count_io(bittotal)
+    #     print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(numapplied,
+    #                                                 100*iotrans/possible_transitions,
+    #                                                 len(dubins.pred),
+    #                                                 time.time() - abs_starttime))
 
         # xdyn = mgr.exist(['v_0'],(dubins_x.pred) & mgr.var('v_0'))
         # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
 
-dubins = (dubins_x | dubins_y | dubins_theta)
+print("Abstraction Time: ", time.time() - abs_starttime)
+
+# dubins = (dubins_x | dubins_y | dubins_theta)
+dubins = composite.children[0] | composite.children[1] | composite.children[2]
 
 # csys = to_control_module(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')))
 
 cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
+dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
 
 # Declare reach set as [0.8] x [-.8, 0] box
 target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 6, innerapprox=False)
@@ -183,9 +202,17 @@ game = ReachGame(cpre, target)
 starttime = time.time()
 basin, steps, controller = game.run()
 print("Solve Time:", time.time() - starttime)
+
+dgame = ReachGame(dcpre, target)
+dstarttime = time.time()
+dbasin, _, _ = dgame.run()
+print("Solve Time:", time.time() - dstarttime)
+assert dbasin == basin
+
 print("Reach Size:", dubins.mgr.count(basin, 18))
 print("Target Size:", dubins.mgr.count(target, 18))
 print("Game Steps:", steps)
+
 
 # # Plot reachable winning set
 # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), basin, 128)

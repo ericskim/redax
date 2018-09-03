@@ -8,14 +8,15 @@ Module container
 
 from __future__ import annotations
 
-from typing import Dict, Generator, List, Union, Collection
+from typing import Dict, Generator, List, Union, Collection, Tuple, Set
 import itertools
 
 from toposort import toposort
 
 import redax.spaces as sp
-from redax.utils import flatten
+from redax.bvutils import flatten
 from redax.spaces import OutOfDomainError
+
 
 class AbstractModule(object):
     r"""
@@ -38,7 +39,7 @@ class AbstractModule(object):
         """
         Initialize the abstract module.
 
-        The pred and nonblocking parameters should only be used for fast 
+        The pred and nonblocking parameters should only be used for fast
         initialization of the module.
 
         Parameters
@@ -65,25 +66,20 @@ class AbstractModule(object):
         self._mgr = mgr
 
         if any(var.isalnum() is False for var in self.vars):
-            raise ValueError("Only alphanumeric strings are accepted as variable names")
+            raise ValueError("Non-alphanumeric variable name")
 
         self._pred = self.mgr.false if pred is None else pred
-        self._nb   = self.nonblock() if nonblocking is None else nonblocking
+        self._nb = self.nonblock() if nonblocking is None else nonblocking
 
     def __repr__(self):
         if len(self.vars) > 0:
             maxvarlen = max(len(v) for v in self.vars)
             maxvarlen = max(maxvarlen, 20) + 4
         s = "AbstractModule(inputs={"
-        s += ", ".join(["{0}: ".format(k) + v.__repr__() for k,v in self._in.items()]) + "}"
-        s += ", outputs={"
-        s += ", ".join(["{0}: ".format(k) + v.__repr__() for k,v in self._in.items()]) + "})"
-        # s = "{0:{1}}{2}\n".format("==Input Names==", maxvarlen, "==Input Spaces==")
-        # s += "\n".join(["{0:{1}}".format(k,maxvarlen) + v.__repr__() for k,v in self._in.items()])
-        # s += "\n"
-        # s += "{0:{1}}{2}\n".format("==Output Names==", maxvarlen, "==Output Spaces==")
-        # s += "\n".join(["{0:{1}}".format(k,maxvarlen) + v.__repr__() for k,v in self._out.items()])
-        # s += "\n"
+        s += ", ".join([k + ": " + v.__repr__() for k, v in self._in.items()])
+        s += "}, outputs={"
+        s += ", ".join([k + ": " + v.__repr__() for k, v in self._out.items()])
+        s += "})"
         return s
 
     def __getitem__(self, var):
@@ -102,7 +98,7 @@ class AbstractModule(object):
         if self.pred != other.pred:
             return False
         if self._nb != other._nb:
-            return False 
+            return False
         return True
 
     def iospace(self):
@@ -133,7 +129,7 @@ class AbstractModule(object):
     def pred_bitvars(self) -> Dict[str, List[str]]:
         r"""Get dictionary with variable name keys and BDD bit names as values."""
         s = self.pred.support
-        allocbits = {v: [] for v in self.vars}
+        allocbits: Dict[str, List[str]] = {v: [] for v in self.vars}
         for bitvar in s:
             prefix, _ = bitvar.split("_")
             allocbits[prefix].append(bitvar)
@@ -146,7 +142,7 @@ class AbstractModule(object):
 
         Returns
         -------
-        bdd: 
+        bdd:
             Predicate corresponding to the Cartesian product of each
             input space.
 
@@ -162,7 +158,7 @@ class AbstractModule(object):
 
         Returns
         -------
-        bdd: 
+        bdd:
             Predicate corresponding to the Cartesian product of each
             output space.
 
@@ -175,8 +171,8 @@ class AbstractModule(object):
     def nonblock(self):
         r"""
         Compute a predicate of the inputs for which there exists an output.
-        
-        Equivalent to the predicate from hiding all module outputs. 
+
+        Equivalent to the predicate from hiding all module outputs.
 
         Returns
         -------
@@ -207,7 +203,7 @@ class AbstractModule(object):
         concrete: dict
             Concrete values for conc2pred() method of spaces.
         **kwargs:
-            Custom arguments for conc2pred() method of spaces 
+            Custom arguments for conc2pred() method of spaces.
 
         Returns
         -------
@@ -243,7 +239,7 @@ class AbstractModule(object):
         Parameters
         ----------
         concrete: dict(Variable str: concrete values)
-            
+
         silent: bool, optional
             If true, does not raise an error out of bounds errors
             If false, raises an error.
@@ -268,14 +264,14 @@ class AbstractModule(object):
             outputs = {k: v for k, v in concrete.items() if k in self.outputs}
             inpred = self.input_to_abs(inputs, **kwargs)
             outpred = self.output_to_abs(outputs, **kwargs)
-        except OutOfDomainError:  # TODO: Should catch a custom out of boundaries error
+        except OutOfDomainError:
             if silent:
                 return self
             raise
         except:
             raise
 
-        return AbstractModule(self.mgr, 
+        return AbstractModule(self.mgr,
                               self.inputs,
                               self.outputs,
                               ((~self._nb & inpred & self.inspace()) | self.pred) & (~inpred | outpred),
@@ -303,13 +299,13 @@ class AbstractModule(object):
     def input_to_abs(self, concrete: dict, **kwargs):
         r"""Convert concrete inputs to abstract ones.
 
-        Applies an underapproximation for inputs that live in a continuous 
+        Applies an underapproximation for inputs that live in a continuous
         domain.
 
         Parameters
         ----------
         concrete : dict
-            Keys are input variable names, values are concrete instances of 
+            Keys are input variable names, values are concrete instances of
             that variable
         **kwargs:
             Arguments that are specific to each input space's conc2pred method
@@ -337,7 +333,7 @@ class AbstractModule(object):
     def output_to_abs(self, concrete: dict, **kwargs):
         r"""Convert concrete outputs to abstract ones.
 
-        Applies an overapproximation for outputs that live in a continuous 
+        Applies an overapproximation for outputs that live in a continuous
         domain.
 
         Parameters
@@ -372,12 +368,14 @@ class AbstractModule(object):
         r"""
         Generate for exhaustive search over the concrete input grid.
 
-        #FIXME: Implementation assumes dictionary ordering is stable
+        #FIXME: Implementation assumes dictionary ordering is stable.
+        # This solution is very adhoc!!! Need to find a better way to
+        # accommodate keyword arguments
 
         Parameters
         ----------
         precision: dict
-            Keys are variables associated with dynamic covers. Values are an 
+            Keys are variables associated with dynamic covers. Values are an
             integer number of bits.
 
         Yields
@@ -390,8 +388,6 @@ class AbstractModule(object):
         names = [k for k, v in self.inputs.items() if isinstance(v, sp.DynamicCover)]
         names += [k for k, v in self.inputs.items() if not isinstance(v, sp.DynamicCover)]
 
-        # FIXME: This solution is very adhoc!!! Need to find a better way to 
-        # accommodate keyword arguments
         iters = [v.conc_iter(precision[k]) for k, v in self.inputs.items()
                  if isinstance(v, sp.DynamicCover)]
         iters += [v.conc_iter() for k, v in self.inputs.items()
@@ -399,6 +395,9 @@ class AbstractModule(object):
 
         for i in itertools.product(*iters):
             yield {names[j]: i[j] for j in range(numin)}
+
+    def count_nb(self, bits: int) -> float:
+        return self.mgr.count(self.nonblock(), bits)
 
     def count_io(self, bits: int) -> float:
         r"""
@@ -458,9 +457,9 @@ class AbstractModule(object):
     def __le__(self, other: AbstractModule) -> bool:
         r"""
         Check for a feedback refinement relation between two modules.
-        
+
         If abs <= conc then we call abs an abstraction of the concrete system
-        conc. 
+        conc.
 
         Returns
         -------
@@ -469,7 +468,7 @@ class AbstractModule(object):
             False if there is a type or module port mismatch
 
         """
-        #TODO: Checks between Dynamic and fixed partitions
+        # TODO: Checks between Dynamic and fixed partitions
 
         # Incomparable
         if not isinstance(other, AbstractModule):
@@ -479,7 +478,7 @@ class AbstractModule(object):
         if self.outputs != other.outputs:
             return False
 
-        # Abstract module must accept fewer inputs 
+        # Abstract module must accept fewer inputs
         if (~self._nb | other._nb != self.mgr.true):
             return False
 
@@ -510,7 +509,7 @@ class AbstractModule(object):
         if any(b < 0 for b in bits.values()):
             raise ValueError("Negative bits are not allowed.")
 
-        # Identify bits that are finer than the desired precision 
+        # Identify bits that are finer than the desired precision
         def fine_bits(var, num):
             return self.pred_bitvars[var][num:]
 
@@ -531,7 +530,7 @@ class AbstractModule(object):
 
     def renamed(self, names: Dict = None, **kwargs) -> AbstractModule:
         """
-        Rename input and output ports
+        Rename input and output ports.
 
         Parameters
         ----------
@@ -539,8 +538,8 @@ class AbstractModule(object):
             Keys are str of old names, values are str of new names
         **kwargs:
             Same dictionary format as names.
-        """
 
+        """
         names = dict([]) if names is None else names
         names.update(kwargs)
 
@@ -582,19 +581,18 @@ class AbstractModule(object):
         ----------
         other: AbstractModule
             Module to compose with.
-        
+
         Returns
         -------
         AbstractModule:
             Composed monolithic module
 
         """
-
         if self.mgr != other.mgr:
             raise ValueError("Module managers do not match")
         if not set(self._out).isdisjoint(other.outputs):
             raise ValueError("Outputs are not disjoint")
-        
+
         inout = set(other._out).intersection(self._in)
         outin = set(other._in).intersection(self._out)
         if len(inout) > 0 and len(outin) > 0:
@@ -623,7 +621,7 @@ class AbstractModule(object):
                 raise TypeError("Mismatch between input spaces {0}, {1}".format(newinputs[k],
                                                                                 downstream.inputs[k]))
             newinputs[k] = downstream.inputs[k]
-        
+
         # Shared vars that are both inputs and outputs
         overlapping_vars = set(upstream._out) & set(downstream._in)
         for k in overlapping_vars:
@@ -635,22 +633,24 @@ class AbstractModule(object):
         elim_bits |= set(flatten([downstream.pred_bitvars[k] for k in downstream._out]))
         elim_bits &= nonblocking.support
         nonblocking = upstream.mgr.forall(elim_bits, nonblocking)
-        return AbstractModule(upstream.mgr, newinputs, newoutputs,
-                                upstream.pred & downstream.pred & nonblocking)
+        return AbstractModule(upstream.mgr,
+                              newinputs,
+                              newoutputs,
+                              upstream.pred & downstream.pred & nonblocking)
 
     def __rshift__(self, other: Union[AbstractModule, tuple]) -> AbstractModule:
         r"""
         Series composition or output renaming operator.
 
-        Series composition reduces to parallel composition if no output variables
-        feed into the other module's input.
+        Series composition reduces to parallel composition if no output
+        variables feed into the other module's input.
 
         See Also
         --------
         __rrshift__:
             Input renaming operator
         composed_with:
-            Generic composition operator 
+            Generic composition operator
 
         Parameters
         ----------
@@ -661,8 +661,8 @@ class AbstractModule(object):
         Returns
         -------
         AbstractModule:
-            Either the series composition or 
-        
+            Either the series or parallel composition (if defined)
+
         """
         if isinstance(other, tuple):
             # Renaming an output
@@ -673,49 +673,17 @@ class AbstractModule(object):
             return self.renamed({oldname: newname})
 
         elif isinstance(other, AbstractModule):
-            if self.mgr != other.mgr:
-                raise ValueError("Module managers do not match")
-            if not set(self._out).isdisjoint(other.outputs):
-                raise ValueError("Outputs are not disjoint")
-            if not set(other._out).isdisjoint(self._in):
-                raise ValueError("Downstream outputs feedback composed with upstream inputs")
-
-            # Outputs are the union of both module outputs
-            newoutputs = self._out.copy()
-            newoutputs.update(other.outputs)
-
-            # Compute inputs = (self.inputs | other.inputs) \ ()
-            # Checks for type differences
-            newinputs = self._in.copy()
-            for k in other.inputs:
-                # Common existing inputs must have same grid type
-                if k in newinputs and newinputs[k] != other.inputs[k]:
-                    raise TypeError("Mismatch between input spaces {0}, {1}".format(newinputs[k], 
-                                                                                    other.inputs[k]))
-                newinputs[k] = other.inputs[k]
-            
-            # Variables that are both inputs and outputs
-            overlapping_vars = set(self._out) & set(other._in)
-            for k in overlapping_vars:
-                newinputs.pop(k)
-
-            # Compute forall outputvars . (self.pred => other.nonblock())
-            nonblocking = ~self.outspace() | ~self.pred | other.nonblock()
-            elim_bits = set(flatten([self.pred_bitvars[k] for k in self._out]))
-            elim_bits |= set(flatten([other.pred_bitvars[k] for k in other._out]))
-            elim_bits &= nonblocking.support
-            nonblocking = self.mgr.forall(elim_bits, nonblocking)
-            return AbstractModule(self.mgr, newinputs, newoutputs,
-                                  self.pred & other.pred & nonblocking)
+            return self.composed_with(other)
 
         else:
             raise TypeError
 
     def __rrshift__(self, other) -> AbstractModule:
         r"""
-        Input renaming operator via serial composition notation
+        Input renaming operator via serial composition notation.
 
         Example: module = ("a", "b") >> module
+
         """
         if isinstance(other, tuple):
             # Renaming an input
@@ -767,132 +735,235 @@ class AbstractModule(object):
         return AbstractModule(self.mgr, newinputs, newoutputs,
                               self.pred & other.pred)
 
-class IOTopology(object):
-    pass
+    def _direct_io_refined(self, inpred, outpred) -> AbstractModule:
+        """
+        Apply io refinement directly from abstract predicates.
+
+        No conversion from concrete values.
+        """
+        return AbstractModule(self.mgr,
+                              self.inputs,
+                              self.outputs,
+                              ((~self._nb & inpred & self.inspace()) | self.pred) & (~inpred | outpred),
+                              self._nb | inpred)
+
+
 
 class CompositeModule(object):
-    r"""
-    Container for a collection of modules.
-    """
-    def __init__(self, modules: Collection[AbstractModule]) -> None:
+    r"""Container for a collection of modules."""
+    def __init__(self, modules: Collection[AbstractModule], checktopo: bool=True) -> None:
+
+        if len(modules) < 1:
+            raise ValueError("Empty module collection")
 
         self.children = tuple(modules)
 
-        self._var_io = dict()
-        self._inputs = dict() # Inputs to at least one module
-        self._outputs = dict() # Inputs to at least one module
+        if checktopo:
+            self.check()
 
-        # Populate hidden attributes
-        #TODO: Clean this up...
-        for idx, mod in enumerate(self.children):
+    @property
+    def _inputs(self):
+        """Variables that are inputs to some module."""
+        inputs = dict()
+        for mod in self.children:
             for var in mod.inputs:
-                if var in self._inputs:
-                    assert self._inputs[var] == mod.inputs[var]
-                self._inputs[var] = mod.inputs[var]
+                if var in inputs:
+                    assert inputs[var] == mod.inputs[var]
+                inputs[var] = mod.inputs[var]
+        return inputs
 
-                if var not in self._var_io:
-                    self._var_io[var] = {'i': [], 'o': []}
-                self._var_io[var]['i'].append(idx)
-
+    @property
+    def _outputs(self):
+        """Variables that are outputs to some module."""
+        outputs = dict()
+        for mod in self.children:
             for var in mod.outputs:
-                if var in self._outputs:
-                    assert self._outputs[var] == mod.outputs[var]
+                if var in outputs:
+                    raise ValueError("Multiple modules own output {0}".format(var))
                 if var in self._inputs:
                     assert self._inputs[var] == mod.outputs[var]
-                self._outputs[var] = mod.outputs[var]
+                outputs[var] = mod.outputs[var]
+        return outputs
 
-                if var not in self._var_io:
-                    self._var_io[var] = {'i': [], 'o':[]}
-                self._var_io[var]['o'].append(idx)
+    @property
+    def _var_io(self):
+        vario = dict()
+        for idx, mod in enumerate(self.children):
+            for var in mod.inputs:
+                if var not in vario:
+                    vario[var] = {'i': [], 'o': []}
+                vario[var]['i'].append(idx)
+
+            for var in mod.outputs:
+                if var not in vario:
+                    vario[var] = {'i': [], 'o': []}
+                vario[var]['o'].append(idx)
 
                 # Cannot have output defined by multiple modules
-                if len(self._var_io[var]['o']) > 1:
+                if len(vario[var]['o']) > 1:
                     raise ValueError
-
-        self._sorted = self.sorted_mods()
-
-    # def _var_io(self):
-    #     pass 
+        return vario
 
     @property
     def inputs(self):
+        r"""Variables that are inputs to the composite module."""
         invars = (var for var, io in self._var_io.items() if len(io['o']) == 0)
         return {var: self._inputs[var] for var in invars}
 
     @property
     def outputs(self):
+        r"""Variables that are outputs to the composite module."""
         outvars = (var for var, io in self._var_io.items() if len(io['o']) > 0)
         return {var: self._outputs[var] for var in outvars}
 
     @property
     def latent(self):
         r"""
+        Variables that are internal to the composite module.
+
         Note: All latent variables are also output variables from self.outputs
         """
         latentvars = set(self._inputs).intersection(self._outputs)
         return {var: self._outputs[var] for var in latentvars}
 
+    def __getitem__(self, var):
+        for mod in self.children:
+            if var in mod.vars:
+                return mod[var]
+                
+        raise ValueError("Variable does not exist")
+    
     def inspace(self):
         raise NotImplementedError
 
     def outspace(self):
         raise NotImplementedError
 
-    def sorted_mods(self):
+    def sorted_mods(self) -> Tuple[Tuple[AbstractModule]]:
 
         # Pass to declare dependencies
-        deps = {idx: set() for idx, _ in enumerate(self.children)}
-        for var, io in self._var_io.items():
+        deps: Dict[int, Set[int]] = {idx: set() for idx, _ in enumerate(self.children)}
+        for _, io in self._var_io.items():
             for inmods in io['i']:
                 if len(io['o']) > 0:
                     deps[inmods].add(io['o'][0])
-        
+
         # Toposort requires that elements are hashable.
         # self.children[i] converts from an index back to a module
-        return tuple(tuple(self.children[i] for i in mod_indices) for mod_indices in toposort(deps))
+        return tuple(
+                        tuple(self.children[i] for i in modidx)
+                        for modidx in toposort(deps)
+                    )
 
     def hidden(self, var):
         raise NotImplementedError
 
     def check(self):
         # Check consistency of children
-        try:
-            for child in self.children:
-                child.check()
-        except:
-            raise
+        for child in self.children:
+            child.check()
 
-        # Check validity of dependency graph
-        raise NotImplementedError
+        if len(self.children) > 0:
+            mgr = self.children[0].mgr
+        for child in self.children:
+            assert mgr == child.mgr
 
-    def io_refined(self, concrete, **kwargs) -> 'CompositeModule':
-        """
-        Refines interior modules.
+        # Check validity of module topology
+        self._inputs
+        self._outputs
+        self._var_io
+        self.sorted_mods()
+
+    def io_refined(self, concrete, silent: bool=True, **kwargs) -> CompositeModule:
+        r"""
+        Refine interior modules.
 
         Minimizes redundant computations of predicates by memoizing.
-        """
-        raise NotImplementedError
 
+        Internal modules only updated when all inputs + outputs are provided
+        as keys in 'concrete'.
+
+        """
         newmods = []
 
-        inner_preds = dict()
-        outer_preds = dict()
+        # Memoize input/output predicates
+        pred_memo = dict()
 
-        # Refine each module individually
+        # Refine each module individually and append to newmods
         for mod in self.children:
-            
-            # Relevant kwargs
-
-            # Check for reusable predicates or compute it
 
 
-            # Refine and append
-            #newmods.append
-            pass
+            if not set(mod.vars).issubset(concrete):
+                newmods.append(mod)  # don't refine
+                continue
 
-        return CompositeModule(newmods)
+            outerror = False
+            inerror = False
+            inbox = mod.mgr.true
+            for var, space in mod.inputs.items():
+                # Input kwargs
+                slice_kwargs = {k: v[var] for k, v in kwargs.items() if var in v}
+                if isinstance(mod[var], sp.ContinuousCover):
+                    slice_kwargs.update({'innerapprox': True})
 
-    def atomize(self) -> AbstractModule:
+                # Check for reusable predicates or compute it
+                _hashable_args = [var] + list(slice_kwargs.items())
+                hashable_args = tuple(_hashable_args)
+                if hashable_args in pred_memo:
+                    in_slice = pred_memo[hashable_args]
+                else:
+                    try:
+                        in_slice = space.conc2pred(mod.mgr,
+                                                   var,
+                                                   concrete[var],
+                                                   **slice_kwargs)
+                        pred_memo[hashable_args] = in_slice
+                    except OutOfDomainError:
+                        if silent:
+                            inerror = True
+                            break
+                        raise
+                    except:
+                        raise
+
+                inbox &= in_slice
+
+            outbox = mod.mgr.true
+            for var, space in mod.outputs.items():
+                # Output kwargs
+                slice_kwargs = {k: v[var] for k, v in kwargs.items() if var in v}
+                if isinstance(mod[var], sp.ContinuousCover):
+                    slice_kwargs.update({'innerapprox': False})
+
+                # Check for reusable predicates or compute it
+                _hashable_args = [var] + list(slice_kwargs.items())
+                hashable_args = tuple(_hashable_args)
+                if hashable_args in pred_memo:
+                    out_slice = pred_memo[hashable_args]
+                else:
+                    try:
+                        out_slice = space.conc2pred(mod.mgr,
+                                                    var,
+                                                    concrete[var],
+                                                    **slice_kwargs)
+                        pred_memo[hashable_args] = out_slice
+                    except OutOfDomainError:
+                        if silent:
+                            outerror = True
+                            break
+                        raise
+                    except:
+                        raise
+                outbox &= out_slice
+
+            # Refine and remember
+            if (outerror or inerror) and silent:
+                newmods.append(mod)  # don't refine
+            else:
+                newmods.append(mod._direct_io_refined(inbox, outbox))
+
+        return CompositeModule(newmods, checktopo=False)
+
+    def atomized(self) -> AbstractModule:
+        r"""Reduce composite module into an atomic one."""
         raise NotImplementedError
-        
-

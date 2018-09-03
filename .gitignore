@@ -9,3 +9,4 @@ build/
 docs/**
 **/*.png
 .mypy_cache/**
+*.txt
