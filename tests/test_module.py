@@ -290,6 +290,7 @@ def test_sin_sqrt_comp():
 
     # from redax.visualizer import plot2D
     # plot2D(mgr, ('sin', sinin), ('sout', sqrtout), comp.children[0].pred)
+    # plot2D(mgr, ('sin', sinin), ('sout', sqrtout), comp.children[0].coarsened(sout = 6, sin = 6) .pred)
     # plot2D(mgr, ('sout', sqrtout), ('sqrt', sqrtout), comp.children[1].pred)
     # plot2D(mgr, ('sin', sinin), ('sqrt', sqrtout), sinroot.pred)
 
