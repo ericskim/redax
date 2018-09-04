@@ -40,9 +40,14 @@ SIDE_ENGINE_POWER  =  0.6
 
 INITIAL_RANDOM = 1000.0   # Set 1500 to make game harder
 
+# Original polygon
+# LANDER_POLY =[
+#     (-14,+17), (-17,0), (-17,-10),
+#     (+17,-10), (+17,0), (+14,+17)
+#     ]
 LANDER_POLY =[
-    (-14,+17), (-17,0), (-17,-10),
-    (+17,-10), (+17,0), (+14,+17)
+    (-17,+17), (-17,-17),
+    (+17,-17), (+17,+17)
     ]
 LEG_AWAY = 20
 LEG_DOWN = 18
@@ -118,9 +123,6 @@ class LunarLander(gym.Env):
         self.world.DestroyBody(self.legs[0])
         self.world.DestroyBody(self.legs[1])
 
-    def reset_state(self):
-        raise NotImplementedError 
-
     def reset(self, state=None):
         self._destroy()
         self.world.contactListener_keepref = ContactDetector(self)
@@ -175,8 +177,12 @@ class LunarLander(gym.Env):
             angvel = state[5]
 
 
-        init_x = VIEWPORT_W/SCALE * .5*(xpos + 1)
-        init_y = VIEWPORT_H/SCALE * ypos 
+        init_x = VIEWPORT_W/SCALE * 0.5*(xpos + 1)
+        init_y = ypos * (VIEWPORT_H/SCALE/2) +  (self.helipad_y+LEG_DOWN/SCALE)
+        # (pos.y - (self.helipad_y+LEG_DOWN/SCALE)) / (VIEWPORT_H/SCALE/2)
+        # vel.x*(VIEWPORT_W/SCALE/2)/FPS,
+        # vel.y*(VIEWPORT_H/SCALE/2)/FPS,
+
 
         self.lander = self.world.CreateDynamicBody(
             position = (init_x, init_y),
@@ -205,7 +211,7 @@ class LunarLander(gym.Env):
                 angle = angle+(i*0.5),
                 fixtures = fixtureDef(
                     shape=polygonShape(box=(LEG_W/SCALE, LEG_H/SCALE)),
-                    density=1.0,
+                    density=0.01,
                     restitution=0.0,
                     categoryBits=0x0020,
                     maskBits=0x001)
@@ -234,7 +240,22 @@ class LunarLander(gym.Env):
 
         self.drawlist = [self.lander] + self.legs
 
-        return self.step(np.array([0,0]) if self.continuous else 0)[0]
+        # Everything here before the return is debugging for setting an initial state
+        pos = self.lander.position
+        vel = self.lander.linearVelocity
+        state = [
+            (pos.x - VIEWPORT_W/SCALE/2) / (VIEWPORT_W/SCALE/2),
+            (pos.y - (self.helipad_y+LEG_DOWN/SCALE)) / (VIEWPORT_H/SCALE/2),
+            vel.x*(VIEWPORT_W/SCALE/2)/FPS,
+            vel.y*(VIEWPORT_H/SCALE/2)/FPS,
+            self.lander.angle,
+            20.0*self.lander.angularVelocity/FPS,
+            1.0 if self.legs[0].ground_contact else 0.0,
+            1.0 if self.legs[1].ground_contact else 0.0
+            ]
+        # print(state)
+        return state
+        # return self.step(np.array([0,0]) if self.continuous else 0)[0]
 
     def _create_particle(self, mass, x, y, ttl):
         p = self.world.CreateDynamicBody(
@@ -260,6 +281,7 @@ class LunarLander(gym.Env):
 
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid " % (action,type(action))
+
 
         # Engines
         tip  = (math.sin(self.lander.angle), math.cos(self.lander.angle))
@@ -296,16 +318,16 @@ class LunarLander(gym.Env):
             oy = -tip[1]*dispersion[0] - side[1]*(3*dispersion[1]+direction*SIDE_ENGINE_AWAY/SCALE)
             impulse_pos = (self.lander.position[0] + ox - tip[0]*17/SCALE, self.lander.position[1] + oy + tip[1]*SIDE_ENGINE_HEIGHT/SCALE)
             p = self._create_particle(0.7, impulse_pos[0], impulse_pos[1], s_power)
-            p.ApplyLinearImpulse(           ( ox*SIDE_ENGINE_POWER*s_power,  oy*SIDE_ENGINE_POWER*s_power), impulse_pos, True)
+            # p.ApplyLinearImpulse(           ( ox*SIDE_ENGINE_POWER*s_power,  oy*SIDE_ENGINE_POWER*s_power), impulse_pos, True)
             self.lander.ApplyLinearImpulse( (-ox*SIDE_ENGINE_POWER*s_power, -oy*SIDE_ENGINE_POWER*s_power), impulse_pos, True)
 
-        self.world.Step(1.0/FPS, 6*50, 2*50)
+        self.world.Step(1.0/FPS, 6*30, 2*30)
 
         pos = self.lander.position
         vel = self.lander.linearVelocity
         state = [
             (pos.x - VIEWPORT_W/SCALE/2) / (VIEWPORT_W/SCALE/2),
-            (pos.y - (self.helipad_y+LEG_DOWN/SCALE)) / (VIEWPORT_W/SCALE/2),
+            (pos.y - (self.helipad_y+LEG_DOWN/SCALE)) / (VIEWPORT_H/SCALE/2),
             vel.x*(VIEWPORT_W/SCALE/2)/FPS,
             vel.y*(VIEWPORT_H/SCALE/2)/FPS,
             self.lander.angle,
@@ -426,23 +448,28 @@ if __name__=="__main__":
     env = LunarLander()
     # env = LunarLanderContinuous()
     env.seed(1337)
-    state = (-.5,.2,0,0,.3,0)
+    state = (-.3,.87,-.1,.1,np.pi/4,0)
+    # print("Assigned State: ", state)
     s = env.reset(state)
+    # print(s)
     total_reward = 0
     steps = 0
+    import time
     while True:
+        if steps >= 700:
+            break
         if action is None:
             a = heuristic(env, s)
         else:
             a = action
         s, r, done, info = env.step(a)
         s = np.hstack((s,a))
-        env.render()
+        # env.render(); time.sleep(.02)
         total_reward += r
-        if steps % 2 == 0 or done:
-            print("steps: {}".format(steps), ["{:+0.6f}".format(x) for x in s])
+        if steps % 1 == 0 or done:
+            print("steps: {}".format(steps), ["{:+0.8f}".format(x) for x in s])
             # print("step {} total_reward {:+0.2f}".format(steps, total_reward))
         steps += 1
         if done: break
 
-    env.close()
+    # env.close()

@@ -17,9 +17,6 @@ from redax.visualizer import plot3D, plot3D_QT
 # x = [-1,1]
 # y = [0,1]
 # angle = [-pi, pi]
-# Not sure what reasonable velocities
-# Linear velocity is around [-10,10] for each positional dimension
-# Angular velocity is also roughly [-10, 10] but could easily go higher 
 xspace = DynamicCover(-1, 1)
 yspace = DynamicCover(0, 1)
 vxspace = DynamicCover(-1, 1)
@@ -76,7 +73,8 @@ for numapplied in range(50000):
 
     # Simulate and overapprox
     states = {k: v for k, v in iobox.items() if k is not 'a'}
-    s = env.reset(tuple(.5 * (l + r) for l, r in states.values()))
+    state_pt = tuple(.5 * (l + r) for l, r in states.values())
+    s = env.reset(state_pt)
     for _ in range(30):
         s, r, done, info = env.step(iobox['a'])
     
