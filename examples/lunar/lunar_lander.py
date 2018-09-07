@@ -54,8 +54,8 @@ LEG_DOWN = 18
 LEG_W, LEG_H = 2, 8
 LEG_SPRING_TORQUE = 40
 
-SIDE_ENGINE_HEIGHT = 14.0
-SIDE_ENGINE_AWAY   = 12.0
+SIDE_ENGINE_HEIGHT = 17.0
+SIDE_ENGINE_AWAY   = 17.0
 
 VIEWPORT_W = 2400
 VIEWPORT_H = 1600
@@ -318,7 +318,7 @@ class LunarLander(gym.Env):
             oy = -tip[1]*dispersion[0] - side[1]*(3*dispersion[1]+direction*SIDE_ENGINE_AWAY/SCALE)
             impulse_pos = (self.lander.position[0] + ox - tip[0]*17/SCALE, self.lander.position[1] + oy + tip[1]*SIDE_ENGINE_HEIGHT/SCALE)
             p = self._create_particle(0.7, impulse_pos[0], impulse_pos[1], s_power)
-            # p.ApplyLinearImpulse(           ( ox*SIDE_ENGINE_POWER*s_power,  oy*SIDE_ENGINE_POWER*s_power), impulse_pos, True)
+            p.ApplyLinearImpulse(           ( ox*SIDE_ENGINE_POWER*s_power,  oy*SIDE_ENGINE_POWER*s_power), impulse_pos, True)
             self.lander.ApplyLinearImpulse( (-ox*SIDE_ENGINE_POWER*s_power, -oy*SIDE_ENGINE_POWER*s_power), impulse_pos, True)
 
         self.world.Step(1.0/FPS, 6*30, 2*30)
@@ -448,7 +448,7 @@ if __name__=="__main__":
     env = LunarLander()
     # env = LunarLanderContinuous()
     env.seed(1337)
-    state = (-.3,.87,-.1,.1,np.pi/4,0)
+    state = (-.3,.8,-.2,.1,.2*np.pi/4,-.1)
     # print("Assigned State: ", state)
     s = env.reset(state)
     # print(s)
@@ -464,12 +464,12 @@ if __name__=="__main__":
             a = action
         s, r, done, info = env.step(a)
         s = np.hstack((s,a))
-        # env.render(); time.sleep(.02)
+        env.render(); time.sleep(.02)
         total_reward += r
         if steps % 1 == 0 or done:
-            print("steps: {}".format(steps), ["{:+0.8f}".format(x) for x in s])
+            print("steps: {}".format(steps), ["{:+0.9f}".format(x) for x in s])
             # print("step {} total_reward {:+0.2f}".format(steps, total_reward))
         steps += 1
         if done: break
 
-    # env.close()
+    env.close()

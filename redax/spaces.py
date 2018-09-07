@@ -86,6 +86,12 @@ class DiscreteSet(SymbolicSet):
         bv = int2bv(concrete, self.num_bits)
         return bv2pred(mgr, name, bv)
 
+    def bv2conc(self, bv: BitVector) -> int:
+        """
+        Converts a bitvector into a concrete grid point
+        """
+        return bv2int(bv)
+
 @dataclass(frozen=True)
 class EmbeddedGrid(DiscreteSet):
     """

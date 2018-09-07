@@ -8,104 +8,157 @@ except ImportError:
 
 import gym
 from lunar_lander import LunarLander
+from dynamics import lander_box_dynamics
+
 
 from redax.module import AbstractModule, CompositeModule
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover, DiscreteSet
 from redax.synthesis import SafetyGame, ControlPre, DecompCPre
 from redax.visualizer import plot3D, plot3D_QT
 
-# x = [-1,1]
-# y = [0,1]
-# angle = [-pi, pi]
-xspace = DynamicCover(-1, 1)
-yspace = DynamicCover(0, 1)
-vxspace = DynamicCover(-1, 1)
-vyspace = DynamicCover(-1, 1)
-thetaspace  = DynamicCover(-np.pi, np.pi, periodic=True)
-omegaspace = DynamicCover(-1, 1)
-actionspace = DiscreteSet(4)
 
-mgr = BDD()
-# f_x = AbstractModel(mgr, {x, xvel, theta, omega}, {xnext}) <--- ideal signature with named spaces or "wires"
-f_x = AbstractModule(mgr, {'x': xspace, 'xvel': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'xnext': xspace})
-f_y = AbstractModule(mgr, {'y': yspace, 'yvel': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'ynext': yspace})
-f_vx = AbstractModule(mgr, {'xvel': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'xvelnext': vxspace})
-f_vy = AbstractModule(mgr, {'yvel': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'yvelnext': vyspace})
-f_theta = AbstractModule(mgr, {'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'thetanext': thetaspace})
-f_omega = AbstractModule(mgr, {'omega': omegaspace, 'a': actionspace}, {'omeganext': omegaspace})
+def abstract(f, samples=100):
 
-# f = f_x | f_y | f_vx | f_vy | f_theta | f_omega
-f = CompositeModule((f_x, f_y, f_vx, f_vy, f_theta, f_omega))
+    # Abstract
+    precision = {'x': 5, 'y': 5, 'vx': 6, 'vy': 6, 'theta': 5, 'omega': 5,
+                'xnext': 5, 'ynext': 5, 'vxnext': 6, 'vynext': 6, 'thetanext': 5, 'omeganext': 5}
 
-# Edit lunar lander to take reset states, get rid of rewards.
-# simulate a bunch of different boxes
-# Find out the reachable set bound by sampling along corners of 6D set and multiplying by a safety factor
-# Ten time steps?
-from lunar_lander import LunarLander
-env = LunarLander()
-env.seed(1337)
+    abs_starttime = time.time()
+    for numapplied in range(samples):
+        # Shrink window widths over time
+        scale = 1/np.log10(3.0*numapplied+10)
 
-precision = {'x': 6, 'y': 6, 'xvel': 5, 'yvel': 5, 'theta': 5, 'omega': 5, 
-             'xnext': 6, 'ynext': 6, 'xvelnext': 5, 'yvelnext': 5, 'thetanext': 5, 'omeganext': 5}
-             
-# Abstract
-abs_starttime = time.time()
-for numapplied in range(50000):
-    # Shrink window widths over time
-    scale = 1/np.log10(3.0*numapplied+10)
+        # Generate random input windows and points
+        f_width = {'x':     np.random.rand()*scale*.8,#xspace.width(),
+                'y':     np.random.rand()*scale*.4,#yspace.width(),
+                'vx': np.random.rand()*scale*f['vx'].width(),
+                'vy': np.random.rand()*scale*f['vy'].width(),
+                'theta': .2*f['theta'].width(),
+                'omega': np.random.rand()*scale*f['omega'].width()}
+        f_left = {'x':     -.4 + np.random.rand() * (.4 - f_width['x']),  # (xspace.width() - f_width['x']),
+                'y':     .3 + np.random.rand() * (.7 - f_width['y']),  # (yspace.width() - f_width['y']),
+                'vx': f['vx'].lb + np.random.rand() * (f['vx'].width() - f_width['vx']),
+                'vy': f['vx'].lb + np.random.rand() * (f['vx'].width() - f_width['vy']),
+                'theta': f['theta'].lb + np.random.rand() * (f['theta'].width()),
+                'omega': f['omega'].lb + np.random.rand() * (f['omega'].width() - f_width['omega'])}
+        f_right = {k: f_width[k] + f_left[k] for k in f_width}
+        iobox = {'a': np.random.randint(0, 4)}
+        iobox.update({k: (f_left[k], f_right[k]) for k in f_width})
 
-    # Generate random input windows and points
-    f_width = {'x':     np.random.rand()*scale*.8,#xspace.width(),
-               'y':     np.random.rand()*scale*.4,#yspace.width(),
-               'xvel': np.random.rand()*scale*vxspace.width(),
-               'yvel': np.random.rand()*scale*vyspace.width(),
-               'theta': .2*thetaspace.width(),
-               'omega': np.random.rand()*scale*omegaspace.width()}
-    f_left = {'x':     -.4 + np.random.rand() * (.4 - f_width['x']),# (xspace.width() - f_width['x']),
-              'y':     .3 + np.random.rand() * (.7 - f_width['y']), # (yspace.width() - f_width['y']),
-              'xvel': vxspace.lb + np.random.rand() * (vxspace.width() - f_width['xvel']),
-              'yvel': vyspace.lb + np.random.rand() * (vyspace.width() - f_width['yvel']),
-              'theta': thetaspace.lb + np.random.rand() * (thetaspace.width()),
-              'omega': omegaspace.lb + np.random.rand() * (omegaspace.width() - f_width['omega'])}
-    f_right = {k: f_width[k] + f_left[k] for k in f_width}
-    iobox = {'a':     np.random.randint(0, 4)}
-    iobox.update({k: (f_left[k], f_right[k]) for k in f_width})
+        # Simulate and overapprox
+        states = {k: v for k, v in iobox.items() if k is not 'a'}
+        s = lander_box_dynamics(steps=30, a=iobox['a'], **states)
+        out = {i: j for i, j in zip(f.outputs, s)}
+        iobox.update(out)
 
-    # Simulate and overapprox
-    states = {k: v for k, v in iobox.items() if k is not 'a'}
-    state_pt = tuple(.5 * (l + r) for l, r in states.values())
-    s = env.reset(state_pt)
-    for _ in range(30):
-        s, r, done, info = env.step(iobox['a'])
+        # Refine
+        f = f.io_refined(iobox, nbits = precision)
+
+        if numapplied % 1000 == 999:
+            print("Sample: {0}  Time: {1}".format(numapplied+1, time.time() - abs_starttime))
+
+    print("Abs Time: ", time.time() - abs_starttime)
+
+    return f 
+
+def synthesizesafe(f):
+
+    # Solve safety operations
+    safe = f['x'].conc2pred(mgr, 'x', (-.4, .4), 5, innerapprox=True)
+    safe &= f['y'].conc2pred(mgr, 'y', (.3, .7), 5, innerapprox=True)
+
+    cpre = DecompCPre(f, (('x', 'xnext'), ('y', 'ynext'), ('vx', 'vxnext'), ('vy', 'vynext'), ('theta', 'thetanext'), ('omega', 'omeganext')), ('a'))
+
+    # Solve game and plot 2D invariant region
+    print("Solving Game")
+    game = SafetyGame(cpre, safe)
+    game_starttime = time.time()
+    inv, steps, controller = game.run(verbose=True)
+    print("Solve time: ", time.time() - game_starttime)
+    print("Solve steps: ", steps)
+    print("Trivial region: ", inv == mgr.false)
+    print("Safe Size:", mgr.count(safe, 6*6))
+    print("Invariant Size:", mgr.count(inv, 6*6))
+    print("Safe Fraction: ", mgr.count(inv, 6*6) / mgr.count(safe, 6*6))
+
+    assert inv == cpre.elimcontrol(controller.C)
+
+    return controller
+
+def simulate(controller):
+
+    if not controller.isempty():
+
+        from lunar_lander import LunarLander
+        env = LunarLander()
+        env.seed(1337)
+
+        # Simulate and control
+        import funcy as fn
+        state = fn.first(controller.winning_states())
+        state = {k: .5*(v[0] + v[1]) for k, v in state.items()}
+        ordered_state = [state[v] for v in ['x', 'y', 'vx', 'vy', 'theta', 'omega']]
+        env.reset(ordered_state)
+        for step in range(10):
+            u = fn.first(controller.allows(state))
+            if u is None:
+                raise RuntimeError("No safe control inputs for state {}".format(state))
+            picked_u = {'a': u['a']}
+
+            state.update(picked_u)
+            print(step, state)
+
+            for i in range(30):
+                s, r, done, info = env.step(picked_u['a'])
+                env.render()
+                time.sleep(.1)
+            
+            state = {v: s[idx] for idx, v in enumerate(['x', 'y', 'vx', 'vy', 'theta', 'omega'])}
+            
+        env.close()
+
+
+def setup():
+    xspace = DynamicCover(-1, 1)
+    yspace = DynamicCover(0, 1)
+    vxspace = DynamicCover(-15, 15)
+    vyspace = DynamicCover(-15, 15)
+    thetaspace  = DynamicCover(-np.pi, np.pi, periodic=True)
+    omegaspace = DynamicCover(-1, 1)
+    actionspace = DiscreteSet(4)
+
+    mgr = BDD()
+    f_x = AbstractModule(mgr, {'x': xspace, 'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'xnext': xspace})
+    f_y = AbstractModule(mgr, {'y': yspace, 'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'ynext': yspace})
+    f_vx = AbstractModule(mgr, {'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'vxnext': vxspace})
+    f_vy = AbstractModule(mgr, {'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'vynext': vyspace})
+    f_theta = AbstractModule(mgr, {'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'thetanext': thetaspace})
+    f_omega = AbstractModule(mgr, {'omega': omegaspace, 'a': actionspace}, {'omeganext': omegaspace})
+
+
+
+    f = CompositeModule((f_x, f_y, f_vx, f_vy, f_theta, f_omega))
+
+    return mgr, f
+
+
+if __name__ is "__main__":
     
-    # time.sleep(1)
+    try:
+        f
+        mgr
+        import sys
+        if "-c" in sys.argv:
+            mgr, f = setup()
+            abs_iters = 0
+    except NameError:
+        mgr, f = setup()
+        abs_iters = 0
 
-    out = {'xnext': s[0], 'ynext': s[1], 'xvelnext': s[2], 'yvelnext': s[3], 'thetanext': s[4], 'omeganext': s[5]}
-    out = {o[0]: (o[1] - .6*w, o[1] + .6*w) for w, o in zip(f_width.values(), out.items())}
-    iobox.update(out)
+    N = 200
+    f = abstract(f, samples=N)
+    abs_iters += N
 
-    # Refine
-    f = f.io_refined(iobox, nbits = precision)
+    controller = synthesizesafe(f)
 
-    if numapplied % 1000 == 999:
-        print("Sample: {0}  Time: {1}".format(numapplied+1, time.time() - abs_starttime))
-
-print("Abs Time: ", time.time() - abs_starttime)
-
-
-# Solve safety operations
-safe = xspace.conc2pred(mgr, 'x', (-.4, .4), 6, innerapprox=True)
-safe &= yspace.conc2pred(mgr, 'y', (.3, .7), 6, innerapprox=True)
-
-cpre = DecompCPre(f, (('x', 'xnext'), ('y', 'ynext'), ('xvel', 'xvelnext'), ('yvel', 'yvelnext'), ('theta', 'thetanext'), ('omega', 'omeganext')), ('a'))
-
-# Solve game and plot 2D invariant region
-print("Solving Game")
-game = SafetyGame(cpre, safe)
-game_starttime = time.time()
-inv, steps, controller = game.run(verbose=True)
-print("Solve time: ", time.time() - game_starttime)
-print("Solve steps: ", steps)
-print("Trivial region: ", inv == mgr.false)
-print("Safe Size:", mgr.count(safe, 6*6))
-print("Invariant Size:", mgr.count(inv, 6*6))
+    simulate(controller)

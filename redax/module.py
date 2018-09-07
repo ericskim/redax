@@ -830,9 +830,16 @@ class CompositeModule(object):
         for mod in self.children:
             if var in mod.vars:
                 return mod[var]
-                
+
         raise ValueError("Variable does not exist")
     
+    @property 
+    def vars(self):
+        vars = set([])
+        for mod in self.children:
+            vars.update(mod.vars)
+        return vars
+
     def inspace(self):
         raise NotImplementedError
 
@@ -967,3 +974,22 @@ class CompositeModule(object):
     def atomized(self) -> AbstractModule:
         r"""Reduce composite module into an atomic one."""
         raise NotImplementedError
+
+
+    @property
+    def pred_bitvars(self) -> Dict[str, List[str]]:
+        r"""Get dictionary with variable name keys and BDD bit names as values."""
+
+
+        allocbits = {v: set([]) for v in self.vars}
+        for mod in self.children:
+            for k, v in mod.pred_bitvars.items():
+                allocbits[k].update(v)
+
+        list_allocbits = dict()
+        for k, v in allocbits.items():
+            list_allocbits[k] = list(v)
+            list_allocbits[k].sort()
+
+        return list_allocbits
+

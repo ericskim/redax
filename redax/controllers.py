@@ -4,6 +4,8 @@ Controller interface classes
 
 """
 
+# from redax.synthesis import ControlPre, DecompCPre
+
 def _name(i):
     return i.split('_')[0]
 
@@ -39,6 +41,32 @@ class MemorylessController(SupervisoryController):
         self.cpre = cpre
         self.C = allowed_controls
 
+    def isempty(self):
+        return self.C == self.cpre.mgr.false
+
+    def winning_states(self):
+        r"""
+        Generates a state from the winning set
+
+        Returns
+        -------
+        generator
+            Yields dictionaries with state var keys and concrete values
+        """
+        winning = self.cpre.elimcontrol(self.C)
+        
+        # Generate a winning point
+        for x_assignment in self.cpre.mgr.pick_iter(winning):
+            # Translate BDD assignment into concrete counterpart
+            xval = dict()
+            for xvar in self.cpre.prestate:
+                xbits = [k for k in x_assignment if _name(k) == xvar]
+                xbits.sort()
+                bv = [x_assignment[bit] for bit in xbits]
+                xval[xvar] = self.cpre.prestate[xvar].bv2conc(bv)
+            yield xval
+
+
     def allows(self, state): # -> Generator[Dict[str, concretetype], None, None]
         """
         Compute the set of allowed inputs associated with a state.
@@ -63,11 +91,9 @@ class MemorylessController(SupervisoryController):
             nbits = len(self.cpre.sys.pred_bitvars[k])
             pt_bdd &= self.cpre.prestate[k].pt2bdd(self.cpre.mgr, k, v, nbits)
 
-        # Safe state-input pairs
-        xu = pt_bdd & self.C
-
-        # Safe control inputs
-        u = self.cpre.elimprestate(xu)
+        # TODO: To compute u should assign x variable... but this works
+        xu = pt_bdd & self.C  # Safe state-input pairs
+        u = self.cpre.elimprestate(xu)  # Safe control inputs
 
         # Generate allowed controls
         for u_assignment in self.cpre.mgr.pick_iter(u):
@@ -79,5 +105,4 @@ class MemorylessController(SupervisoryController):
                 bv = [u_assignment[bit] for bit in ubits]
                 uval[uvar] = self.cpre.control[uvar].bv2conc(bv)
             yield uval
-
 

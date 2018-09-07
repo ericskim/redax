@@ -120,7 +120,9 @@ class ControlPre():
         # Exchange Z's pre state variables for post state variables
         swapvars = self.swappedstates(Z)
         if len(swapvars) > 0:
-            Z = self.mgr.let(self.swappedstates(Z), Z)
+            self.mgr.declare(*swapvars.values())
+            Z = self.mgr.let(swapvars, Z)
+
         # Compute implication
         Z = ~self.sys.pred | Z
         # Eliminate post states and return
@@ -131,13 +133,15 @@ class ControlPre():
 
 class DecompCPre(ControlPre):
 
-    def __init__(self, mod: CompositeModule, states, control) -> None:
+    def __init__(self, mod: CompositeModule, states, control, elim_order = None) -> None:
         
         if len(mod.sorted_mods()) > 2:
             raise NotImplementedError("Only implemented for parallel composed modules.")
 
         ControlPre.__init__(self, mod, states, control)
     
+        self.elimorder = elim_order
+
     @property
     def mgr(self):
         return self.sys.children[0].mgr
@@ -155,9 +159,13 @@ class DecompCPre(ControlPre):
     def __call__(self, Z, no_inputs=False):
         swapvars = self.swappedstates(Z)
         if len(swapvars) > 0:
-            Z = self.mgr.let(self.swappedstates(Z), Z)
+            self.mgr.declare(*swapvars.values())
+            Z = self.mgr.let(swapvars, Z)
 
-        to_elim_post = [i for i in self.poststate]
+        if self.elimorder is not None:
+            to_elim_post = self.elimorder
+        else:
+            to_elim_post = [i for i in self.poststate]
 
         while(len(to_elim_post) > 0):
             var = to_elim_post.pop()
@@ -174,6 +182,9 @@ class DecompCPre(ControlPre):
                 nb = nb & mod._nb
 
             Z = nb & self.elimpostslice(Z, var)
+
+        # TODO: Assert Z's support is in the composite systems input range. Line below hasn't been checked
+        # assert Z.support <= set(flatten([self.sys.pred_bitvars[v] for v in self.sys.inputs]))
 
         # Eliminate
         if no_inputs:
@@ -226,7 +237,7 @@ class SafetyGame():
 
         C = self.cpre.mgr.false
 
-        z = self.cpre.prespace() if winning is None else winning
+        z = self.cpre.prespace() & self.safe if winning is None else winning
         zz = self.cpre.mgr.false
 
         i = 0

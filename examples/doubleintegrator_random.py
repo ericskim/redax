@@ -12,11 +12,14 @@ try:
 except ImportError:
     from dd.autoref import BDD
 
+import funcy as fn
+
 from redax.controlmodule import to_control_module
 from redax.module import AbstractModule, CompositeModule
 from redax.spaces import DynamicCover
 from redax.synthesis import SafetyGame, ControlPre, DecompCPre
 from redax.visualizer import plot2D, plot3D, plot3D_QT
+
 
 ts = .2
 k = .1
@@ -55,7 +58,9 @@ system = pcomp | vcomp
 composite = CompositeModule((pcomp, vcomp))
 
 # Declare grid precision
-precision = {'p': 7, 'v': 7, 'a': 7, 'pnext': 7, 'vnext': 7}
+p_precision = 7
+v_precision = 7
+precision = {'p': p_precision, 'v': v_precision, 'a': 7, 'pnext': p_precision, 'vnext': v_precision}
 bittotal = sum(precision.values())
 outorder = {0: 'pnext', 1: 'vnext'}
 possible_transitions = (pcomp | vcomp).count_io_space(bittotal)
@@ -134,26 +139,30 @@ for nbits in [6]:
 
     dgame = SafetyGame(dcpre, safe)
     dsynth_starttime = time.time()
-    dinv, steps, _ = dgame.run()
+    dinv, steps, controller = dgame.run()
     print("Dsolver: ", time.time() - dsynth_starttime)
     assert dinv == inv
 
     print("Solving Bits: ", nbits)
     print("Solver Steps: ", steps)
-    print("Safe Size:", system.mgr.count(safe, 14))
-    print("Invariant Size:", system.mgr.count(inv, 14))
+    print("Safe Size:", system.mgr.count(safe, p_precision + v_precision))
+    print("Invariant Size:", system.mgr.count(inv,  p_precision + v_precision))
     # plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
 # plot3D_QT(system.mgr, ('p', vspace), ('v', aspace), ('pnext', vspace), pcomp.pred, 128)
 # plot3D_QT(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
 
+
 sim_starttime = time.time()
 """Simulate"""
-state = {'p': -4, 'v': 2}
+# state = {'p': -4, 'v': 2}
+state = fn.first(controller.winning_states())
+state = {k: .5*(v[0] + v[1]) for k, v in state.items()}
 for step in range(10):
-    u = [i for i in controller.allows(state)]
-    if len(u) == 0:
+    u = fn.first(controller.allows(state))
+    if u is None:
         break
-    picked_u = {'a': u[0]['a'][0]} # Pick lower bound of first allowed control voxel
+    picked_u = {'a': u['a'][0]} # Pick lower bound of first allowed control voxel
+
     state.update(picked_u)
     print(step, state)
     nextstate = dynamics(**state)

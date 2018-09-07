@@ -16,6 +16,8 @@ from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover
 from redax.synthesis import ReachGame, ControlPre, DecompCPre
 from redax.visualizer import plot3D, plot3D_QT
 
+from redax.utils.overapprox import maxmincos, maxminsin
+
 """
 Specify dynamics and overapproximations
 """
@@ -24,41 +26,6 @@ L= 1.4
 vmax = .5
 def dynamics(x,y,theta,v,omega):
     return x + v*np.cos(theta), y + v*np.sin(theta), theta + (1/L) * v * np.sin(omega)
-
-def containszero(left, right):
-    """Determine if 0 is contained in a periodic interval [left,right]. Possible that right < left."""
-    # Map to interval [-pi,pi]
-    left = ((left + np.pi) % (np.pi*2) ) - np.pi
-    left = left - 2*np.pi if left > np.pi else left
-    right = ((right + np.pi) % (np.pi*2) ) - np.pi
-    right = right - 2*np.pi if right > np.pi else right
-
-    if right < left:
-        if left <= 0:
-            return True
-    else:
-        if left <= 0 and right >= 0:
-            return True
-
-    return False
-
-def maxmincos(left, right):
-    """Compute the maximum and minimum values of cos in an interval."""
-    if containszero(left, right) is True:
-        maxval = 1
-    else:
-        maxval = max([np.cos(left), np.cos(right)])
-
-    if containszero(left + np.pi, right + np.pi) is True:
-        minval = -1
-    else:
-        minval = min([np.cos(left), np.cos(right)])
-
-    return (minval, maxval)
-
-def maxminsin(left, right):
-    """Compute the maximum and minimum values of sin in an interval."""
-    return maxmincos(left - np.pi/2, right - np.pi/2)
 
 # Overapproximations of next states for each component
 # v and omega are points and not windows
@@ -99,8 +66,9 @@ dubins_theta    = AbstractModule(mgr, {'theta': anglespace, 'v': vspace, 'omega'
 dubins = (dubins_x | dubins_y | dubins_theta)
 composite = CompositeModule([dubins_x, dubins_y, dubins_theta])
 
-precision = {'x': 6, 'y':6, 'theta': 6,
-             'xnext': 6, 'ynext': 6, 'thetanext': 6}
+bits = 6
+precision = {'x': bits, 'y':bits, 'theta': bits,
+             'xnext': bits, 'ynext': bits, 'thetanext': bits}
 bittotal = sum(precision.values()) + 3 # +3 for the discrete embedded grid bits
 possible_transitions = dubins.count_io_space(bittotal)
 
@@ -195,22 +163,25 @@ cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext'
 dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
 
 # Declare reach set as [0.8] x [-.8, 0] box
+# FIXME: raises an error if this precision is higher than the system precision
 target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 6, innerapprox=False)
 target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 6, innerapprox=False)
 
-game = ReachGame(cpre, target)
-starttime = time.time()
-basin, steps, controller = game.run()
-print("Solve Time:", time.time() - starttime)
+# game = ReachGame(cpre, target)
+# starttime = time.time()
+# basin, steps, controller = game.run()
+# print("Monolithic Solve Time:", time.time() - starttime)
 
 dgame = ReachGame(dcpre, target)
 dstarttime = time.time()
-dbasin, _, _ = dgame.run()
-print("Solve Time:", time.time() - dstarttime)
-assert dbasin == basin
+dbasin, steps, controller = dgame.run()
+print("Decomp Solve Time:", time.time() - dstarttime)
+# assert dbasin == basin
+basin = dbasin
 
-print("Reach Size:", dubins.mgr.count(basin, 18))
-print("Target Size:", dubins.mgr.count(target, 18))
+
+print("Reach Size:", dubins.mgr.count(basin, len(basin.support)))
+print("Target Size:", dubins.mgr.count(target, len(basin.support)))
 print("Game Steps:", steps)
 
 
@@ -218,11 +189,11 @@ print("Game Steps:", steps)
 # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), basin, 128)
 
 # # Plot x transition relation for v = .5
-# xdyn = mgr.exist(['v_0'],(dubins_x.pred) & mgr.var('v_0'))
+# xdyn = mgr.exist(['v_0'],(composite.children[0].pred) & mgr.var('v_0'))
 # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
 
 # # Plot y transition relation for v = .5
-# ydyn = mgr.exist(['v_0'],(dubins_y.pred) & mgr.var('v_0'))
+# ydyn = mgr.exist(['v_0'],(composite.children[1].pred) & mgr.var('v_0'))
 # plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
 
 """Simulate"""
