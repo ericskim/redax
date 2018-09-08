@@ -10,7 +10,6 @@ try:
 except ImportError:
     from dd.autoref import BDD
 
-from redax.controlmodule import to_control_module
 from redax.module import AbstractModule, CompositeModule
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover
 from redax.synthesis import ReachGame, ControlPre, DecompCPre
@@ -66,7 +65,7 @@ dubins_theta    = AbstractModule(mgr, {'theta': anglespace, 'v': vspace, 'omega'
 dubins = (dubins_x | dubins_y | dubins_theta)
 composite = CompositeModule([dubins_x, dubins_y, dubins_theta])
 
-bits = 6
+bits = 7
 precision = {'x': bits, 'y':bits, 'theta': bits,
              'xnext': bits, 'ynext': bits, 'thetanext': bits}
 bittotal = sum(precision.values()) + 3 # +3 for the discrete embedded grid bits
@@ -156,8 +155,6 @@ print("Abstraction Time: ", time.time() - abs_starttime)
 
 # dubins = (dubins_x | dubins_y | dubins_theta)
 dubins = composite.children[0] | composite.children[1] | composite.children[2]
-
-# csys = to_control_module(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')))
 
 cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
 dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))

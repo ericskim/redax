@@ -1,3 +1,5 @@
+import time
+
 from functools import reduce
 
 from bidict import bidict
@@ -156,7 +158,7 @@ class DecompCPre(ControlPre):
         elimbits = tuple(i for i in implies_pred.support if _name(i) == postvar)
         return self.mgr.forall(elimbits, implies_pred)
 
-    def __call__(self, Z, no_inputs=False):
+    def __call__(self, Z, no_inputs=False, verbose=False):
         swapvars = self.swappedstates(Z)
         if len(swapvars) > 0:
             self.mgr.declare(*swapvars.values())
@@ -182,6 +184,8 @@ class DecompCPre(ControlPre):
                 nb = nb & mod._nb
 
             Z = nb & self.elimpostslice(Z, var)
+            if verbose:
+                print("Eliminated ", var)
 
         # TODO: Assert Z's support is in the composite systems input range. Line below hasn't been checked
         # assert Z.support <= set(flatten([self.sys.pred_bitvars[v] for v in self.sys.inputs]))
@@ -244,13 +248,14 @@ class SafetyGame():
         while (z != zz):
             if steps and i == steps:
                 break
+            step_start = time.time()
             zz = z
-            C = self.cpre(zz) & self.safe
+            C = self.cpre(zz, verbose=verbose) & self.safe
             z = self.cpre.elimcontrol(C)
             i = i + 1
 
             if verbose:
-                print("Step: ", i)
+                print("Step #: ", i, " Step Time (s): ", time.time() - step_start)
 
         return z, i, MemorylessController(self.cpre, C)
 
@@ -323,7 +328,7 @@ class ReachAvoidGame():
 
     Attributes
     ----------
-    sys: ControlSystem
+    sys: ControlPre
         Control system to synthesize for
     safe: bdd
         Safety region predicate

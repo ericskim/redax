@@ -24,7 +24,7 @@ class MemorylessController(SupervisoryController):
 
     Parameters
     ----------
-    sys: ControlSystem
+    sys: ControlPre
         The system to be controlled
     allowed_controls: bdd
         BDD encoding state-input pairs

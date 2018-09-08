@@ -8,7 +8,7 @@ except ImportError:
 
 import gym
 from lunar_lander import LunarLander
-from dynamics import lander_box_dynamics
+from dynamics import lander_box_dynamics, plot_io_bounds
 
 
 from redax.module import AbstractModule, CompositeModule
@@ -17,11 +17,34 @@ from redax.synthesis import SafetyGame, ControlPre, DecompCPre
 from redax.visualizer import plot3D, plot3D_QT
 
 
+def setup():
+    xspace = DynamicCover(-1, 1)
+    yspace = DynamicCover(0, 1)
+    vxspace = DynamicCover(-2.5, 2.5)
+    vyspace = DynamicCover(-5, 3)
+    thetaspace  = DynamicCover(-np.pi/4, np.pi/4, periodic=True)
+    omegaspace = DynamicCover(-1, 1)
+    actionspace = DiscreteSet(4)
+
+    mgr = BDD()
+    mgr.configure(reordering=True)
+    f_x = AbstractModule(mgr, {'x': xspace, 'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'xnext': xspace})
+    f_y = AbstractModule(mgr, {'y': yspace, 'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'ynext': yspace})
+    f_vx = AbstractModule(mgr, {'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'vxnext': vxspace})
+    f_vy = AbstractModule(mgr, {'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'vynext': vyspace})
+    f_theta = AbstractModule(mgr, {'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'thetanext': thetaspace})
+    f_omega = AbstractModule(mgr, {'omega': omegaspace, 'a': actionspace}, {'omeganext': omegaspace})
+
+    f = CompositeModule((f_x, f_y, f_vx, f_vy, f_theta, f_omega))
+
+    return mgr, f
+
+
 def abstract(f, samples=100):
 
     # Abstract
-    precision = {'x': 5, 'y': 5, 'vx': 6, 'vy': 6, 'theta': 5, 'omega': 5,
-                'xnext': 5, 'ynext': 5, 'vxnext': 6, 'vynext': 6, 'thetanext': 5, 'omeganext': 5}
+    precision = {'x': 5,     'y': 5,     'vx': 5,     'vy': 5,     'theta': 5,     'omega': 5,
+                 'xnext': 5, 'ynext': 5, 'vxnext': 5, 'vynext': 5, 'thetanext': 5, 'omeganext': 5}
 
     abs_starttime = time.time()
     for numapplied in range(samples):
@@ -47,7 +70,7 @@ def abstract(f, samples=100):
 
         # Simulate and overapprox
         states = {k: v for k, v in iobox.items() if k is not 'a'}
-        s = lander_box_dynamics(steps=30, a=iobox['a'], **states)
+        s = lander_box_dynamics(steps=20, a=iobox['a'], **states)
         out = {i: j for i, j in zip(f.outputs, s)}
         iobox.update(out)
 
@@ -64,8 +87,8 @@ def abstract(f, samples=100):
 def synthesizesafe(f):
 
     # Solve safety operations
-    safe = f['x'].conc2pred(mgr, 'x', (-.4, .4), 5, innerapprox=True)
-    safe &= f['y'].conc2pred(mgr, 'y', (.3, .7), 5, innerapprox=True)
+    safe = f['x'].conc2pred(mgr, 'x', (-.4, .4), 6, innerapprox=True)
+    safe &= f['y'].conc2pred(mgr, 'y', (.3, .7), 6, innerapprox=True)
 
     cpre = DecompCPre(f, (('x', 'xnext'), ('y', 'ynext'), ('vx', 'vxnext'), ('vy', 'vynext'), ('theta', 'thetanext'), ('omega', 'omeganext')), ('a'))
 
@@ -99,47 +122,28 @@ def simulate(controller):
         state = {k: .5*(v[0] + v[1]) for k, v in state.items()}
         ordered_state = [state[v] for v in ['x', 'y', 'vx', 'vy', 'theta', 'omega']]
         env.reset(ordered_state)
-        for step in range(10):
-            u = fn.first(controller.allows(state))
-            if u is None:
-                raise RuntimeError("No safe control inputs for state {}".format(state))
-            picked_u = {'a': u['a']}
+        try: 
+            for step in range(10):
+                u = fn.first(controller.allows(state))
+                if u is None:
+                    raise RuntimeError("No safe control inputs for state {}".format(state))
+                picked_u = {'a': u['a']}
 
-            state.update(picked_u)
-            print(step, state)
+                state.update(picked_u)
+                print(step, state)
 
-            for i in range(30):
-                s, r, done, info = env.step(picked_u['a'])
-                env.render()
-                time.sleep(.1)
-            
-            state = {v: s[idx] for idx, v in enumerate(['x', 'y', 'vx', 'vy', 'theta', 'omega'])}
-            
+                for i in range(30):
+                    s, r, done, info = env.step(picked_u['a'])
+                    env.render()
+                    time.sleep(.1)
+                
+                state = {v: s[idx] for idx, v in enumerate(['x', 'y', 'vx', 'vy', 'theta', 'omega'])}
+        except:
+            env.close()
+            raise
+
         env.close()
 
-
-def setup():
-    xspace = DynamicCover(-1, 1)
-    yspace = DynamicCover(0, 1)
-    vxspace = DynamicCover(-15, 15)
-    vyspace = DynamicCover(-15, 15)
-    thetaspace  = DynamicCover(-np.pi, np.pi, periodic=True)
-    omegaspace = DynamicCover(-1, 1)
-    actionspace = DiscreteSet(4)
-
-    mgr = BDD()
-    f_x = AbstractModule(mgr, {'x': xspace, 'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'xnext': xspace})
-    f_y = AbstractModule(mgr, {'y': yspace, 'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'ynext': yspace})
-    f_vx = AbstractModule(mgr, {'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'vxnext': vxspace})
-    f_vy = AbstractModule(mgr, {'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'vynext': vyspace})
-    f_theta = AbstractModule(mgr, {'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'thetanext': thetaspace})
-    f_omega = AbstractModule(mgr, {'omega': omegaspace, 'a': actionspace}, {'omeganext': omegaspace})
-
-
-
-    f = CompositeModule((f_x, f_y, f_vx, f_vy, f_theta, f_omega))
-
-    return mgr, f
 
 
 if __name__ is "__main__":
@@ -155,10 +159,10 @@ if __name__ is "__main__":
         mgr, f = setup()
         abs_iters = 0
 
-    N = 200
+    N = 300
     f = abstract(f, samples=N)
     abs_iters += N
 
     controller = synthesizesafe(f)
 
-    simulate(controller)
+    # simulate(controller)

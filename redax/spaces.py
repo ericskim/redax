@@ -290,9 +290,9 @@ class DynamicCover(ContinuousCover):
             point = self._wrap(point)
 
         if point > self.ub + tol:
-            raise OutOfDomainError
+            raise OutOfDomainError("Point {0} exceepds upper bound {1}".format(point, self.ub+tol))
         if point < self.lb - tol:
-            raise OutOfDomainError
+            raise OutOfDomainError("Point {0} exceepds lower bound {1}".format(point, self.lb-tol))
 
         bucket_fraction = 2**nbits * (point - self.lb) / (self.ub - self.lb)
 

@@ -14,7 +14,6 @@ except ImportError:
 
 import funcy as fn
 
-from redax.controlmodule import to_control_module
 from redax.module import AbstractModule, CompositeModule
 from redax.spaces import DynamicCover
 from redax.synthesis import SafetyGame, ControlPre, DecompCPre
