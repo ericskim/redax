@@ -130,6 +130,7 @@ def test_embeddedgrid_module():
 
     m = AbstractModule(mgr, inputs, outputs)
 
+    mgr.declare("x_0", "x_1", "y_0", "y_1", "y_2")
     assert m.io_refined({'x': 2, 'y':4}).pred == mgr.add_expr(r"( x_0 /\ ~x_1)") & mgr.add_expr(r" ~( x_0 /\ ~x_1) | (~y_0 /\ ~y_1 /\ ~y_2)")
     
     assert len(mgr.vars) > 0 

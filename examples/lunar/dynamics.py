@@ -30,7 +30,7 @@ def lander_box_dynamics(x, y, vx, vy, theta, omega, a, steps):
     Takes state boxes and computes an output box
     """
 
-    for i in range(1, steps + 1):
+    for _ in range(1, steps + 1):
 
         thrust = 1 if a == 2 else 0
         side = a - 2 if a in [1, 3] else 0
@@ -39,7 +39,6 @@ def lander_box_dynamics(x, y, vx, vy, theta, omega, a, steps):
         y_ = (y[0] + .0014062 * vy[0], y[1] + .0014062 * vy[1])
         theta_ = (theta[0] + .05 * omega[0], theta[1] + .05 * omega[1])
         omega_ = (omega[0] - side * .05598, omega[1] - side * .05598)
-
 
         mincos, maxcos = maxmincos(theta[0], theta[1])
         minsin, maxsin = maxminsin(theta[0], theta[1])
@@ -56,11 +55,14 @@ def lander_box_dynamics(x, y, vx, vy, theta, omega, a, steps):
                    vy[1] + thrust *  .1439 * maxcos + side * .02826 * minsin - .1066)
 
         x, y, vx, vy, theta, omega = x_, y_, vx_, vy_, theta_, omega_
-    
+
+    x, y, vx, vy, theta, omega = tuple((a[0]-.01, a[1]+.01) for a in (x, y, vx, vy, theta, omega))
+
     return x, y, vx, vy, theta, omega
 
 def plot_io_bounds(x, y, vx, vy, theta, omega, a, steps):
     import matplotlib.pyplot as plt
+
 
     statebox = [x, y, vx, vy, theta, omega]
     centerstate = [box[0] + .5*(box[1] - box[0]) for box in statebox]
@@ -94,16 +96,17 @@ def plot_io_bounds(x, y, vx, vy, theta, omega, a, steps):
     envstatehist = np.array(envstatehist)
     stateboxhist = np.array(stateboxhist)
 
-    print(envstatehist.shape)
-    print(stateboxhist.shape)
-    
-
     t = np.linspace(0, steps, steps+1)
-    _, axs = plt.subplots(6,1)
+    fig, axs = plt.subplots(6,1)
 
+
+    limits = [[-1,1], [0,1], [-2.5, 2.5], [-5,3], [-np.pi/4, np.pi/4], [-1.5,1.5]]
     for i in range(6):
         axs[i].fill_between(t, stateboxhist[:, i, 0], stateboxhist[:,i,1],alpha=0.3)
         axs[i].plot(centerstatehist[:,i], 'r')
         axs[i].plot(envstatehist[:,i], 'b.')
+        axs[i].set_ylim(bottom=limits[i][0], top=limits[i][1])
+
+    axs[0].set_title('Action {0}'.format(a))
     plt.show()
 

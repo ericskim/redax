@@ -119,6 +119,13 @@ def test_dynamic_periodic():
     assert x.conc2pred(mgr, 'x', (0,20), 4, innerapprox=True) == x.conc2pred(mgr, 'x', (20,40), 4, innerapprox=False)
 
 
+    """
+    FIXME: Uncertainty in how to deal with this case. Options:
+    1) The 35 is mapped to a 15 so it's equivalent to the interval (5,15) 
+    2) One entire period (5, 25) is covered so we need to return an entire period
+    """
+    # assert x.conc2pred(mgr, 'x', (5, 35), 4, innerapprox=True) == mgr.true
+
 def test_fixed_regular():
 
     x = FixedCover(-3, 7, 13)

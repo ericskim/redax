@@ -35,13 +35,20 @@ class ControlPre():
         control: Collection of str
 
         """
+
+        try:
+            mod.check()
+        except:
+            import warnings
+            warnings.warn("Module does not pass check")
+
         self.sys = mod
 
         prepost = [(prepost[0], prepost[1]) for prepost in states]
 
-        if not {post for pre, post in prepost}.issubset(mod.outputs):
+        if not {post for _, post in prepost}.issubset(mod.outputs):
             raise ValueError("Unknown post state")
-        if not {pre for pre, post in prepost}.issubset(mod.inputs):
+        if not {pre for pre, _ in prepost}.issubset(mod.inputs):
             raise ValueError("Unknown pre state")
         if not {ctrl for ctrl in control}.issubset(mod.inputs):
             raise ValueError("Unknown control input")
@@ -105,7 +112,7 @@ class ControlPre():
         postbits = tuple(self.pre_to_post[_name(i)] + '_' + _idx(i) for i in bits)
         return {pre: post for pre, post in zip(bits, postbits)}
 
-    def __call__(self, Z, no_inputs=False):
+    def __call__(self, Z, no_inputs=False, verbose=False):
         r"""
         Compute controllable predecessor for target next state set.
 
@@ -137,6 +144,7 @@ class DecompCPre(ControlPre):
 
     def __init__(self, mod: CompositeModule, states, control, elim_order = None) -> None:
         
+        # Check if all modules aren't just a parallel composition
         if len(mod.sorted_mods()) > 2:
             raise NotImplementedError("Only implemented for parallel composed modules.")
 
@@ -165,7 +173,7 @@ class DecompCPre(ControlPre):
             Z = self.mgr.let(swapvars, Z)
 
         if self.elimorder is not None:
-            to_elim_post = self.elimorder
+            to_elim_post = [i for i in self.elimorder]
         else:
             to_elim_post = [i for i in self.poststate]
 
@@ -255,7 +263,10 @@ class SafetyGame():
             i = i + 1
 
             if verbose:
-                print("Step #: ", i, " Step Time (s): ", time.time() - step_start)
+                print("Step #: ", i, 
+                      " Step Time (s): {0:.3f}".format(time.time() - step_start), 
+                      "Size: ", self.cpre.mgr.count(z, len(z.support)),
+                      "Support: ", z.support)
 
         return z, i, MemorylessController(self.cpre, C)
 
@@ -277,7 +288,7 @@ class ReachGame():
         self.cpre = cpre
         self.target = target # TODO: Check if a subset of the state space
 
-    def run(self, steps=None, winning=None):
+    def run(self, steps=None, winning=None, verbose=False):
         """
         Run a reachability game until reaching a fixed point or a maximum number of steps.
 
@@ -287,6 +298,8 @@ class ReachGame():
             Maximum number of game steps to run
         winning: int
             Currently winning region
+        verbose: bool
+            If True (not default), then print out intermediate statistics.
 
         Returns
         -------
@@ -312,10 +325,17 @@ class ReachGame():
                 break
 
             zz = z
-            z = self.cpre(zz) | self.target # state-input pairs
+            step_start = time.time()
+            z = self.cpre(zz, verbose=verbose) | self.target # state-input pairs
             C = C | (z & (~self.cpre.elimcontrol(C))) # Add new state-input pairs to controller
             z = self.cpre.elimcontrol(z)
             i += 1
+
+            if verbose:
+                print("Step #: ", i, 
+                      " Step Time (s): ", time.time() - step_start, 
+                      "Size: ", self.cpre.mgr.count(z, len(z.support)),
+                      "Support: ", z.support)
 
         return z, i, MemorylessController(self.cpre, C)
 

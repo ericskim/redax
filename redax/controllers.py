@@ -6,6 +6,8 @@ Controller interface classes
 
 # from redax.synthesis import ControlPre, DecompCPre
 
+from redax.spaces import OutOfDomainError
+
 def _name(i):
     return i.split('_')[0]
 
@@ -44,9 +46,14 @@ class MemorylessController(SupervisoryController):
     def isempty(self):
         return self.C == self.cpre.mgr.false
 
-    def winning_states(self):
+    def winning_states(self, exclude=None):
         r"""
         Generates a state from the winning set
+
+        Parameters
+        ----------
+        exclude: bdd
+            Set of states to exclude.
 
         Returns
         -------
@@ -55,8 +62,12 @@ class MemorylessController(SupervisoryController):
         """
         winning = self.cpre.elimcontrol(self.C)
         
+        # assert exclude.support.issubset(winning.support)
+
+        exclude = self.cpre.mgr.false if exclude is None else None
+
         # Generate a winning point
-        for x_assignment in self.cpre.mgr.pick_iter(winning):
+        for x_assignment in self.cpre.mgr.pick_iter(winning & ~exclude):
             # Translate BDD assignment into concrete counterpart
             xval = dict()
             for xvar in self.cpre.prestate:
@@ -67,7 +78,7 @@ class MemorylessController(SupervisoryController):
             yield xval
 
 
-    def allows(self, state): # -> Generator[Dict[str, concretetype], None, None]
+    def allows(self, state): # -> Generator[Dict[str, Any], None, None]
         """
         Compute the set of allowed inputs associated with a state.
 
@@ -89,7 +100,11 @@ class MemorylessController(SupervisoryController):
         pt_bdd = self.cpre.mgr.true
         for k, v in state.items():
             nbits = len(self.cpre.sys.pred_bitvars[k])
-            pt_bdd &= self.cpre.prestate[k].pt2bdd(self.cpre.mgr, k, v, nbits)
+            try:
+                pt_bdd &= self.cpre.prestate[k].pt2bdd(self.cpre.mgr, k, v, nbits)
+            except OutOfDomainError:
+                print(k, v)
+                raise
 
         # TODO: To compute u should assign x variable... but this works
         xu = pt_bdd & self.C  # Safe state-input pairs

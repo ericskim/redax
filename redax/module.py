@@ -865,10 +865,16 @@ class CompositeModule(object):
     def hidden(self, var):
         raise NotImplementedError
 
-    def check(self):
+    def check(self, verbose=False):
         # Check consistency of children
         for child in self.children:
-            child.check()
+            try:
+                child.check()
+            except:
+                print(child)
+                raise
+            if verbose:
+                print("Passed :", child)
 
         if len(self.children) > 0:
             mgr = self.children[0].mgr

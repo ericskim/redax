@@ -46,7 +46,7 @@ pip install .
   - Visualization:
     - matplotlib
     - pyqtgraph
-  - Tests and Documentation:
+  - Testing and Documentation:
     - pytest
     - sphinx
 
@@ -147,7 +147,7 @@ The core foundations are working and providing meaningful results on some test e
 
 - Examples
   - lunar lander
-  - 3DOF ship
+    - Change to a reachability specification
   - Pair of dubins vehicles
 - (?) Recursive fixed points
 - Helper classes for different input-output overapproximation procedures
@@ -155,18 +155,16 @@ The core foundations are working and providing meaningful results on some test e
   - Mixed monotone
   - Random sampling in box with bloating
   - Box corners with bloating
+- Different iterators of input space
 - Tests for floating point inequalities for conc2abs method in continuous covers
   - Iterators for the 2^N reduced grid traversal
-- Upload to github and add code coverage, travis-ci banners
+- Upload to github and add code coverage, travis-ci
 - Rewrite continuous cover grid to have an overlap parameter.
 - source/sink module tests
 - Class for named spaces so we don't refer to variables via strings.
 - Lazy composition
-  - Refine internal modules
-    - Memoization and method to directly generate in-out predicates
   - conjoin information about modules
   - Support methods: Collapse to monolithic, split and give a collection, or something in the middle
-  - Atomic module vs composite. Existing one is atomic.
   - hide certain outputs
   - compose.py helper functions
 
