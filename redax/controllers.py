@@ -48,12 +48,12 @@ class MemorylessController(SupervisoryController):
 
     def winning_states(self, exclude=None):
         r"""
-        Generates a state from the winning set
+        Generator for states from the winning set.
 
         Parameters
         ----------
         exclude: bdd
-            Set of states to exclude.
+            Set of states to exclude from generation.
 
         Returns
         -------
@@ -64,7 +64,7 @@ class MemorylessController(SupervisoryController):
         
         # assert exclude.support.issubset(winning.support)
 
-        exclude = self.cpre.mgr.false if exclude is None else None
+        exclude = self.cpre.mgr.false if exclude is None else exclude
 
         # Generate a winning point
         for x_assignment in self.cpre.mgr.pick_iter(winning & ~exclude):

@@ -14,7 +14,7 @@ import itertools
 from toposort import toposort
 
 import redax.spaces as sp
-from redax.bvutils import flatten
+from redax.utils.bv import flatten
 from redax.spaces import OutOfDomainError
 
 
@@ -369,8 +369,7 @@ class AbstractModule(object):
         Generate for exhaustive search over the concrete input grid.
 
         #FIXME: Implementation assumes dictionary ordering is stable.
-        # This solution is very adhoc!!! Need to find a better way to
-        # accommodate keyword arguments
+        # This solution is very adhoc!!! Need to accommodate keyword arguments
 
         Parameters
         ----------
@@ -772,6 +771,15 @@ class CompositeModule(object):
                 inputs[var] = mod.inputs[var]
         return inputs
 
+    def nonblock(self):
+        if len(self.children) == 0:
+            raise RuntimeError("Should return false")
+
+        nb = self.children[0].mgr.true
+        for mod in self.children:
+            nb &= mod._nb
+        return nb
+    
     @property
     def _outputs(self):
         """Variables that are outputs to some module."""

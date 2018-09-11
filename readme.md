@@ -30,7 +30,8 @@ Ideally for:
 Clone this repo and run the following commands:
 
 ```shellscript
-# Setup script doesn't currently handle all dependency installation
+# Setup script doesn't currently handle all dependency installations.
+# Missing: pytest, sphinx, cudd
 cd /location/of/redax/here/
 pip install .
 ```
@@ -120,9 +121,10 @@ pip install .
 
   # Hide outputs
   Need a simpler example...
+  x = module.hidden('x')
 
   # Future feature: Compute lower complexity abstractions keeping only the most significant bits
-  simple_model = model.coarsen(x=3, y=4)
+  coarser_model = model.coarsen(x=3, y=4)
   ```
 
   Operations can also be chained together:
@@ -149,7 +151,7 @@ The core foundations are working and providing meaningful results on some test e
   - lunar lander
     - Change to a reachability specification
   - Pair of dubins vehicles
-- (?) Recursive fixed points
+- Make the dependencies on the bdd manager more explicit. Reordering with python's quasi-pass-by-value semantics and multiple managers is hard to deal with.
 - Helper classes for different input-output overapproximation procedures
   - Lipschitz
   - Mixed monotone

@@ -5,7 +5,7 @@ from functools import reduce
 from bidict import bidict
 
 from redax.controllers import MemorylessController
-from redax.bvutils import flatten
+from redax.utils.bv import flatten
 from redax.module import AbstractModule, CompositeModule
 
 # flatten = lambda l: [item for sublist in l for item in sublist]
@@ -316,7 +316,8 @@ class ReachGame():
 
         C = self.cpre.mgr.false
 
-        z = self.cpre.mgr.false if winning is None else winning
+
+        z = self.cpre.prespace() & self.target if winning is None else winning
         zz = self.cpre.mgr.true
 
         i = 0

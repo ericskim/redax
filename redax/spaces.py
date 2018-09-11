@@ -19,7 +19,7 @@ from dataclasses import dataclass, InitVar, field
 
 import numpy as np
 
-from redax.bvutils import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, bv2int, bintogray, graytobin, increment_bv, bv_interval
+from redax.utils.bv import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, bv2int, bintogray, graytobin, increment_bv, bv_interval
 
 class OutOfDomainError(Exception):
     pass
@@ -91,6 +91,9 @@ class DiscreteSet(SymbolicSet):
         Converts a bitvector into a concrete grid point
         """
         return bv2int(bv)
+
+    def conc_iter(self):
+        return range(self.num_vals)
 
 @dataclass(frozen=True)
 class EmbeddedGrid(DiscreteSet):

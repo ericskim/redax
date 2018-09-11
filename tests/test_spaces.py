@@ -2,7 +2,7 @@ import numpy as np
 from pytest import approx, raises
 
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover, DiscreteSet, OutOfDomainError
-from redax.bvutils import bv_interval, bvwindow, index_interval
+from redax.utils.bv import bv_interval, bvwindow, index_interval
 
 try:
     from dd.cudd import BDD
