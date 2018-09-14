@@ -6,7 +6,7 @@ build/
 *.cache
 *.egg-info
 *.code-workspace
-docs/**
+docs/_*
 **/*.png
 .mypy_cache/**
 *.txt

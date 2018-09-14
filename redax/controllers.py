@@ -78,7 +78,7 @@ class MemorylessController(SupervisoryController):
             yield xval
 
 
-    def allows(self, state): # -> Generator[Dict[str, Any], None, None]
+    def allows(self, state):
         """
         Compute the set of allowed inputs associated with a state.
 

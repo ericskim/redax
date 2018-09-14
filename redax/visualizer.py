@@ -184,6 +184,9 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
     # Construct bitmask
     mask = np.full((xbins, ybins, zbins), False)
 
+    config = mgr.configure()  # pick_iter alters config so save config state
+
+
     for pt in mgr.pick_iter(pred):
         xvars = [k for k, v in pt.items() if _name(k) == xname]
         yvars = [k for k, v in pt.items() if _name(k) == yname]
@@ -222,3 +225,5 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
     w.addItem(ax)
 
     QtGui.QApplication.instance().exec_()
+
+    mgr.configure(**config)  # Reinstate config state

@@ -179,11 +179,11 @@ class DecompCPre(ControlPre):
 
         while(len(to_elim_post) > 0):
             var = to_elim_post.pop()
-            # elimbits = tuple(i for i in implies_pred.support if _name(i) == var)
+            if verbose:
+                print("Eliminating", var, "with", len(self.mgr), "nodes in manager")
 
             # Partition into modules that do/don't depend on var
-            dep_mods = [mod for mod in self.sys.children if var in mod.outputs]
-            # indep_mods = [mod for mod in self.sys.children if var not in mod.outputs]
+            dep_mods = tuple(mod for mod in self.sys.children if var in mod.outputs)
 
             # Aggregate implication and construct nonblocking
             nb = self.mgr.true
@@ -192,17 +192,16 @@ class DecompCPre(ControlPre):
                 nb = nb & mod._nb
 
             Z = nb & self.elimpostslice(Z, var)
-            if verbose:
-                print("Eliminated ", var)
 
         # TODO: Assert Z's support is in the composite systems input range. Line below hasn't been checked
         # assert Z.support <= set(flatten([self.sys.pred_bitvars[v] for v in self.sys.inputs]))
 
-        # Eliminate
+        # Eliminate control inputs
         if no_inputs:
             return self.elimcontrol(Z)
         else:
             return Z
+
 
 class SafetyGame():
     """
@@ -259,14 +258,15 @@ class SafetyGame():
             step_start = time.time()
             zz = z
             C = self.cpre(zz, verbose=verbose) & self.safe
+            if verbose:
+                print("Eliminating control")
             z = self.cpre.elimcontrol(C)
             i = i + 1
 
             if verbose:
-                print("Step #: ", i, 
-                      " Step Time (s): {0:.3f}".format(time.time() - step_start), 
-                      "Size: ", self.cpre.mgr.count(z, len(z.support)),
-                      "Support: ", z.support)
+                print("Step #: ", i,
+                      "Step Time (s): {0:.3f}".format(time.time() - step_start), 
+                      "Size: ", self.cpre.mgr.count(z, len(z.support)))
 
         return z, i, MemorylessController(self.cpre, C)
 
@@ -329,16 +329,18 @@ class ReachGame():
             step_start = time.time()
             z = self.cpre(zz, verbose=verbose) | self.target # state-input pairs
             C = C | (z & (~self.cpre.elimcontrol(C))) # Add new state-input pairs to controller
-            z = self.cpre.elimcontrol(z)
+            if verbose:
+                print("Eliminating control")
+            z = self.cpre.elimcontrol(C)
             i += 1
 
             if verbose:
                 print("Step #: ", i, 
-                      " Step Time (s): ", time.time() - step_start, 
-                      "Size: ", self.cpre.mgr.count(z, len(z.support)),
-                      "Support: ", z.support)
+                      "Step Time (s): ", time.time() - step_start, 
+                      "Size: ", self.cpre.mgr.count(z, len(z.support)))
 
         return z, i, MemorylessController(self.cpre, C)
+
 
 
 class ReachAvoidGame():
@@ -358,14 +360,13 @@ class ReachAvoidGame():
 
     """
     
-    def __init__(self, sys, safe, target):
+    def __init__(self, cpre, safe, target):
         raise NotImplementedError("Needs to be refactored to take controllable predecessors")
-        self.cpre = ControlPre(sys)
+        self.cpre = cpre
         self.target = target  # TODO: Check if a subset of the state space
         self.safe = safe
-        self.sys = sys
 
-    def __call__(self, steps = None):
+    def run(self, steps = None):
         """
         Run a reach-avoid game until reaching a fixed point or a maximum number of steps.
 
@@ -402,12 +403,13 @@ class ReachAvoidGame():
             zz = z
             # z = (zz | self.cpre(zz, no_inputs = True) | self.target) & self.safe 
             z = (self.cpre(zz) & self.safe) | self.target # State input pairs
-            ubits = tuple(k for k in z.support if _name(k) in self.sys.control.keys())
+            ubits = tuple(k for k in z.support if _name(k) in self.cpre.control.keys())
             C = C | (z & (~self.cpre.mgr.exist(ubits , C))) # Add new state-input pairs to controller
             i += 1
-            z = self.cpre.mgr.exist(ubits , z)
+            # z = self.cpre.mgr.exist(ubits , z)
+            z = self.cpre.elimcontrol(z)
 
-        return z, i, MemorylessController(self.sys, C)
+        return z, i, MemorylessController(self.cpre, C)
 
 
 """

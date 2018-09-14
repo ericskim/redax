@@ -6,9 +6,9 @@ REDAX is a controller synthesis tool that constructs finite state machines that 
 
 - [About](#About)
 - [Installation](#installation)
-- [Features](#Distinguishing-Features)
-- [Notes](#Notes)
-- [References](#References)
+- [Features](#distinguishing-features)
+- [Notes](#notes)
+- [References](#references)
 
 ## About
 
@@ -120,7 +120,6 @@ pip install .
   m1 >> m2
 
   # Hide outputs
-  Need a simpler example...
   x = module.hidden('x')
 
   # Future feature: Compute lower complexity abstractions keeping only the most significant bits
@@ -149,7 +148,6 @@ The core foundations are working and providing meaningful results on some test e
 
 - Examples
   - lunar lander
-    - Change to a reachability specification
   - Pair of dubins vehicles
 - Make the dependencies on the bdd manager more explicit. Reordering with python's quasi-pass-by-value semantics and multiple managers is hard to deal with.
 - Helper classes for different input-output overapproximation procedures

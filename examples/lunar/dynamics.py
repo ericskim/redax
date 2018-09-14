@@ -17,8 +17,8 @@ def lander_dynamics(x, y, vx, vy, theta, omega, a):
 
     x_ = x + 0.0006301 * vx
     y_ = y + .0014062 * vy
-    vx_ = vx + thrust * -.2159 * sin + side * .04236 * cos
-    vy_ = vy + thrust *  .1439 * cos + side * .02826 * sin - .1066
+    vx_ = vx + thrust * 2 * -.2159 * sin + side * .04236 * cos
+    vy_ = vy + thrust * 2 * .1439 * cos + side * .02826 * sin - .1066
     theta_ = theta + .05 * omega
     omega_ = omega - side * .05598
 
@@ -44,19 +44,19 @@ def lander_box_dynamics(x, y, vx, vy, theta, omega, a, steps):
         minsin, maxsin = maxminsin(theta[0], theta[1])
 
         if side == 1:
-            vx_ = (vx[0] + thrust * -.2159 * maxsin + side * .04236 * mincos,
-                   vx[1] + thrust * -.2159 * minsin + side * .04236 * maxcos)
-            vy_ = (vy[0] + thrust *  .1439 * mincos + side * .02826 * minsin - .1066,
-                   vy[1] + thrust *  .1439 * maxcos + side * .02826 * maxsin - .1066)
+            vx_ = (vx[0] + thrust * 2 * -.2159 * maxsin + side * .04236 * mincos,
+                   vx[1] + thrust * 2 * -.2159 * minsin + side * .04236 * maxcos)
+            vy_ = (vy[0] + thrust * 2 *  .1439 * mincos + side * .02826 * minsin - .1066,
+                   vy[1] + thrust * 2 *  .1439 * maxcos + side * .02826 * maxsin - .1066)
         else: # side = -1 or 0
-            vx_ = (vx[0] + thrust * -.2159 * maxsin + side * .04236 * maxcos,
-                   vx[1] + thrust * -.2159 * minsin + side * .04236 * mincos)
-            vy_ = (vy[0] + thrust *  .1439 * mincos + side * .02826 * maxsin - .1066,
-                   vy[1] + thrust *  .1439 * maxcos + side * .02826 * minsin - .1066)
+            vx_ = (vx[0] + thrust * 2 * -.2159 * maxsin + side * .04236 * maxcos,
+                   vx[1] + thrust * 2 * -.2159 * minsin + side * .04236 * mincos)
+            vy_ = (vy[0] + thrust * 2 *  .1439 * mincos + side * .02826 * maxsin - .1066,
+                   vy[1] + thrust * 2 *  .1439 * maxcos + side * .02826 * minsin - .1066)
 
         x, y, vx, vy, theta, omega = x_, y_, vx_, vy_, theta_, omega_
 
-    x, y, vx, vy, theta, omega = tuple((a[0]-.01, a[1]+.01) for a in (x, y, vx, vy, theta, omega))
+    x, y, vx, vy, theta, omega = tuple((a[0]-.0001, a[1]+.0001) for a in (x, y, vx, vy, theta, omega))
 
     return x, y, vx, vy, theta, omega
 
@@ -97,8 +97,9 @@ def plot_io_bounds(x, y, vx, vy, theta, omega, a, steps):
     stateboxhist = np.array(stateboxhist)
 
     t = np.linspace(0, steps, steps+1)
-    fig, axs = plt.subplots(6,1)
+    fig, axs = plt.subplots(6,1, figsize=(3, 8))
 
+    # fig.set_size_inches(5,7,forward=True)
 
     limits = [[-1,1], [0,1], [-2.5, 2.5], [-5,3], [-np.pi/4, np.pi/4], [-1.5,1.5]]
     for i in range(6):
@@ -106,6 +107,8 @@ def plot_io_bounds(x, y, vx, vy, theta, omega, a, steps):
         axs[i].plot(centerstatehist[:,i], 'r')
         axs[i].plot(envstatehist[:,i], 'b.')
         axs[i].set_ylim(bottom=limits[i][0], top=limits[i][1])
+        axs[i].set_yticks(np.linspace(limits[i][0], limits[i][1], 17), minor=True)
+        axs[i].grid(which='minor', alpha = .4)
 
     axs[0].set_title('Action {0}'.format(a))
     plt.show()

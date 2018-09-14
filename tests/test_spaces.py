@@ -53,8 +53,9 @@ def test_dynamic_regular():
     # Some numerical sensitivity tests 
     assert x.box2indexwindow((-1.0, 1.0), 2, innerapprox=True) == (1, 2)
     assert x.box2indexwindow((-1.0, 1.0-.00001), 2, innerapprox=True) == (1, 1)
-    assert x.box2indexwindow((-1.0, 1.0+.00001), 2, innerapprox=True) == (1, 2)
+    assert x.box2indexwindow((-1.0-.00001, 1.0+.00001), 2, innerapprox=True) == (1, 2)
     assert x.box2indexwindow((-1.0 - .00001, 1.0+.00001), 2, innerapprox=False) == (0, 3)
+
 
     # BDD creation
     assert x.conc2pred(mgr, "x", (.4, .6), 1, True) == mgr.false
