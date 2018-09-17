@@ -15,137 +15,150 @@ from redax.module import AbstractModule, CompositeModule
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover, DiscreteSet
 from redax.synthesis import SafetyGame, ControlPre, DecompCPre, ReachGame
 from redax.controllers import MemorylessController
-from redax.visualizer import plot2D, plot3D, plot3D_QT
+from redax.visualizer import scatter2D, plot3D, plot3D_QT
 
-T = 8
+T = 12
 
 # Abstract
-precision = {'x': 6,     'y': 6,     'vx': 6,     'vy': 6,     'theta': 6,     'omega': 6,
-                'xnext': 6, 'ynext': 6, 'vxnext': 6, 'vynext': 6, 'thetanext': 6, 'omeganext': 6}
+precision = {'x': 7,     'y': 7,     'vx': 6,     'vy': 7,     'theta': 6,     'omega': 5,
+             'xnext': 7, 'ynext': 7, 'vxnext': 6, 'vynext': 7, 'thetanext': 6, 'omeganext': 5}
 statebits = sum([precision[s] for s in ['x', 'y', 'vx', 'vy', 'theta', 'omega']])
 
+states = ['x', 'y', 'vx', 'vy', 'theta', 'omega']
+nextstates = [i+'next' for i in states]
+
+# Helper for substituting different precision from the default.
+def replace(default, replacement):
+    return {k: replacement[k] if k in replacement else default[k]
+                                for k, v in default.items()
+            }
+
+# Each component depends on certain variables with different precision.
+sysview = {'x': replace(precision, {'vx':6, 'theta': 3, 'omega':3}),
+           'y': replace(precision, {'vy':6, 'theta': 3, 'omega':3}),
+           'vx': replace(precision, {'theta':6, 'omega':4}),
+           'vy': replace(precision, {'theta':6, 'omega':4}),
+           'theta': precision,
+           'omega': precision}
+
+
 def setup(init=False):
-    xspace = DynamicCover(-1, 1)
+    xspace = DynamicCover(-.4, .4)
     yspace = DynamicCover(0, 1)
-    vxspace = DynamicCover(-2, 2)
-    vyspace = DynamicCover(-3, 3)
-    thetaspace  = DynamicCover(-np.pi/4, np.pi/4, periodic=False)
-    omegaspace = DynamicCover(-1.5, 1.5)
+    vxspace = DynamicCover(-8, 8)
+    vyspace = DynamicCover(-8, 8)
+    thetaspace  = DynamicCover(-np.pi/2, np.pi/2, periodic=False)
+    omegaspace = DynamicCover(-3, 3)
     actionspace = DiscreteSet(4)
 
     mgr = BDD()
     mgr.configure(reordering=False)  # Reordering causes too much time overhead for minimal gain.
-    f_x = AbstractModule(mgr, {'x': xspace, 'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'xnext': xspace})
-    f_y = AbstractModule(mgr, {'y': yspace, 'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'ynext': yspace})
-    f_vx = AbstractModule(mgr, {'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'vxnext': vxspace})
-    f_vy = AbstractModule(mgr, {'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'vynext': vyspace})
-    f_theta = AbstractModule(mgr, {'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'thetanext': thetaspace})
-    f_omega = AbstractModule(mgr, {'omega': omegaspace, 'a': actionspace}, {'omeganext': omegaspace})
+    subsys = {}
+    # subsys['x'] = AbstractModule(mgr, {'x': xspace, 'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'xnext': xspace})
+    # subsys['y'] = AbstractModule(mgr, {'y': yspace, 'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'ynext': yspace})
+    subsys['x'] = AbstractModule(mgr, {'x': xspace, 'vx': vxspace, 'theta': thetaspace, 'a': actionspace}, {'xnext': xspace})
+    subsys['y'] = AbstractModule(mgr, {'y': yspace, 'vy': vyspace, 'theta': thetaspace, 'a': actionspace}, {'ynext': yspace})    
+    subsys['vx'] = AbstractModule(mgr, {'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'vxnext': vxspace})
+    subsys['vy'] = AbstractModule(mgr, {'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'vynext': vyspace})
+    subsys['theta'] = AbstractModule(mgr, {'theta': thetaspace, 'omega': omegaspace, 'a': actionspace}, {'thetanext': thetaspace})
+    subsys['omega'] = AbstractModule(mgr, {'omega': omegaspace, 'a': actionspace}, {'omeganext': omegaspace})
 
     # Coarse, but exhaustive abstraction of submodules.
     if init:
-        coarseness = {var: 4 for var in ['x', 'y', 'vx', 'vy', 'theta', 'omega']}
+        iter_coarseness = {var: 4 for var in states}
+        iter_coarseness = {'x': replace(iter_coarseness, {'vx':5, 'theta': 3, 'omega':3}),
+                           'y': replace(iter_coarseness, {'vy':5, 'theta': 3, 'omega':3}),
+                           'vx': iter_coarseness,
+                           'vy': iter_coarseness,
+                           'theta': replace(iter_coarseness, {'theta': 6, 'omega':6}),
+                           'omega': replace(iter_coarseness, {'omega':7})}
         initabs_start = time.time()
-        f_x = initial_abstract(f_x, coarseness)
-        mgr.reorder(order_heuristic(mgr))
-        f_y = initial_abstract(f_y, coarseness)
-        mgr.reorder(order_heuristic(mgr))
-        f_vx = initial_abstract(f_vx, coarseness)
-        mgr.reorder(order_heuristic(mgr))
-        f_vy = initial_abstract(f_vy, coarseness)
-        mgr.reorder(order_heuristic(mgr))
-        f_theta = initial_abstract(f_theta, coarseness)
-        mgr.reorder(order_heuristic(mgr))
-        f_omega = initial_abstract(f_omega, coarseness)
+        for i in states:
+            subsys[i] = coarse_abstract(subsys[i], iter_coarseness[i], sysview[i])
+
         mgr.reorder(order_heuristic(mgr))
         print("Initial Abstraction Time (s): ", time.time() - initabs_start)
 
-    f = CompositeModule((f_x, f_y, f_vx, f_vy, f_theta, f_omega))
+    return mgr, subsys
 
-    return mgr, f
-
-def bloat(box):
+def bloat(box, factor = .001):
+    assert factor > -1.0
     center = box[0] + .5 * (box[1]-box[0])
-    return box[0] - .001*(center - box[0]), box[1] + .001*(box[1] - center)
+    return box[0] - factor*(center - box[0]), box[1] + factor*(box[1] - center)
 
-def initial_abstract(f: AbstractModule, coarseness):
+def coarse_abstract(f: AbstractModule, iter_coarseness, save_precision):
     var_to_idx = {'xnext': 0, 'ynext': 1, 'vxnext': 2, 'vynext': 3, 'thetanext': 4, 'omeganext': 5}
     default_boxes = {'x': (-.01, .01), 'y': (.49, .51), 'vx': (-.01,.01), 'vy': (-.01,.01), 'theta': (-.01,.01), 'omega': (-.01,.01)}
-    iter = f.input_iter(precision=coarseness)
+    iter = f.input_iter(precision=iter_coarseness)
     for iobox in iter:
         # Lift arguments to a full dimension with default_boxes
         for arg in default_boxes:
             if arg not in iobox:
                 iobox[arg] = default_boxes[arg]
 
+        # Bloat inputs for numerical precision, just in case.
         for k, v in iobox.items():
             if isinstance(v, tuple):
                 iobox[k] = bloat(v)
 
+        # Overapproximate
         s = lander_box_dynamics(steps=T, **iobox)
         out = {var: s[var_to_idx[var]] for var in f.outputs}  # Extract output dimension box
+        out = {k, bloat(v, factor=-.002) for k, v in out.items()}
         iobox.update(out)
         iobox = {k: v for k, v in iobox.items() if k in f.vars}  # Filter unnecessary input/output slices. 
 
-        f = f.io_refined(iobox, nbits=precision)
+        f = f.io_refined(iobox, nbits=save_precision)
         f.check()
 
     print("Done coarse abs: ", f.outputs)
 
     return f
 
-def abstract(f, samples=0, maxboxscale = 1.0):
+def abstract(subsys, samples=0, maxboxscale = 1.0):
 
-    f.children[0].mgr.configure(reordering=False)
+    subsys['x'].mgr.configure(reordering=False)
+    
     abs_starttime = time.time()
     for numapplied in range(samples):
         # Shrink window widths over time
         scale = maxboxscale / np.log10(numapplied+20)
 
         # Generate random input windows and points
-        f_width = {'x':     scale*f['x'].width(),
-                   'y':     scale*f['y'].width(),
-                   'vx': .8*scale*f['vx'].width(),
-                   'vy': .8*scale*f['vy'].width(),
-                   'theta': .5*scale*f['theta'].width(),
-                   'omega': .5*scale*f['omega'].width()}
-        f_left = {'x':     f['x'].lb + np.random.rand() * (f['x'].width() - f_width['x']),  # (xspace.width() - f_width['x']),
-                  'y':     f['y'].lb + np.random.rand() * (f['y'].width() - f_width['y']),  # (yspace.width() - f_width['y']),
-                  'vx': f['vx'].lb + np.random.rand() * (f['vx'].width() - f_width['vx']),
-                  'vy': f['vy'].lb + np.random.rand() * (f['vy'].width() - f_width['vy']),
-                  'theta': f['theta'].lb + np.random.rand() * (f['theta'].width() - f_width['theta']),
-                  'omega': f['omega'].lb + np.random.rand() * (f['omega'].width() - f_width['omega'])}
-        f_right = {k: f_width[k] + f_left[k] for k in f_width}
-        iobox = {'a': np.random.randint(0, 4)}
-        iobox.update({k: (f_left[k], f_right[k]) for k in f_width})
+        f_width = {'x':     scale*subsys['x']['x'].width(),
+                   'y':     scale*subsys['y']['y'].width(),
+                   'vx': scale*subsys['vx']['vx'].width(),
+                   'vy': scale*subsys['vy']['vy'].width(),
+                   'theta': scale*subsys['theta']['theta'].width(),
+                   'omega': scale*subsys['omega']['omega'].width()}
+        f_left = {k: subsys[k][k].lb + np.random.rand() * (subsys[k][k].width() - f_width[k]) for k in states}
+        f_right = {k: f_width[k] + f_left[k] for k in states}
+        iobox = {'a': numapplied % 4}
+        iobox.update({k: (f_left[k], f_right[k]) for k in states})
 
         # Simulate and overapprox
-        states = {k: v for k, v in iobox.items() if k is not 'a'}
-        s = lander_box_dynamics(steps=T, a=iobox['a'], **states)
-        out = {i: j for i, j in zip(f.outputs, s)}
+        stateboxes = {k: v for k, v in iobox.items() if k is not 'a'}
+        s = lander_box_dynamics(steps=T, a=iobox['a'], **stateboxes)
+        
+        out = {i: j for i, j in zip(nextstates, s)}
+        out = {k, bloat(v, factor=-.002) for k, v in out.items()} ## Shrink output box ever so slightly.
         iobox.update(out)
 
-        # plot_io_bounds(**states, steps=T, a=iobox['a'])
-        # print(states)
+        # plot_io_bounds(**stateboxes, steps=T, a=iobox['a'])
+        # print(stateboxes)
 
-        # Refine
-        f = f.io_refined(iobox, nbits = precision)
+        # Refine modules each with custom precision viewpoints
+        # for s in ['vx', 'vy', 'theta', 'omega']:
+        for s in states:
+            filtered_io = {k: v for k, v in iobox.items() if k in subsys[s].vars}
+            subsys[s] = subsys[s].io_refined(filtered_io, nbits=sysview[s])
 
-        if numapplied % 400 == 399:
-            print("Sample: {0}  Time: {1}, # Nodes: {2}  Scale: {3}".format(numapplied+1, time.time() - abs_starttime, len(f.children[0].mgr), scale))
+        if numapplied % 2000 == 1999:
+            print("Sample: {0}  Time: {1}, # Nodes: {2}  Scale: {3}".format(numapplied+1, time.time() - abs_starttime, len(subsys['x'].mgr), scale))
 
     print("Abs Time: ", time.time() - abs_starttime)
 
-    return f
-
-def varorder(m: BDD):
-    """
-    BDD variable ordering in manager
-    """
-    from bidict import bidict
-
-    lvls = bidict(m.var_levels).inv
-    return [lvls[i] for i in range(len(lvls))]
+    return subsys
 
 def synthesize_safe(f, safe, steps=None):
 
@@ -184,9 +197,6 @@ def synthesize_reach(f, target):
 
 def simulate(controller: MemorylessController, exclude=None):
 
-    # FIXME: THIS FUNCTION SOMEHOW MUTATES THE MANAGER STATE TO ALLOW REORDERING.
-    # pick_iter causes the reordering to flip back to true.
-
     if not controller.isempty():
 
         from lunar_lander import LunarLander
@@ -198,9 +208,6 @@ def simulate(controller: MemorylessController, exclude=None):
 
         state = fn.first(controller.winning_states(exclude=exclude))
         state = {k: .5*(v[0] + v[1]) for k, v in state.items()}
-        state = {k: 0 for k in state}
-        state['vy'] = 1.0
-        state['y'] = .5
         ordered_state = [state[v] for v in ['x', 'y', 'vx', 'vy', 'theta', 'omega']]
         env.reset(ordered_state)
 
@@ -209,7 +216,7 @@ def simulate(controller: MemorylessController, exclude=None):
             if u is None:
                 print("No safe control inputs for state {}".format(state))
                 env.close()
-                f.children[0].mgr.configure(reordering=False)  # BUG: mgr.pick_iter toggles reordering  to True
+                f.children[0].mgr.configure(reordering=False)  # BUG: mgr.pick_iter toggles reordering to True
                 return
             picked_u = {'a': u['a']}
 
@@ -219,9 +226,9 @@ def simulate(controller: MemorylessController, exclude=None):
             for i in range(T):
                 s, _, _, _ = env.step(picked_u['a'])
                 env.render()
-                time.sleep(.05)
+                time.sleep(.03)
             
-            state = {v: s[idx] for idx, v in enumerate(['x', 'y', 'vx', 'vy', 'theta', 'omega'])}
+            state = {v: s[idx] for idx, v in enumerate(states)}
 
         env.close()
         return
@@ -246,16 +253,16 @@ def order_heuristic(mgr):
 if __name__ is "__main__":
     
     # Run setup only on startup or if user sets cleanse option.
-    init = True
+    init = False
     try:
-        f
+        subsys
         mgr
         import sys
         if "-c" in sys.argv:
-            mgr, f = setup(init=init)
+            mgr, subsys = setup(init=init)
             abs_iters = 0
     except NameError:
-        mgr, f = setup(init=init)
+        mgr, subsys = setup(init=init)
         abs_iters = 0
 
     epoch = 0
@@ -263,69 +270,90 @@ if __name__ is "__main__":
     # mgr.configure(reordering=False)
     # mgr.reorder(order_heuristic(mgr))
 
-    while(epoch < 5):
+    while(epoch < 6):
         print("Epoch:", epoch)
         print(mgr)
-        N = 3000
-        boxscale = (epoch+1)**(-1/4)
-        f = abstract(f, samples=N, maxboxscale=boxscale)
+        N = 8000
+        boxscale = .8*(epoch+1)**(-1/4)
+        subsys = abstract(subsys, samples=N, maxboxscale=boxscale)
         abs_iters += N
 
+        for state in states:
+            print("System", state, "predicate size", len(subsys[state].pred))
+
         if epoch == 0:
-            print("Manager Nodes: ", len(mgr))
+            print("Nodes before reordering:", len(mgr))
             mgr.configure(reordering=False)
             mgr.reorder(order_heuristic(mgr))
+            print("Nodes after reordering:", len(mgr))
 
-        print("Manager config:", mgr.configure())
 
         # # Solve reach operations
-        # target = f['x'].conc2pred(mgr, 'x', (0, .6), 5, innerapprox=True)
+        # f = CompositeModule(tuple(subsys[i] for i in states))
+        # target = f['x'].conc2pred(mgr, 'x', (0, .3), 5, innerapprox=True)
         # target &= f['y'].conc2pred(mgr, 'y', (.5, .8), 5, innerapprox=True)
         # target &= f['theta'].conc2pred(mgr, 'theta', (-.2, .2), 5, innerapprox=True)
         # target &= f['vy'].conc2pred(mgr, 'vy', (1,2.5), 5, innerapprox=True)
+        # print("Target Size:", mgr.count(target, statebits))
         # controller, steps = synthesize_reach(f, target)
         # simulate(controller, exclude=target)
         # print("Mgr after simulate:", mgr.configure())
 
         # Solve safety operations
-        safe = f['x'].conc2pred(mgr, 'x', (-.75, .75), 6, innerapprox=True)
-        safe &= f['y'].conc2pred(mgr, 'y', (.25, .75), 6, innerapprox=True)
-        safe &= f['theta'].conc2pred(mgr, 'theta', (-.5, .5), 6, innerapprox=True)
-        controller, steps = synthesize_safe(f, safe, steps=2)
+        # f = CompositeModule(tuple(subsys[i] for i in states))
+        # safe = f['x'].conc2pred(mgr, 'x', (-.3, .3), 6, innerapprox=True)
+        # safe &= f['y'].conc2pred(mgr, 'y', (.20, .80), 6, innerapprox=True)
+        # safe &= f['theta'].conc2pred(mgr, 'theta', (-1, 1), 6, innerapprox=True)
+        # print("Safe Size:", mgr.count(safe, statebits))
+        # controller, steps = synthesize_safe(f, safe)
         # simulate(controller)
 
-        # if not controller.isempty():
-        #     break
         epoch += 1
 
         print("\n\n")
 
-    # a_bdd = mgr.var('a_0') & mgr.var('a_1')
-    # prednb = mgr.exist(['a_0', 'a_1'],(f.children[4].nonblock()) & a_bdd)
-    # nbpred = mgr.exist(['a_0', 'a_1'],(f.children[4]._nb) & a_bdd)
-    # assert prednb == nbpred
-    # plot2D(mgr, ('theta', f['theta']) , ('omega', f['omega']), prednb)
+    # Plot omega component
+    # a_bdd = ~mgr.var('a_0') & mgr.var('a_1')
+    # pred = mgr.exist(['a_0', 'a_1'], subsys['omega'].pred & a_bdd)
+    # scatter2D(mgr, ('omega', subsys['omega']['omega']),
+    #                ('omeganext', subsys['omega']['omeganext']),
+    #                pred , 70)
 
-    # # # Plot theta component
-    a_bdd = mgr.var('a_0') & mgr.var('a_1')
-    pred = mgr.exist(['a_0', 'a_1'], f.children[4].pred & a_bdd)
-    plot3D_QT(mgr, ('theta', f['theta']),
-                   ('omega', f['omega']),
-                   ('thetanext', f['thetanext']),
-                   pred , 70)
-    mgr.configure(reordering=False)
+    # Plot theta component
+    # a_bdd = mgr.var('a_0') & ~mgr.var('a_1')
+    # pred = mgr.exist(['a_0', 'a_1'], subsys['theta'].pred & a_bdd)
+    # plot3D_QT(mgr, ('theta', subsys['theta']['theta']),
+    #                ('omega', subsys['theta']['omega']),
+    #                ('thetanext', subsys['theta']['thetanext']),
+    #                pred , 70)
 
-    # # # Plot vx component 
+    # Plot vy component
     a_bdd = mgr.var('a_0') & ~mgr.var('a_1')
-    omega_bdd = mgr.var('omega_0') & ~mgr.var('omega_1') & mgr.var('omega_2') & mgr.var('omega_3') & ~mgr.var('omega_4') &  ~mgr.var('omega_5')
-    elimvars = ['a_'+str(i) for i in [0,1]] + ['omega_'+str(i) for i in range(6)]
-    pred = mgr.exist(elimvars, f.children[3].pred & a_bdd & omega_bdd)
-    plot3D_QT(mgr, ('vy', f['vy']),
-                   ('theta', f['theta']),
-                   ('vynext', f['vynext']),
+    omega_bdd = mgr.var('omega_0') & ~mgr.var('omega_1') & ~mgr.var('omega_2') & ~mgr.var('omega_3') & ~mgr.var('omega_4')# &  ~mgr.var('omega_5')
+    elimvars = ['a_'+str(i) for i in [0,1]] + ['omega_'+str(i) for i in range(5)]
+    pred = mgr.exist(elimvars, subsys['vy'].pred & a_bdd & omega_bdd)
+    plot3D_QT(mgr, ('vy', subsys['vy']['vy']),
+                   ('theta', subsys['vy']['theta']),
+                   ('vynext', subsys['vy']['vynext']),
                    pred , 70)
-    mgr.configure(reordering=False)
 
+    # Plot vx component wrt vx, theta
+    a_bdd = mgr.var('a_0') & ~mgr.var('a_1')
+    omega_bdd = mgr.var('omega_0') & ~mgr.var('omega_1') & ~mgr.var('omega_2') & ~mgr.var('omega_3') & ~mgr.var('omega_4')# &  ~mgr.var('omega_5')
+    elimvars = ['a_'+str(i) for i in [0,1]] + ['omega_'+str(i) for i in range(5)]
+    pred = mgr.exist(elimvars, subsys['vx'].pred & a_bdd & omega_bdd)
+    plot3D_QT(mgr, ('vx', subsys['vx']['vx']),
+                ('theta', subsys['vx']['theta']),
+                ('vxnext', subsys['vx']['vxnext']),
+                pred , 70)
 
-    for i in range(6):
-        print(len(f.children[i].pred))
+    # Plot x component wrt x, vx. Ideally should see some dependence on vx.
+    a_bdd = mgr.var('a_0') & ~mgr.var('a_1')
+    # omega_bdd = mgr.var('omega_0') & ~mgr.var('omega_1') & ~mgr.var('omega_2') & ~mgr.var('omega_3') & ~mgr.var('omega_4')# &  ~mgr.var('omega_5')
+    theta_bdd = mgr.var('theta_0') & ~mgr.var('theta_1') & ~mgr.var('theta_2') & ~mgr.var('theta_3') & ~mgr.var('theta_4')# &  ~mgr.var('omega_5')
+    elimvars = (a_bdd & omega_bdd).support
+    pred = mgr.exist(elimvars, subsys['x'].pred & a_bdd & theta_bdd)# & omega_bdd)
+    plot3D_QT(mgr, ('x', subsys['x']['x']),
+                ('vx', subsys['x']['vx']),
+                ('xnext', subsys['x']['xnext']),
+                pred , 70)

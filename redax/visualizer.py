@@ -30,11 +30,77 @@ def dynamicperiodic(space):
         return True
     return False
 
+def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None):
+    """
+    Plot a 2D set represented by a predicate as a pixel image.
+
+    Parameters
+    ----------
+    mgr : dd manager
+    xspace : tuple (str, symbolic space)
+        horizontal axis name and space
+    yspace : tuple (str, symbolic space)
+        vertical axis name and space
+    pred : bdd
+        Predicate representing set over xspace and yspace
+
+    Returns
+    -------
+    matplotlib figure
+    matplotlib axis
+
+    """
+
+    xname, xgrid = xspace
+    yname, ygrid = yspace
+
+    support = pred.support
+    xbits = len([bit for bit in support if _name(bit) == xname])
+    ybits = len([bit for bit in support if _name(bit) == yname])
+    xbins = 2**xbits
+    ybins = 2**ybits
+
+    mask = np.full((xbins, ybins), 0, dtype=np.int8)
+
+    xpts = []
+    ypts = []
+
+    config = mgr.configure()  # pick_iter alters config so save config state
+    # Add all BDD assignments to a list of points
+    for pt in mgr.pick_iter(pred):
+        xvars = [k for k, v in pt.items() if _name(k) == xname]
+        yvars = [k for k, v in pt.items() if _name(k) == yname]
+        xvars.sort()  # Sort by bit names
+        yvars.sort()
+
+        xbv = [pt[bit] for bit in xvars]
+        ybv = [pt[bit] for bit in yvars]
+
+        bv2int(xbv)
+        mask[bv2int(ybv), bv2int(xbv)] = 111
+    mgr.configure(reordering=config['reordering'])  # Reinstate config state
+
+    fig, ax = plt.subplots()
+    ax.pcolormesh(mask)
+
+    # ax.set_xlim(xgrid.lb, xgrid.ub)
+    ax.set_xlabel(xname)
+    # ax.set_ylim(ygrid.lb, ygrid.ub)
+    ax.set_ylabel(yname)
+    if title:
+        ax.set_title(title)
+    if fname is not None:
+        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        fig.savefig(str(fname)+'.png', dpi=400, bbox_inches=extent.expanded(1.1, 1.2))
+    else:
+        plt.show()
+
+    # return fig, ax
 
 # Organize into bitvectors
-def plot2D(mgr, xspace, yspace, pred, title=None, fname=None):
+def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None):
     """
-    Plot a 2D set represented by a predicate.
+    Plot a 2D set represented by a predicate as a scatter plot.
 
     Parameters
     ----------
@@ -58,6 +124,7 @@ def plot2D(mgr, xspace, yspace, pred, title=None, fname=None):
     xpts = []
     ypts = []
 
+    config = mgr.configure()  # pick_iter alters config so save config state
     # Add all BDD assignments to a list of points
     for pt in mgr.pick_iter(pred):
         xvars = [k for k, v in pt.items() if _name(k) == xname]
@@ -70,6 +137,7 @@ def plot2D(mgr, xspace, yspace, pred, title=None, fname=None):
 
         xpts.append(xgrid.bv2conc(xbv))
         ypts.append(ygrid.bv2conc(ybv))
+    mgr.configure(reordering=config['reordering'])  # Reinstate config state
 
     fig, ax = plt.subplots()
     ax.scatter(xpts, ypts)
@@ -90,7 +158,7 @@ def plot2D(mgr, xspace, yspace, pred, title=None, fname=None):
 
 
 def plot3D(mgr, xspace, yspace, zspace, pred, 
-           opacity=40, view=None, title=None, fname=False):
+           opacity=40, view=None, title=None, fname=None):
     """Matplotlib based plotter with voxels"""
     voxelcolors = '#7A88CC' + format(opacity, "02x")
     edgecolors = '#000000' + format(opacity // 3, "02x")
@@ -112,6 +180,8 @@ def plot3D(mgr, xspace, yspace, zspace, pred,
     y = (y * (ygrid.ub - ygrid.lb)/ybins) + ygrid.lb
     z = (z * (zgrid.ub - zgrid.lb)/zbins) + zgrid.lb
 
+    config = mgr.configure()  # pick_iter alters config so save config state
+
     # Construct bitmask
     mask = np.full((xbins, ybins, zbins), False)
     for pt in mgr.pick_iter(pred):
@@ -132,6 +202,8 @@ def plot3D(mgr, xspace, yspace, zspace, pred,
 
         mask[x_idx, y_idx, z_idx] = True
 
+    mgr.configure(reordering=config['reordering'])  # Reinstate config state
+
     fig = plt.figure()
     ax = fig.gca(projection='3d')
     ax.voxels(x, y, z, mask, facecolors=voxelcolors, edgecolor=edgecolors)
@@ -142,11 +214,13 @@ def plot3D(mgr, xspace, yspace, zspace, pred,
         ax.view_init(view[0], view[1])
     if title:
         ax.set_title(title)
-    if fname is not None:
+    if fname:
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         fig.savefig(str(fname)+'.png', dpi=400, bbox_inches=extent.expanded(1.1, 1.2))
     else:
         plt.show()
+
+
 
     # return fig, ax
 
@@ -226,4 +300,4 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
 
     QtGui.QApplication.instance().exec_()
 
-    mgr.configure(**config)  # Reinstate config state
+    mgr.configure(reordering=config['reordering'])  # Reinstate config state

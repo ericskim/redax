@@ -296,7 +296,7 @@ class LunarLander(gym.Env):
                 m_power = (np.clip(action[0], 0.0,1.0) + 1.0)*0.5   # 0.5..1.0
                 assert m_power>=0.5 and m_power <= 1.0
             else:
-                m_power = 2.0  # default is 1.0, changed so that the thrust engine is more powerful
+                m_power = 1.0  # default is 1.0, changed so that the thrust engine is more powerful
             ox =  tip[0]*(4/SCALE + 2*dispersion[0]) + side[0]*dispersion[1]   # 4 is move a bit downwards, +-2 for randomness
             oy = -tip[1]*(4/SCALE + 2*dispersion[0]) - side[1]*dispersion[1]
             impulse_pos = (self.lander.position[0] + ox, self.lander.position[1] + oy)
@@ -443,31 +443,43 @@ def heuristic(env, s):
 if __name__=="__main__":
     import sys
     action = None
+
+    # env = LunarLander()
+    env = LunarLanderContinuous()
+
     if len(sys.argv) == 2:
         action = int(sys.argv[1])
-    env = LunarLander()
-    # env = LunarLanderContinuous()
+
     env.seed(1337)
-    state = (-.3,.8,-.2,.1,.2*np.pi/4,-.1)
+    state = (.3,.8,-0,0,0,0)
     # print("Assigned State: ", state)
     s = env.reset(state)
     # print(s)
     total_reward = 0
     steps = 0
     import time
+
+    # Discrete action count
+    action_count = {i: 0 for i in range(4)}
+
     while True:
-        if steps >= 40:
+        if steps >= 400:
             break
         if action is None:
-            a = heuristic(env, s)
+            if steps % 1 == 0:
+                a = heuristic(env, s)
         else:
-            a = action
+            if not env.continuous and steps % 1 == 0:
+                a = action
+        if not env.continuous:
+            action_count[a] += 1
         s, r, done, info = env.step(a)
         s = np.hstack((s,a))
-        env.render(); time.sleep(.02)
+        env.render(); time.sleep(.01)
         total_reward += r
-        if steps % 1 == 0 or done:
+        if steps % 12 == 0 or done:
             print("steps: {}".format(steps), ["{:+0.9f}".format(x) for x in s])
+            # time.sleep(.3)
             # print("step {} total_reward {:+0.2f}".format(steps, total_reward))
         steps += 1
         if done: break

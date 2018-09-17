@@ -7,9 +7,13 @@ import numpy as np
 from redax.utils.overapprox import maxmincos, maxminsin
 from lunar_lander import LunarLander
 
+thrust_mult = 1.0
+side_mult = 1.0
+
 def lander_dynamics(x, y, vx, vy, theta, omega, a):
     
     thrust = 1 if a == 2 else 0
+    thrust *= thrust_mult
     side = a - 2 if a in [1, 3] else 0
 
     cos = np.cos(theta)
@@ -17,8 +21,8 @@ def lander_dynamics(x, y, vx, vy, theta, omega, a):
 
     x_ = x + 0.0006301 * vx
     y_ = y + .0014062 * vy
-    vx_ = vx + thrust * 2 * -.2159 * sin + side * .04236 * cos
-    vy_ = vy + thrust * 2 * .1439 * cos + side * .02826 * sin - .1066
+    vx_ = vx + thrust * -.2159 * sin + side * .04236 * cos
+    vy_ = vy + thrust * .1439 * cos + side * .02826 * sin - .1066
     theta_ = theta + .05 * omega
     omega_ = omega - side * .05598
 
@@ -33,6 +37,7 @@ def lander_box_dynamics(x, y, vx, vy, theta, omega, a, steps):
     for _ in range(1, steps + 1):
 
         thrust = 1 if a == 2 else 0
+        thrust *= thrust_mult
         side = a - 2 if a in [1, 3] else 0
 
         x_ = (x[0] + 0.0006301 * vx[0], x[1] + 0.0006301 * vx[1])
@@ -44,15 +49,15 @@ def lander_box_dynamics(x, y, vx, vy, theta, omega, a, steps):
         minsin, maxsin = maxminsin(theta[0], theta[1])
 
         if side == 1:
-            vx_ = (vx[0] + thrust * 2 * -.2159 * maxsin + side * .04236 * mincos,
-                   vx[1] + thrust * 2 * -.2159 * minsin + side * .04236 * maxcos)
-            vy_ = (vy[0] + thrust * 2 *  .1439 * mincos + side * .02826 * minsin - .1066,
-                   vy[1] + thrust * 2 *  .1439 * maxcos + side * .02826 * maxsin - .1066)
+            vx_ = (vx[0] + thrust * -.2159 * maxsin + side * .04236 * mincos,
+                   vx[1] + thrust * -.2159 * minsin + side * .04236 * maxcos)
+            vy_ = (vy[0] + thrust *  .1439 * mincos + side * .02826 * minsin - .1066,
+                   vy[1] + thrust *  .1439 * maxcos + side * .02826 * maxsin - .1066)
         else: # side = -1 or 0
-            vx_ = (vx[0] + thrust * 2 * -.2159 * maxsin + side * .04236 * maxcos,
-                   vx[1] + thrust * 2 * -.2159 * minsin + side * .04236 * mincos)
-            vy_ = (vy[0] + thrust * 2 *  .1439 * mincos + side * .02826 * maxsin - .1066,
-                   vy[1] + thrust * 2 *  .1439 * maxcos + side * .02826 * minsin - .1066)
+            vx_ = (vx[0] + thrust * -.2159 * maxsin + side * .04236 * maxcos,
+                   vx[1] + thrust * -.2159 * minsin + side * .04236 * mincos)
+            vy_ = (vy[0] + thrust *  .1439 * mincos + side * .02826 * maxsin - .1066,
+                   vy[1] + thrust *  .1439 * maxcos + side * .02826 * minsin - .1066)
 
         x, y, vx, vy, theta, omega = x_, y_, vx_, vy_, theta_, omega_
 
@@ -62,7 +67,6 @@ def lander_box_dynamics(x, y, vx, vy, theta, omega, a, steps):
 
 def plot_io_bounds(x, y, vx, vy, theta, omega, a, steps):
     import matplotlib.pyplot as plt
-
 
     statebox = [x, y, vx, vy, theta, omega]
     centerstate = [box[0] + .5*(box[1] - box[0]) for box in statebox]

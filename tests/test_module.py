@@ -289,11 +289,11 @@ def test_sin_sqrt_comp():
     assert sinroot.pred != mgr.false
     sinroot.check() 
 
-    # from redax.visualizer import plot2D
-    # plot2D(mgr, ('sin', sinin), ('sout', sqrtout), comp.children[0].pred)
-    # plot2D(mgr, ('sin', sinin), ('sout', sqrtout), comp.children[0].coarsened(sout = 6, sin = 6) .pred)
-    # plot2D(mgr, ('sout', sqrtout), ('sqrt', sqrtout), comp.children[1].pred)
-    # plot2D(mgr, ('sin', sinin), ('sqrt', sqrtout), sinroot.pred)
+    # from redax.visualizer import scatter2D
+    # scatter2D(mgr, ('sin', sinin), ('sout', sqrtout), comp.children[0].pred)
+    # scatter2D(mgr, ('sin', sinin), ('sout', sqrtout), comp.children[0].coarsened(sout = 6, sin = 6) .pred)
+    # scatter2D(mgr, ('sout', sqrtout), ('sqrt', sqrtout), comp.children[1].pred)
+    # scatter2D(mgr, ('sin', sinin), ('sqrt', sqrtout), sinroot.pred)
 
 def test_composite_module_topology():
 

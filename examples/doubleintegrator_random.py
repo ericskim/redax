@@ -17,7 +17,7 @@ import funcy as fn
 from redax.module import AbstractModule, CompositeModule
 from redax.spaces import DynamicCover
 from redax.synthesis import SafetyGame, ControlPre, DecompCPre
-from redax.visualizer import plot2D, plot3D, plot3D_QT
+from redax.visualizer import scatter2D, plot3D, plot3D_QT, pixel2D
 
 
 ts = .2
@@ -146,7 +146,8 @@ for nbits in [6]:
     print("Solver Steps: ", steps)
     print("Safe Size:", system.mgr.count(safe, p_precision + v_precision))
     print("Invariant Size:", system.mgr.count(inv,  p_precision + v_precision))
-    # plot2D(system.mgr, ('v', vspace), ('p', pspace), inv)
+    scatter2D(system.mgr, ('v', vspace), ('p', pspace), inv)
+
 # plot3D_QT(system.mgr, ('p', vspace), ('v', aspace), ('pnext', vspace), pcomp.pred, 128)
 # plot3D_QT(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
 
