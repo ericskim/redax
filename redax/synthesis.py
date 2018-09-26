@@ -185,10 +185,13 @@ class DecompCPre(ControlPre):
             # Partition into modules that do/don't depend on var
             dep_mods = tuple(mod for mod in self.sys.children if var in mod.outputs)
 
-            # Aggregate implication and construct nonblocking
+            # Find Z bit precision. 
+            Z_var_bits = len([b for b in Z.support if _name(b) == var])
+
+            # Aggregate implication and construct nonblocking set
             nb = self.mgr.true
             for mod in dep_mods:
-                Z = ~mod.pred | Z
+                Z = ~(mod.coarsened(**{var: Z_var_bits})).pred | Z
                 nb = nb & mod._nb
 
             Z = nb & self.elimpostslice(Z, var)
@@ -246,18 +249,23 @@ class SafetyGame():
         if steps is not None:
             assert steps >= 0
 
-        C = self.cpre.mgr.false
+        
 
         z = self.cpre.prespace() & self.safe if winning is None else winning
         zz = self.cpre.mgr.false
 
+        C = self.cpre.mgr.false
+
         i = 0
+        synth_start = time.time()
         while (z != zz):
             if steps and i == steps:
                 break
             step_start = time.time()
             zz = z
-            C = self.cpre(zz, verbose=verbose) & self.safe
+            z = self.cpre(zz, verbose=verbose) & self.safe
+
+            C = z
             if verbose:
                 print("Eliminating control")
             z = self.cpre.elimcontrol(C)
@@ -266,7 +274,70 @@ class SafetyGame():
             if verbose:
                 print("Step #: ", i,
                       "Step Time (s): {0:.3f}".format(time.time() - step_start), 
-                      "Size: ", self.cpre.mgr.count(z, len(z.support)))
+                      "Winning Size:", self.cpre.mgr.count(z, len(z.support)),
+                      "Winning nodes:", len(z))
+
+        return z, i, MemorylessController(self.cpre, C)
+
+
+class OptimisticSafetyGame(SafetyGame):
+    """
+    Just like a safety game but returns a "best effort controller" that should work if the adversary isn't too strong.
+    """
+
+    def run(self, steps=None, winning=None, verbose=False):
+        """
+        Run a safety game until reaching a fixed point or a maximum number of steps.
+
+        Parameters
+        ----------
+        steps: int
+            Maximum number of game steps to run
+        winning: int
+            Currently winning region
+        verbose: bool, False
+            If True (not default), then print out intermediate statistics.
+
+        Returns
+        -------
+        bdd: 
+            Safe invariant region
+        int:
+            Actualy number of game steps run.
+        generator: 
+            Controller that maps state dictionary to safe input dictionary
+
+        """
+        if steps is not None:
+            assert steps >= 0
+
+        
+
+        z = self.cpre.prespace() & self.safe if winning is None else winning
+        zz = self.cpre.mgr.false
+
+        C = z
+
+        i = 0
+        synth_start = time.time()
+        while (z != zz):
+            if steps and i == steps:
+                break
+            step_start = time.time()
+            zz = z
+            z = self.cpre(zz, verbose=verbose) & self.safe
+
+            C = C & (~self.cpre.elimcontrol(z) | z)
+            if verbose:
+                print("Eliminating control")
+            z = self.cpre.elimcontrol(z)
+            i = i + 1
+
+            if verbose:
+                print("Step #: ", i,
+                      "Step Time (s): {0:.3f}".format(time.time() - step_start), 
+                      "Winning Size:", self.cpre.mgr.count(z, len(z.support)),
+                      "Winning nodes:", len(z))
 
         return z, i, MemorylessController(self.cpre, C)
 
@@ -321,6 +392,7 @@ class ReachGame():
         zz = self.cpre.mgr.true
 
         i = 0
+        synth_start = time.time()
         while (z != zz):
             if steps and i == steps:
                 break
@@ -332,12 +404,13 @@ class ReachGame():
             if verbose:
                 print("Eliminating control")
             z = self.cpre.elimcontrol(C)
-            i += 1
 
+            i += 1
             if verbose:
-                print("Step #: ", i, 
-                      "Step Time (s): ", time.time() - step_start, 
-                      "Size: ", self.cpre.mgr.count(z, len(z.support)))
+                print("Step #: ", i,
+                      "Step Time (s): ", time.time() - step_start,
+                      "Size: ", self.cpre.mgr.count(z, len(z.support)),
+                      "Winning nodes:", len(z))
 
         return z, i, MemorylessController(self.cpre, C)
 
@@ -366,7 +439,7 @@ class ReachAvoidGame():
         self.target = target  # TODO: Check if a subset of the state space
         self.safe = safe
 
-    def run(self, steps = None):
+    def run(self, steps = None, winning=None, verbose=False):
         """
         Run a reach-avoid game until reaching a fixed point or a maximum number of steps.
 
@@ -387,13 +460,13 @@ class ReachAvoidGame():
             Controller for the reach-avoid game
             
         """
-        if steps:
+        if steps is not None:
             assert steps >= 0
 
-        C = self.mgr.false
+        C = self.cpre.mgr.false
 
-        z = self.mgr.false
-        zz = self.mgr.true
+        z = self.cpre.prespace() & self.target if winning is None else winning
+        zz = self.cpre.mgr.true
 
         i = 0
         while (z != zz):
@@ -401,18 +474,20 @@ class ReachAvoidGame():
                 break
 
             zz = z
-            # z = (zz | self.cpre(zz, no_inputs = True) | self.target) & self.safe 
-            z = (self.cpre(zz) & self.safe) | self.target # State input pairs
-            ubits = tuple(k for k in z.support if _name(k) in self.cpre.control.keys())
-            C = C | (z & (~self.cpre.mgr.exist(ubits , C))) # Add new state-input pairs to controller
+            step_start = time.time()
+            z = (self.cpre(zz, verbose=verbose) & self.safe) | self.target # State input pairs
+            C = C | (z & (~self.cpre.elimcontrol(C))) # Add new state-input pairs to controller
+
+            if verbose:
+                print("Eliminating control")
+            z = self.cpre.elimcontrol(C)
+
             i += 1
-            # z = self.cpre.mgr.exist(ubits , z)
-            z = self.cpre.elimcontrol(z)
+            if verbose:
+                print("Step #: ", i,
+                      "Step Time (s): ", time.time() - step_start,
+                      "Size: ", self.cpre.mgr.count(z, len(z.support)),
+                      "Winning nodes:", len(z))
 
         return z, i, MemorylessController(self.cpre, C)
 
-
-"""
-def fp_iter(operation, starting, steps):
-
-"""

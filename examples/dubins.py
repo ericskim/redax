@@ -180,11 +180,9 @@ print("Decomp Solve Time:", time.time() - dstarttime)
 # assert dbasin == basin
 basin = dbasin
 
-
 print("Reach Size:", dubins.mgr.count(basin, len(basin.support)))
 print("Target Size:", dubins.mgr.count(target, len(basin.support)))
 print("Game Steps:", steps)
-
 
 # # Plot reachable winning set
 # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), basin, 60)

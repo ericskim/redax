@@ -46,6 +46,9 @@ class MemorylessController(SupervisoryController):
     def isempty(self):
         return self.C == self.cpre.mgr.false
 
+    def winning_set(self):
+        return self.cpre.elimcontrol(self.C)
+
     def winning_states(self, exclude=None):
         r"""
         Generator for states from the winning set.
