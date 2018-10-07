@@ -18,7 +18,7 @@ from redax.controllers import MemorylessController
 from redax.visualizer import scatter2D, plot3D, plot3D_QT
 from redax.utils.bv import bv2pred, int2bv
 
-T = 16
+T = 12
 np.random.seed(1337)
 
 # Abstract
@@ -44,12 +44,12 @@ sysview = {'x': replace(precision, {'vx':6, 'theta': 4}),
            'theta': precision,
            'omega': precision}
 
-xspace = DynamicCover(-.4, .4)
+xspace = DynamicCover(-.2, .2)
 yspace = DynamicCover(0, 1)
-vxspace = DynamicCover(-3, 3)
-vyspace = DynamicCover(-3, 3)
-thetaspace  = DynamicCover(-np.pi/3, np.pi/3, periodic=False)
-omegaspace = DynamicCover(-1.3, 1.3)
+vxspace = DynamicCover(-2, 2)
+vyspace = DynamicCover(-2, 2)
+thetaspace  = DynamicCover(-np.pi/4, np.pi/4, periodic=False)
+omegaspace = DynamicCover(-1.0, 1.0)
 thrust = EmbeddedGrid(4, -.01, .99)
 side = EmbeddedGrid(4, -.51, .51)
 
@@ -96,6 +96,7 @@ def setup(init=False):
                            'vy': {'vy': 5, 'theta': 5,'omega': 3},
                            'theta': {'theta': 5, 'omega': 5},
                            'omega': {'omega': 5}}
+        iter_coarseness = {k: {k_: v_ + 1 for k_, v_ in v.items()} for k, v in iter_coarseness.items()}
         initabs_start = time.time()
         for i in states:
             print("Refining", i, "module")
@@ -103,12 +104,12 @@ def setup(init=False):
             print("Recording Coarseness:", {k: v for k, v in sysview[i].items() if k in subsys[i].vars})
             subsys[i] = coarse_abstract(subsys[i], iter_coarseness[i], sysview[i])
             print(len(mgr), "manager nodes after first pass")
-            subsys[i] = coarse_abstract(subsys[i], iter_coarseness[i], sysview[i], shift_frac=0.5)
-            print(len(mgr), "manager nodes after second pass")
+            # subsys[i] = coarse_abstract(subsys[i], iter_coarseness[i], sysview[i], shift_frac=0.5)
+            # print(len(mgr), "manager nodes after second pass")
             # subsys[i].check()
             print("\n")
 
-        mgr.reorder(order_heuristic(mgr))
+            mgr.reorder(order_heuristic(mgr, ['x', 'y', 'vx', 'vy', 'theta', 'omega', 't', 's', 'xnext', 'ynext', 'vxnext', 'vynext', 'thetanext', 'omeganext']))
         print("Coarse Initial Abstraction Time (s): ", time.time() - initabs_start)
 
     return mgr, subsys
@@ -139,13 +140,14 @@ def coarse_abstract(f: AbstractModule, iter_coarseness, save_precision, shift_fr
         # Simulate and overapproximate outputs
         stateboxes = {k: v for k, v in iobox.items() if k not in  ['s', 't']}
         s = lander_box_dynamics(steps=T, a=(iobox['t'], iobox['s']), **stateboxes, discrete=False)
-        out = {i: bloatbox(j, factor=-0.001) for i, j in zip(nextstates, s)}  # Shrink output box ever so slightly.
+        out = {i: bloatbox(j, factor=-0.05) for i, j in zip(nextstates, s)}  # Shrink output box ever so slightly.
         iobox.update(out)
 
         # Refine
         iobox = {k: v for k, v in iobox.items() if k in f.vars}  # Filter unnecessary input/output slices. 
         f = f.io_refined(iobox, nbits=save_precision)
 
+    f.check()
     print("Done coarse abs: ", f.outputs)
 
     return f
@@ -241,7 +243,7 @@ def synthesize_reach(f, target, steps=None):
     print("Solving Reach Game")
     game = ReachGame(cpre, target)
     game_starttime = time.time()
-    basin, steps, controller = game.run(verbose=True, steps=steps)
+    basin, steps, controller = game.run(verbose=True, steps=steps, excludewinning=False)
     print("Solve time: ", time.time() - game_starttime)
     print("Solve steps: ", steps)
     print("Trivial region: ", basin == target)
@@ -251,7 +253,7 @@ def synthesize_reach(f, target, steps=None):
 
     return controller, steps
 
-def simulate(controller: MemorylessController, exclude=None):
+def simulate(controller: MemorylessController, exclude=None, drop=0):
 
     try:
 
@@ -262,12 +264,10 @@ def simulate(controller: MemorylessController, exclude=None):
         # Simulate and control
         import funcy as fn
 
-        state = fn.first(fn.drop(0, controller.winning_states(exclude=exclude)))
+        state = fn.first(fn.drop(drop, controller.winning_states(exclude=exclude)))
         state = {k: .5*(v[0] + v[1]) for k, v in state.items()}
         # state = {k: 0 for k in states}
-        # state['y'] = .52
-        # state['vy'] = .3
-        # state['vx'] = 0.0
+        # state['x'] = .03
         ordered_state = [state[v] for v in states]
         env.reset(ordered_state)
 
@@ -297,7 +297,13 @@ def simulate(controller: MemorylessController, exclude=None):
     env.close()
     return
 
-def order_heuristic(mgr):
+def order_heuristic(mgr, var_priority = None):
+    """
+    Most signifiant bits are ordered first in BDD. 
+
+    var_priority is a list of variable names. Resolves ties if two bits, are of the same priority, it resolves based.
+    e.g. var_priority = ['x','y','z'] would impose an order ['x_0', 'y_0', 'z_0'] 
+    """
     
     def _name(i):
         return i.split('_')[0]
@@ -310,7 +316,10 @@ def order_heuristic(mgr):
     max_granularity = max([_idx(i) for i in vars])
     order_seed = []
     for i in range(max_granularity + 1):
-        order_seed.extend([v for v in vars if _idx(v) == i])
+        level_bits = [v for v in vars if _idx(v) == i]
+        if var_priority is not None:
+            level_bits.sort(key = lambda x: {k:v for v, k in enumerate(var_priority)}[ _name(x)])
+        order_seed.extend(level_bits)
 
     return {var: idx for idx, var in enumerate(order_seed)}
 
@@ -374,43 +383,64 @@ if __name__ is "__main__":
 
     if False:
         f = CompositeModule(tuple(subsys[i] for i in states))
-        target = f['x'].conc2pred(mgr, 'x', (0, .3), 5, innerapprox=True)
+        target = f['x'].conc2pred(mgr, 'x', (-.05, .05), 5, innerapprox=True)
         target &= f['y'].conc2pred(mgr, 'y', (.5, .8), 5, innerapprox=True)
-        target &= f['theta'].conc2pred(mgr, 'theta', (-.2, .2), 5, innerapprox=True)
-        target &= f['vy'].conc2pred(mgr, 'vy', (1,2.5), 5, innerapprox=True)
+        target &= f['theta'].conc2pred(mgr, 'theta', (-.25, .25), 5, innerapprox=True)
+        # target &= f['vy'].conc2pred(mgr, 'vy', (0.5, 1.5), 5, innerapprox=True)
         print("Target Size:", mgr.count(target, statebits))
 
         w = target
         c = mgr.false
 
-        # coarsenbits = ['x_6', 'y_5', 'vx_5', 'vy_5', 'theta_4', 'omega_4']
-        for gameiter in range(10):
+
+        for gameiter in range(2):
 
             print("\nStep:", gameiter)
 
+            elimvars = [v for v in w.support if _name(v) not in ['x', 'y']]
+            pwin = mgr.exist(elimvars, w)
+            print("XY Proj states:", mgr.count(pwin, 13))
+            print("XY proj target:", mgr.count(mgr.exist(elimvars, target), 13))
+            # scatter2D(mgr, ('x', subsys['x']['x']),
+            #                 ('y', subsys['y']['y']),
+            #                 mgr.exist(elimvars, target), 70)
+            del pwin
+
             # Decrease complexity of winning set by eliminating a least significant bit.
-            while(len(w) > 7*10**5):
-                coarsenbits = {k: max([_idx(n)  for n in w.support if _name(n) == k]) for k in states}
+            while(len(w) > (gameiter*.4+2)*10**5):
+                coarsenbits = {k: max([_idx(n)  for n in w.support if _name(n) == k]) for k in states if k not in ['x','y']}
                 coarsenbits = [k + "_" + v for k, v in coarsenbits.items()]
                 coarsenbits.sort(key=lambda x: mgr.count(mgr.forall([x], w), statebits), reverse=True) # Want to shrink the least, while simplifying
                 print("Coarsening with", coarsenbits[0])
                 print("Default num states", mgr.count(w, statebits), "node complexity ", len(w))
                 w = mgr.forall([coarsenbits[0]], w)
                 print("After elim", coarsenbits[0], "num states", mgr.count(w, statebits), "node complexity", len(w))
+                controller.C &= w
+                c &= w
+
+            elimvars = [v for v in w.support if _name(v) not in ['x', 'y']]
+            pwin = mgr.exist(elimvars, w)
+            print("XY Proj states after compression:", mgr.count(pwin, 13))
 
             controller, steps = synthesize_reach(f, w, steps=1)
-            w = controller.winning_set()
             c = c | (controller.C & (~controller.cpre.elimcontrol(c)))  # Add new inputs
+            
+            # # Determinize thrust. If thrust = -.01 is possible, then it must hold.
+            # for i in range(4): 
+            #     thrust_bdd = thrust.conc2pred(mgr, 't', -.01 + 1/3.0 * i)
+            #     c = c & (~controller.cpre.elimcontrol(c & thrust_bdd) | thrust_bdd) | target
+            # side_bdd = side.conc2pred(mgr, 's', -.51 * 1.02/3.0 * 1)
+            # c = c & (~controller.cpre.elimcontrol(c & side_bdd) | side_bdd) | target 
 
-            # elimvars = [v for v in w.support if _name(v) not in ['x', 'y']]
-            # pwin = mgr.exist(elimvars, w)
-            # print("XY Proj states:", mgr.count(pwin, 13))
-            # scatter2D(mgr, ('x', subsys['x']['x']),
-            #                 ('y', subsys['y']['y']),
-            #                 pwin , 70)
+            print("Controller nodes: {0}".format(len(c)))
+
+            controller.C = c
+            w = controller.winning_set()
+
 
         # controller.C = c
         # simulate(controller, exclude=target)
+        # simulate(controller, exclude= ~ (w & ~mgr.forall(['x_6'], w)))  # sim from point along boundary
 
 
     # Solve safety operations
@@ -483,12 +513,12 @@ if __name__ is "__main__":
     #                pred , 70)
 
     # # # Plot vx component wrt vx, theta
-    # side_bdd = side.conc2pred(mgr, 's', -.51 * 1.02/3.0 * 1)
-    # thrust_bdd = thrust.conc2pred(mgr, 't', -.01 + 1/3.0 * 0)
+    # side_bdd = side.conc2pred(mgr, 's', -.51 * 1.02/3.0 * 3)
+    # thrust_bdd = thrust.conc2pred(mgr, 't', -.01 + 1/3.0 * 2)
     # omega_bdd = omegaspace.conc2pred(mgr, 'omega', (.01, .02), 5, innerapprox=False)
     # elimvars = (side_bdd & thrust_bdd & omega_bdd).support
     # pred = mgr.exist(elimvars, subsys['vx'].pred & side_bdd & thrust_bdd & omega_bdd)
-    # plot3D(mgr, ('vx', subsys['vx']['vx']),
+    # plot3D_QT(mgr, ('vx', subsys['vx']['vx']),
     #             ('theta', subsys['vx']['theta']),
     #             ('vxnext', subsys['vx']['vxnext']),
     #             pred , 70)
@@ -513,9 +543,9 @@ if __name__ is "__main__":
     # side_bdd = side.conc2pred(mgr, 's', -.51 * 1.02/3.0 * 1)
     # thrust_bdd = thrust.conc2pred(mgr, 't', -.01 + 1/3.0 * 2)
     # theta_bdd = thetaspace.conc2pred(mgr, 'theta', (.01, .02), 4, innerapprox=False)
-    # elimvars = (side_bdd & thrust_bdd & omega_bdd).support
+    # elimvars = (side_bdd & thrust_bdd).support
     # pred = mgr.exist(elimvars, subsys['x'].pred & side_bdd & thrust_bdd & theta_bdd)# & omega_bdd)
-    # plot3D(mgr, ('x', subsys['x']['x']),
+    # plot3D_QT(mgr, ('x', subsys['x']['x']),
     #             ('vx', subsys['x']['vx']),
     #             ('xnext', subsys['x']['xnext']),
     #             pred , 70)

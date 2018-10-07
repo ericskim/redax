@@ -166,11 +166,14 @@ class DecompCPre(ControlPre):
         elimbits = tuple(i for i in implies_pred.support if _name(i) == postvar)
         return self.mgr.forall(elimbits, implies_pred)
 
-    def __call__(self, Z, no_inputs=False, verbose=False):
+    def __call__(self, Z, no_inputs=False, verbose=False, excludedstates=None):
         swapvars = self.swappedstates(Z)
         if len(swapvars) > 0:
             self.mgr.declare(*swapvars.values())
             Z = self.mgr.let(swapvars, Z)
+
+        if excludedstates is None:
+            excludedstates = self.mgr.false
 
         if self.elimorder is not None:
             to_elim_post = [i for i in self.elimorder]
@@ -195,6 +198,7 @@ class DecompCPre(ControlPre):
                 nb = nb & mod._nb
 
             Z = nb & self.elimpostslice(Z, var)
+            Z &= ~excludedstates
 
         # TODO: Assert Z's support is in the composite systems input range. Line below hasn't been checked
         # assert Z.support <= set(flatten([self.sys.pred_bitvars[v] for v in self.sys.inputs]))
@@ -282,7 +286,7 @@ class SafetyGame():
 
 class OptimisticSafetyGame(SafetyGame):
     """
-    Just like a safety game but returns a "best effort controller" that should work if the adversary isn't too strong.
+    Just like a safety game but returns a "best effort controller" that should ideally work if the adversary isn't too strong.
     """
 
     def run(self, steps=None, winning=None, verbose=False):
@@ -359,7 +363,7 @@ class ReachGame():
         self.cpre = cpre
         self.target = target # TODO: Check if a subset of the state space
 
-    def run(self, steps=None, winning=None, verbose=False):
+    def run(self, steps=None, winning=None, verbose=False, excludewinning=False):
         """
         Run a reachability game until reaching a fixed point or a maximum number of steps.
 
@@ -371,6 +375,8 @@ class ReachGame():
             Currently winning region
         verbose: bool
             If True (not default), then print out intermediate statistics.
+        excludewinning: bool
+            If True, controllable predecessor will avoid synthesizing for states that are already in winning region.
 
         Returns
         -------
@@ -387,7 +393,6 @@ class ReachGame():
 
         C = self.cpre.mgr.false
 
-
         z = self.cpre.prespace() & self.target if winning is None else winning
         zz = self.cpre.mgr.true
 
@@ -399,7 +404,10 @@ class ReachGame():
 
             zz = z
             step_start = time.time()
-            z = self.cpre(zz, verbose=verbose) | self.target # state-input pairs
+            if excludewinning:
+                z = self.cpre(zz, verbose=verbose, excludedstates=zz) | self.target # state-input pairs
+            else:
+                z = self.cpre(zz, verbose=verbose) | self.target # state-input pairs
             C = C | (z & (~self.cpre.elimcontrol(C))) # Add new state-input pairs to controller
             if verbose:
                 print("Eliminating control")
@@ -413,7 +421,6 @@ class ReachGame():
                       "Winning nodes:", len(z))
 
         return z, i, MemorylessController(self.cpre, C)
-
 
 
 class ReachAvoidGame():

@@ -30,7 +30,7 @@ def dynamicperiodic(space):
         return True
     return False
 
-def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None):
+def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False, opacity=1.0):
     """
     Plot a 2D set represented by a predicate as a pixel image.
 
@@ -60,7 +60,10 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None):
     xbins = 2**xbits
     ybins = 2**ybits
 
-    mask = np.full((xbins, ybins), 0, dtype=np.int8)
+    if invertcolor:
+        mask = np.full((ybins, xbins), 111-(111*opacity), dtype=np.int8)
+    else:
+        mask = np.full((ybins, xbins), 111*opacity, dtype=np.int8)
 
     xpts = []
     ypts = []
@@ -73,20 +76,34 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None):
         xvars.sort()  # Sort by bit names
         yvars.sort()
 
-        xbv = [pt[bit] for bit in xvars]
+        xbv = [pt[bit] for bit in xvars] # FIXME: Issues if a bit is skipped. Assumes no gaps in bit range.
         ybv = [pt[bit] for bit in yvars]
 
-        bv2int(xbv)
-        mask[bv2int(ybv), bv2int(xbv)] = 111
+        # bv2int(xbv)
+        ycoord = bv2int(ybv)
+        xcoord = bv2int(xbv)
+        if ygrid.periodic:
+            ycoord = graytobin(ycoord)
+        if xgrid.periodic:
+            xcoord = graytobin(xcoord)
+
+        if invertcolor:
+            mask[ycoord, xcoord] = 111*opacity
+        else:
+            mask[ycoord, xcoord] = 111-(111*opacity)
     mgr.configure(reordering=config['reordering'])  # Reinstate config state
 
     fig, ax = plt.subplots()
-    ax.pcolormesh(mask)
+    if invertcolor:
+        ax.pcolormesh(mask, edgecolors='w', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)        
+    else:
+        ax.pcolormesh(mask, edgecolors='k', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)
 
     # ax.set_xlim(xgrid.lb, xgrid.ub)
     ax.set_xlabel(xname)
     # ax.set_ylim(ygrid.lb, ygrid.ub)
     ax.set_ylabel(yname)
+    
     if title:
         ax.set_title(title)
     if fname is not None:
@@ -98,7 +115,7 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None):
     # return fig, ax
 
 # Organize into bitvectors
-def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None):
+def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None, fig = None, ax = None, alpha=None, co=None):
     """
     Plot a 2D set represented by a predicate as a scatter plot.
 
@@ -139,8 +156,9 @@ def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None):
         ypts.append(ygrid.bv2conc(ybv))
     mgr.configure(reordering=config['reordering'])  # Reinstate config state
 
-    fig, ax = plt.subplots()
-    ax.scatter(xpts, ypts)
+    if fig is None:
+        fig, ax = plt.subplots()
+    ax.scatter(xpts, ypts, marker='s', alpha=alpha, c=co)
 
     ax.set_xlim(xgrid.lb, xgrid.ub)
     ax.set_xlabel(xname)
@@ -150,11 +168,11 @@ def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None):
         ax.set_title(title)
     if fname is not None:
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        fig.savefig(str(fname)+'.png', dpi=400, bbox_inches=extent.expanded(1.1, 1.2))
+        fig.savefig(str(fname)+'.png', dpi=400)#, bbox_inches=extent.expanded(1.1, 1.2))
     else:
         plt.show()
 
-    # return fig, ax
+    return fig, ax
 
 
 def plot3D(mgr, xspace, yspace, zspace, pred, 
