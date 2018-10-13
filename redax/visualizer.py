@@ -112,6 +112,7 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     else:
         plt.show()
 
+    return
     # return fig, ax
 
 # Organize into bitvectors
@@ -176,7 +177,7 @@ def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None, fig = None, ax 
 
 
 def plot3D(mgr, xspace, yspace, zspace, pred, 
-           opacity=40, view=None, title=None, fname=None):
+           opacity=40, view=None, title=None, fname=None, **kwargs):
     """Matplotlib based plotter with voxels"""
     voxelcolors = '#7A88CC' + format(opacity, "02x")
     edgecolors = '#000000' + format(opacity // 3, "02x")
@@ -237,8 +238,6 @@ def plot3D(mgr, xspace, yspace, zspace, pred,
         fig.savefig(str(fname)+'.png', dpi=400, bbox_inches=extent.expanded(1.1, 1.2))
     else:
         plt.show()
-
-
 
     # return fig, ax
 

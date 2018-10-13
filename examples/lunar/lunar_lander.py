@@ -59,6 +59,8 @@ SIDE_ENGINE_AWAY   = 17.0
 
 VIEWPORT_W = 2400
 VIEWPORT_H = 1600
+# VIEWPORT_W = 600
+# VIEWPORT_H = 400
 
 class ContactDetector(contactListener):
     def __init__(self, env):
@@ -444,14 +446,14 @@ if __name__=="__main__":
     import sys
     action = None
 
-    # env = LunarLander()
-    env = LunarLanderContinuous()
+    env = LunarLander()
+    # env = LunarLanderContinuous()
 
     if len(sys.argv) == 2:
         action = int(sys.argv[1])
 
     env.seed(1337)
-    state = (.3,.8,-0,0,0,0)
+    state = (.5,.8,.5,.5,.2,-.1)
     # print("Assigned State: ", state)
     s = env.reset(state)
     # print(s)
@@ -463,7 +465,7 @@ if __name__=="__main__":
     action_count = {i: 0 for i in range(4)}
 
     while True:
-        if steps >= 400:
+        if steps >= 100:
             break
         if action is None:
             if steps % 1 == 0:
@@ -477,7 +479,7 @@ if __name__=="__main__":
         s = np.hstack((s,a))
         env.render(); time.sleep(.01)
         total_reward += r
-        if steps % 12 == 0 or done:
+        if steps % 1 == 0 or done:
             print("steps: {}".format(steps), ["{:+0.9f}".format(x) for x in s])
             # time.sleep(.3)
             # print("step {} total_reward {:+0.2f}".format(steps, total_reward))

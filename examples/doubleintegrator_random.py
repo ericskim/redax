@@ -87,7 +87,7 @@ if exhaustive:
         pcomp = pcomp.io_refined({k: v for k, v in iobox.items() if k in pcomp.vars}, nbits=precision)
 
     # Exhaustive traversal velocity component
-    for iobox in vcomp.input_iter(precision={'v': 7, 'a': 7}):
+    for i, iobox in enumerate(vcomp.input_iter(precision={'v': 7, 'a': 7})):
 
         iobox.update({'p': (0,0)})
 
@@ -103,6 +103,8 @@ if exhaustive:
 
         vcomp = vcomp.io_refined({k: v for k, v in iobox.items() if k in vcomp.vars}, nbits=precision)
 
+        # if i == 1999:
+        #     break
 
 # Sample generator
 numapplied = 0
@@ -111,7 +113,7 @@ np.random.seed(1336)
 
 growing_inv = []
 
-while(numapplied < 6000):
+while(numapplied < 400):
 
     # Shrink window widths over time
     width = 20 * 1/np.log10(2*numapplied+10)
@@ -189,7 +191,7 @@ while(numapplied < 6000):
 
 import matplotlib.cm as cm 
 offset = 10
-colors = cm.binary(np.linspace(0,1,len(growing_inv)))
+colors = cm.binary(np.linspace(.1,.9,len(growing_inv)))
 
 for i, safeinv in enumerate(growing_inv[::-1]):
     try:
@@ -232,7 +234,8 @@ for nbits in [6]:
     # fig, ax = scatter2D(system.mgr, ('v', vspace), ('p', pspace), inv)
 
 # plot3D_QT(system.mgr, ('p', vspace), ('v', aspace), ('pnext', vspace), pcomp.pred, 128)
-# plot3D(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
+# plot3D_QT(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
+plot3D(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128, view=(30, -144))
 
 
 sim_starttime = time.time()

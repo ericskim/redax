@@ -149,6 +149,7 @@ The core foundations are working and providing meaningful results on some test e
 - Examples
   - lunar lander
   - Pair of dubins vehicles
+- Make symbolic backend a class attribute.
 - Make the dependencies on the bdd manager more explicit. Reordering with python's quasi-pass-by-value semantics and multiple managers is hard to deal with.
 - Helper classes for different input-output overapproximation procedures
   - Lipschitz

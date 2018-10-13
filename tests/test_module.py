@@ -250,7 +250,7 @@ def test_sin_sqrt_comp():
         iobox = dict()
         for invar, space in module.inputs.items():
             if isinstance(space, ContinuousCover):
-                width = np.random.rand() * scale * space.width()
+                width = scale * space.width()
                 if space.periodic:
                     left = space.lb + np.random.rand() * space.width() 
                 else:
@@ -259,11 +259,12 @@ def test_sin_sqrt_comp():
                 iobox.update({invar: (left, right)})
         return iobox
 
-    precision = {'sin': 8, 'sout': 8, 'sqrt': 8}
+    precision = {'sin': 9, 'sout': 9, 'sqrt': 9}
 
     # Learn sin module
-    for _ in range(200):
-        iobox = random_input_gen(sinmod, scale = .1)
+    from redax.visualizer import scatter2D
+    for i in range(200):
+        iobox = random_input_gen(sinmod, scale = .01)
         out = maxminsin(iobox['sin'][0], iobox['sin'][1])
         iobox.update({'sout': (out[0], out[1])})
 
@@ -273,8 +274,8 @@ def test_sin_sqrt_comp():
         assert sinmod == comp.children[0]
 
     # Learn sqrt module
-    for _ in range(200):
-        iobox = random_input_gen(sqrtmod, scale = .2)
+    for i in range(200):
+        iobox = random_input_gen(sqrtmod, scale = .1)
         if iobox['sout'][0] < 0 or iobox['sout'][1] < 0:
             continue
         out = (math.sqrt(iobox['sout'][0]), math.sqrt(iobox['sout'][1]))
@@ -287,10 +288,8 @@ def test_sin_sqrt_comp():
     sinroot = (comp.children[0] >> comp.children[1]).hidden(['sout'])
     assert set(sinroot.vars) == {'sin', 'sqrt'}
     assert sinroot.pred != mgr.false
-    sinroot.check() 
+    sinroot.check()
 
-    # from redax.visualizer import scatter2D
-    # scatter2D(mgr, ('sin', sinin), ('sout', sqrtout), comp.children[0].pred)
     # scatter2D(mgr, ('sin', sinin), ('sout', sqrtout), comp.children[0].coarsened(sout = 6, sin = 6) .pred)
     # scatter2D(mgr, ('sout', sqrtout), ('sqrt', sqrtout), comp.children[1].pred)
     # scatter2D(mgr, ('sin', sinin), ('sqrt', sqrtout), sinroot.pred)

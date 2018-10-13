@@ -129,7 +129,7 @@ def plot_io_bounds(x, y, vx, vy, theta, omega, a, steps, discrete=True):
 
     # fig.set_size_inches(5,7,forward=True)
 
-    limits = [[-.5,.5], [0,1], [-8, 8], [-8,8], [-np.pi/2, np.pi/2], [-2,2]]
+    limits = [[-.25,.25], [0,.25], [-.8, .8], [-1,1], [-np.pi/7, np.pi/7], [-.5,.5]]
     for i in range(6):
         axs[i].fill_between(t, stateboxhist[:, i, 0], stateboxhist[:,i,1],alpha=0.3)
         axs[i].plot(centerstatehist[:,i], 'r')

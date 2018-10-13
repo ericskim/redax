@@ -4,7 +4,7 @@ from functools import reduce
 
 from bidict import bidict
 
-from redax.controllers import MemorylessController
+from redax.controllers import MemorylessController, SafetyController
 from redax.utils.bv import flatten
 from redax.module import AbstractModule, CompositeModule
 
@@ -205,6 +205,8 @@ class DecompCPre(ControlPre):
 
         # Eliminate control inputs
         if no_inputs:
+            if verbose:
+                print("Eliminating Control")
             return self.elimcontrol(Z)
         else:
             return Z
@@ -227,7 +229,7 @@ class SafetyGame():
         self.cpre = cpre
         self.safe = safeset  # TODO: Check if a subset of the state space
 
-    def run(self, steps=None, winning=None, verbose=False):
+    def run(self, steps=None, winning=None, verbose=False, winningonly=False):
         """
         Run a safety game until reaching a fixed point or a maximum number of steps.
 
@@ -246,14 +248,12 @@ class SafetyGame():
             Safe invariant region
         int:
             Actualy number of game steps run.
-        generator: 
+        MemorylessController: 
             Controller that maps state dictionary to safe input dictionary
 
         """
         if steps is not None:
             assert steps >= 0
-
-        
 
         z = self.cpre.prespace() & self.safe if winning is None else winning
         zz = self.cpre.mgr.false
@@ -267,12 +267,17 @@ class SafetyGame():
                 break
             step_start = time.time()
             zz = z
-            z = self.cpre(zz, verbose=verbose) & self.safe
 
-            C = z
-            if verbose:
-                print("Eliminating control")
-            z = self.cpre.elimcontrol(C)
+            if winningonly:
+                z = self.cpre(zz, verbose=verbose, no_inputs=True) & self.safe
+            else:
+                z = self.cpre(zz, verbose=verbose) & self.safe
+
+                C = z
+                if verbose:
+                    print("Eliminating control")
+                z = self.cpre.elimcontrol(C)
+
             i = i + 1
 
             if verbose:
@@ -280,8 +285,10 @@ class SafetyGame():
                       "Step Time (s): {0:.3f}".format(time.time() - step_start), 
                       "Winning Size:", self.cpre.mgr.count(z, len(z.support)),
                       "Winning nodes:", len(z))
-
-        return z, i, MemorylessController(self.cpre, C)
+        if winningonly: 
+            return z, i, SafetyController(self.cpre, z)
+        else:
+            return z, i, MemorylessController(self.cpre, C)
 
 
 class OptimisticSafetyGame(SafetyGame):

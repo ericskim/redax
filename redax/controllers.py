@@ -124,3 +124,17 @@ class MemorylessController(SupervisoryController):
                 uval[uvar] = self.cpre.control[uvar].bv2conc(bv)
             yield uval
 
+class SafetyController(MemorylessController):
+    """
+    A MemorylessController enforcing a safety constraint.
+
+    Only stores the safe region and not all permitted state-action pairs.
+    Computes safe actions at runtime.
+    """
+
+
+    def __init__(self, cpre, allowed_controls):
+        MemorylessController.__init__(self, cpre, cpre.elimcontrol(allowed_controls))
+
+    def run(self, state):
+        pass # TODO: Implement this!!
