@@ -12,7 +12,7 @@ from dynamics import lander_box_dynamics, plot_io_bounds
 
 
 from redax.module import AbstractModule, CompositeModule
-from redax.spaces import DynamicCover, EmbeddedGrid, DiscreteSet
+from redax.spaces import DynamicCover, EmbeddedGrid, DiscreteSet, OutOfDomainError
 from redax.synthesis import SafetyGame, ControlPre, DecompCPre, ReachGame, OptimisticSafetyGame
 from redax.controllers import MemorylessController
 from redax.visualizer import scatter2D, plot3D, plot3D_QT, pixel2D
@@ -22,8 +22,8 @@ T = 9
 np.random.seed(1337)
 
 # Abstract
-precision = {'x': 8,     'y': 7,     'vx': 6,     'vy': 6,     'theta': 5,     'omega': 4,
-             'xnext': 8, 'ynext': 7, 'vxnext': 6, 'vynext': 6, 'thetanext': 5, 'omeganext': 4}
+precision = {'x': 8,     'y': 8,     'vx': 6,     'vy': 6,     'theta': 5,     'omega': 4,
+             'xnext': 8, 'ynext': 8, 'vxnext': 6, 'vynext': 6, 'thetanext': 5, 'omeganext': 4}
 statebits = sum([precision[s] for s in ['x', 'y', 'vx', 'vy', 'theta', 'omega']])
 
 states = ['x', 'y', 'vx', 'vy', 'theta', 'omega']
@@ -36,17 +36,17 @@ def replace(default, replacement):
             }
 
 # Each component depends on certain variables with different precision.
-sysview = {'x': replace(precision, {'vx':6, 'theta': 3}),
-           'y': replace(precision, {'vy':6, 'theta': 3}),
-           'vx': replace(precision, {'theta':5, 'omega':3}),
-           'vy': replace(precision, {'theta':5, 'omega':3}),
+sysview = {'x': replace(precision, {'vx':6, 'theta': 4}),
+           'y': replace(precision, {'vy':6, 'theta': 4}),
+           'vx': replace(precision, {'theta':5, 'omega':4}),
+           'vy': replace(precision, {'theta':5, 'omega':4}),
            'theta': precision,
            'omega': precision}
 
-xspace = DynamicCover(-.1, .1)
-yspace = DynamicCover(0, .25)
-vxspace = DynamicCover(-1.5, 1.5)
-vyspace = DynamicCover(-1.5, 1.5)
+xspace = DynamicCover(-1, 1)
+yspace = DynamicCover(0, 1.3)
+vxspace = DynamicCover(-1, 1)
+vyspace = DynamicCover(-1, 1)
 thetaspace  = DynamicCover(-np.pi/5, np.pi/5, periodic=False)
 omegaspace = DynamicCover(-.6, .6)
 thrust = EmbeddedGrid(4, -.01, .99)
@@ -101,7 +101,7 @@ def setup(init=False):
     # Coarse, but exhaustive abstraction of submodules.
     if init:
         iter_coarseness = {'x': {'x':7, 'vx': 5, 'theta': 2},
-                           'y': {'y':6, 'vy': 5, 'theta': 2},
+                           'y': {'y':7, 'vy': 5, 'theta': 2},
                            'vx':  {'vx': 5, 'theta': 4, 'omega': 3},
                            'vy': {'vy': 5, 'theta': 4,'omega': 3},
                            'theta': {'theta': 5, 'omega': 4},
@@ -304,6 +304,9 @@ def simulate(controller: MemorylessController, exclude=None, drop=0):
             
             state = {v: s[idx] for idx, v in enumerate(states)}
 
+    except OutOfDomainError:
+        print("Out of system domain")
+        env.close()
     except:
         env.close()
         raise
@@ -357,19 +360,19 @@ if __name__ is "__main__":
     def count(pred):
         return mgr.count(pred, statebits)
 
-    if True:
+    if False:
         f = CompositeModule(tuple(subsys[i] for i in states))
-        target = f['x'].conc2pred(mgr, 'x', (-.03, .03), 6, innerapprox=True)
-        target &= f['y'].conc2pred(mgr, 'y', (.1, .15), 6, innerapprox=True)
-        target &= f['theta'].conc2pred(mgr, 'theta', (-.12, .12), 5, innerapprox=True)
-        target &= f['vy'].conc2pred(mgr, 'vy', (-0.1, .3), 6, innerapprox=True)
+        target = f['x'].conc2pred(mgr, 'x', (-.1, .1), 7, innerapprox=True)
+        target &= f['y'].conc2pred(mgr, 'y', (1.2, 1.28), 7, innerapprox=False)
+        target &= f['theta'].conc2pred(mgr, 'theta', (-.15, .15), 5, innerapprox=True)
+        target &= f['vy'].conc2pred(mgr, 'vy', (-.8, .1), 6, innerapprox=True)
         print("Target Size:", mgr.count(target, statebits))
 
         w = target
         c = mgr.false
 
-
-        for gameiter in range(15):
+        iterreach_start = time.time()
+        for gameiter in range(20):
 
             print("\nStep:", gameiter)
 
@@ -383,8 +386,8 @@ if __name__ is "__main__":
             del pwin
 
             # Decrease complexity of winning set by eliminating a least significant bit.
-            while(len(w) > (gameiter*.6+2)*10**5):
-                coarsenbits = {k: max([_idx(n)  for n in w.support if _name(n) == k]) for k in states if k not in ['x','y']}
+            while(len(w) > (gameiter*.35+5)*10**5):
+                coarsenbits = {k: max([_idx(n)  for n in w.support if _name(n) == k]) for k in states}
                 coarsenbits = [k + "_" + v for k, v in coarsenbits.items()]
                 coarsenbits.sort(key=lambda x: mgr.count(mgr.forall([x], w), statebits), reverse=True) # Want to shrink the least, while simplifying
                 print("Coarsening with", coarsenbits[0])
@@ -398,7 +401,7 @@ if __name__ is "__main__":
             pwin = mgr.exist(elimvars, w)
             print("XY Proj states after compression:", mgr.count(pwin, precision['x'] + precision['y']))
 
-            controller, steps = synthesize_reach(f, w, steps=1)
+            controller, steps = synthesize_reach(f, w | target, steps=1)
             c = c | (controller.C & (~controller.cpre.elimcontrol(c)))  # Add new inputs
             
             # # Determinize thrust. If thrust = -.01 is possible, then it must hold.
@@ -413,20 +416,18 @@ if __name__ is "__main__":
             controller.C = c
             w = controller.winning_set()
 
+        print("Iter Reach Time: {}".format(time.time() - iterreach_start))
 
         # controller.C = c
-        # simulate(controller, exclude=target)
-        exclude = f['x'].conc2pred(mgr, 'x', (-.03, .03), 8, innerapprox=True)
-        exclude = exclude & f['y'].conc2pred(mgr, 'y', (.1, .15), 7, innerapprox=True)
-        simulate(controller, exclude= target | exclude)
-        # simulate(controller, exclude= ~ (w & ~mgr.forall(['x_7', 'y_6'], w)))  # sim from point along boundary
-
+        # exclude = f['x'].conc2pred(mgr, 'x', (-.4, .4), 7, innerapprox=True)
+        # exclude = exclude & f['y'].conc2pred(mgr, 'y', (.9,1.28), 7, innerapprox=False)
+        # simulate(controller, exclude= target | exclude)
 
     # Solve safety operations
     if False:
         f = CompositeModule(tuple(subsys[i] for i in states))
-        safe = f['x'].conc2pred(mgr, 'x', (-.1, .1), 6, innerapprox=True)
-        safe &= f['y'].conc2pred(mgr, 'y', (.03, .23), 6, innerapprox=True)
+        safe = f['x'].conc2pred(mgr, 'x', (-.4, .4), 6, innerapprox=True)
+        safe &= f['y'].conc2pred(mgr, 'y', (.1, 1.2), 6, innerapprox=True)
         # safe = mgr.true
         print("Safe Size:", mgr.count(safe, statebits))
 
@@ -459,83 +460,82 @@ if __name__ is "__main__":
             #                 ('y', subsys['y']['y']),
             #                 pwin , 70)
     
-    # simulate(controller)
 
+    if False:
 
+        # # Plot omega component
+        side_bdd = side.conc2pred(mgr, 's', -.51 + 1.02/3.0 * 0)
+        elimvars = side_bdd.support
+        pred = mgr.exist(elimvars, subsys['omega'].pred & side_bdd)
+        pixel2D(mgr, ('omega', subsys['omega']['omega']),
+                    ('omeganext', subsys['omega']['omeganext']),
+                    pred , 70)
 
-    # # Plot omega component
-    side_bdd = side.conc2pred(mgr, 's', -.51 + 1.02/3.0 * 0)
-    elimvars = side_bdd.support
-    pred = mgr.exist(elimvars, subsys['omega'].pred & side_bdd)
-    pixel2D(mgr, ('omega', subsys['omega']['omega']),
-                   ('omeganext', subsys['omega']['omeganext']),
-                   pred , 70)
+        # # Plot theta component
+        side_bdd = side.conc2pred(mgr, 's', -.51 * 1.02/3.0 * 1)
+        elimvars = side_bdd.support
+        pred = mgr.exist(elimvars, subsys['theta'].pred & side_bdd)
+        plot3D_QT(mgr, ('theta', subsys['theta']['theta']),
+                    ('omega', subsys['theta']['omega']),
+                    ('thetanext', subsys['theta']['thetanext']),
+                    pred , 70)
 
-    # # Plot theta component
-    side_bdd = side.conc2pred(mgr, 's', -.51 * 1.02/3.0 * 1)
-    elimvars = side_bdd.support
-    pred = mgr.exist(elimvars, subsys['theta'].pred & side_bdd)
-    plot3D_QT(mgr, ('theta', subsys['theta']['theta']),
-                   ('omega', subsys['theta']['omega']),
-                   ('thetanext', subsys['theta']['thetanext']),
-                   pred , 70)
+        # # Plot vy component
+        side_bdd = side.conc2pred(mgr, 's', -.51 + 1.02/3.0 * 0)
+        thrust_bdd = thrust.conc2pred(mgr, 't', -.01 + 1/3.0 * 3)
+        omega_bdd = omegaspace.conc2pred(mgr, 'omega', (0.1, 0.2), 5, innerapprox=False)
+        elimvars = (side_bdd & thrust_bdd & omega_bdd).support
+        pred = mgr.exist(elimvars, subsys['vy'].pred & side_bdd & thrust_bdd & omega_bdd)
+        plot3D_QT(mgr, ('vy', subsys['vy']['vy']),
+                    ('theta', subsys['vy']['theta']),
+                    ('vynext', subsys['vy']['vynext']),
+                    pred , 70)
 
-    # # Plot vy component
-    side_bdd = side.conc2pred(mgr, 's', -.51 + 1.02/3.0 * 0)
-    thrust_bdd = thrust.conc2pred(mgr, 't', -.01 + 1/3.0 * 3)
-    omega_bdd = omegaspace.conc2pred(mgr, 'omega', (0.1, 0.2), 5, innerapprox=False)
-    elimvars = (side_bdd & thrust_bdd & omega_bdd).support
-    pred = mgr.exist(elimvars, subsys['vy'].pred & side_bdd & thrust_bdd & omega_bdd)
-    plot3D_QT(mgr, ('vy', subsys['vy']['vy']),
-                   ('theta', subsys['vy']['theta']),
-                   ('vynext', subsys['vy']['vynext']),
-                   pred , 70)
+        # # # Plot vx component wrt vx, theta
+        side_bdd = side.conc2pred(mgr, 's', -.51 + 1.02/3.0 * 2)
+        thrust_bdd = thrust.conc2pred(mgr, 't', -.01 + 1/3.0 * 3)
+        omega_bdd = omegaspace.conc2pred(mgr, 'omega', (.01, .02), 5, innerapprox=False)
+        elimvars = (side_bdd & thrust_bdd & omega_bdd).support
+        pred = mgr.exist(elimvars, subsys['vx'].pred & side_bdd & thrust_bdd & omega_bdd)
+        plot3D_QT(mgr, ('vx', subsys['vx']['vx']),
+                    ('theta', subsys['vx']['theta']),
+                    ('vxnext', subsys['vx']['vxnext']),
+                    pred , 70)
 
-    # # # Plot vx component wrt vx, theta
-    side_bdd = side.conc2pred(mgr, 's', -.51 + 1.02/3.0 * 3)
-    thrust_bdd = thrust.conc2pred(mgr, 't', -.01 + 1/3.0 * 3)
-    omega_bdd = omegaspace.conc2pred(mgr, 'omega', (.01, .02), 5, innerapprox=False)
-    elimvars = (side_bdd & thrust_bdd & omega_bdd).support
-    pred = mgr.exist(elimvars, subsys['vx'].pred & side_bdd & thrust_bdd & omega_bdd)
-    plot3D_QT(mgr, ('vx', subsys['vx']['vx']),
-                ('theta', subsys['vx']['theta']),
-                ('vxnext', subsys['vx']['vxnext']),
-                pred , 70)
+        # for i in ['vx', 'vy']:
+        #     for omega, theta in [(4,5),  (4,4), (3,5), (3,4)]:
+        #         csys = subsys[i].coarsened(omega=omega, theta=theta)
+        #         iobits = len(csys.pred.support)
+        #         nbbits = len(csys.nonblock().support)
+        #         ratio = csys.count_io(iobits) / csys.count_nb(nbbits)
+        #         print("System", i , "granularity", (omega,theta) , "predicate nodes", len(csys.pred), "ND ratio:", ratio)
 
-    # for i in ['vx', 'vy']:
-    #     for omega, theta in [(4,5),  (4,4), (3,5), (3,4)]:
-    #         csys = subsys[i].coarsened(omega=omega, theta=theta)
-    #         iobits = len(csys.pred.support)
-    #         nbbits = len(csys.nonblock().support)
-    #         ratio = csys.count_io(iobits) / csys.count_nb(nbbits)
-    #         print("System", i , "granularity", (omega,theta) , "predicate nodes", len(csys.pred), "ND ratio:", ratio)
+        # for i in ['x', 'y']:
+        #     for theta in [3, 4]:
+        #         csys = subsys[i].coarsened(theta=theta)
+        #         iobits = len(csys.pred.support)
+        #         nbbits = len(csys.nonblock().support)
+        #         ratio = csys.count_io(iobits) / csys.count_nb(nbbits)
+        #         print("System", i , "granularity", (theta) , "predicate nodes", len(csys.pred), "ND ratio:", ratio)
 
-    # for i in ['x', 'y']:
-    #     for theta in [3, 4]:
-    #         csys = subsys[i].coarsened(theta=theta)
-    #         iobits = len(csys.pred.support)
-    #         nbbits = len(csys.nonblock().support)
-    #         ratio = csys.count_io(iobits) / csys.count_nb(nbbits)
-    #         print("System", i , "granularity", (theta) , "predicate nodes", len(csys.pred), "ND ratio:", ratio)
+        # # # Plot x component wrt x, vx. Ideally should see some dependence on vx.
+        side_bdd = side.conc2pred(mgr, 's', -.51 + 1.02/3.0 * 1)
+        thrust_bdd = thrust.conc2pred(mgr, 't', -.01 + 1/3.0 * 0)
+        # theta_bdd = thetaspace.conc2pred(mgr, 'theta', (-.35, -.30), 5, innerapprox=False)
+        theta_bdd = thetaspace.conc2pred(mgr, 'theta', (.26, .27), 3, innerapprox=False)
+        elimvars = (side_bdd & thrust_bdd & theta_bdd).support
+        pred = mgr.exist(elimvars, subsys['x'].pred & side_bdd & thrust_bdd & theta_bdd)# & omega_bdd)
+        # plot3D_QT(mgr, ('x', subsys['x']['x']),
+        #             ('vx', subsys['x']['vx']),
+        #             ('xnext', subsys['x']['xnext']),
+        #             pred , 70)
 
-    # # # Plot x component wrt x, vx. Ideally should see some dependence on vx.
-    side_bdd = side.conc2pred(mgr, 's', -.51 + 1.02/3.0 * 1)
-    thrust_bdd = thrust.conc2pred(mgr, 't', -.01 + 1/3.0 * 0)
-    # theta_bdd = thetaspace.conc2pred(mgr, 'theta', (-.35, -.30), 5, innerapprox=False)
-    theta_bdd = thetaspace.conc2pred(mgr, 'theta', (.26, .27), 3, innerapprox=False)
-    elimvars = (side_bdd & thrust_bdd & theta_bdd).support
-    pred = mgr.exist(elimvars, subsys['x'].pred & side_bdd & thrust_bdd & theta_bdd)# & omega_bdd)
-    # plot3D_QT(mgr, ('x', subsys['x']['x']),
-    #             ('vx', subsys['x']['vx']),
-    #             ('xnext', subsys['x']['xnext']),
-    #             pred , 70)
+        # vx_bdd = vxspace.conc2pred(mgr, 'vx', (.89, .9), 6, innerapprox=False)
+        # pred = mgr.exist([i for i in pred.support if _name(i) == 'vx'], pred & vx_bdd)
 
-    # vx_bdd = vxspace.conc2pred(mgr, 'vx', (.89, .9), 6, innerapprox=False)
-    # pred = mgr.exist([i for i in pred.support if _name(i) == 'vx'], pred & vx_bdd)
-
-    x_bdd = vxspace.conc2pred(mgr, 'x', (.001, .0015), 8, innerapprox=False)
-    pred = mgr.exist(x_bdd.support, pred & x_bdd)
-    pixel2D(mgr, ('vx', subsys['x']['vx']),
-                ('xnext', subsys['x']['xnext']),
-                pred, 70)
+        x_bdd = vxspace.conc2pred(mgr, 'x', (.001, .0015), 8, innerapprox=False)
+        pred = mgr.exist(x_bdd.support, pred & x_bdd)
+        pixel2D(mgr, ('vx', subsys['x']['vx']),
+                    ('xnext', subsys['x']['xnext']),
+                    pred, 70)
 

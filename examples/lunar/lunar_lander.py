@@ -57,10 +57,10 @@ LEG_SPRING_TORQUE = 40
 SIDE_ENGINE_HEIGHT = 17.0
 SIDE_ENGINE_AWAY   = 17.0
 
-VIEWPORT_W = 2400
-VIEWPORT_H = 1600
-# VIEWPORT_W = 600
-# VIEWPORT_H = 400
+# VIEWPORT_W = 2400
+# VIEWPORT_H = 1600
+VIEWPORT_W = 600
+VIEWPORT_H = 400
 
 class ContactDetector(contactListener):
     def __init__(self, env):
@@ -453,7 +453,7 @@ if __name__=="__main__":
         action = int(sys.argv[1])
 
     env.seed(1337)
-    state = (.5,.8,.5,.5,.2,-.1)
+    state = (0,.1,0,0,0,0)
     # print("Assigned State: ", state)
     s = env.reset(state)
     # print(s)
@@ -465,7 +465,7 @@ if __name__=="__main__":
     action_count = {i: 0 for i in range(4)}
 
     while True:
-        if steps >= 100:
+        if steps >= 200:
             break
         if action is None:
             if steps % 1 == 0:

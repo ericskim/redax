@@ -112,6 +112,7 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     else:
         plt.show()
 
+    plt.close()
     return
     # return fig, ax
 
