@@ -446,8 +446,8 @@ if __name__=="__main__":
     import sys
     action = None
 
-    env = LunarLander()
-    # env = LunarLanderContinuous()
+    # env = LunarLander()
+    env = LunarLanderContinuous()
 
     if len(sys.argv) == 2:
         action = int(sys.argv[1])

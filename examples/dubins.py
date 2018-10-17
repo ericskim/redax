@@ -188,7 +188,7 @@ print("Target Size:", dubins.mgr.count(target, len(basin.support)))
 print("Game Steps:", steps)
 
 # # Plot reachable winning set
-# plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), mgr.forall(['x_6'], basin) , 60)
+# plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin , 60)
 
 # # Plot x transition relation for v = .5
 # xdyn = mgr.exist(['v_0'],(composite.children[0].pred) & mgr.var('v_0'))

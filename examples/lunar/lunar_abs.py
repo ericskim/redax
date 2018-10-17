@@ -7,7 +7,6 @@ except ImportError:
     from dd.autoref import BDD
 
 import gym
-from lunar_lander import LunarLander
 from dynamics import lander_box_dynamics, plot_io_bounds
 
 
@@ -285,13 +284,14 @@ def simulate(controller: MemorylessController, exclude=None, drop=0):
         ordered_state = [state[v] for v in states]
         env.reset(ordered_state)
 
+        statehist = None 
         for step in range(20):
             u = fn.first(controller.allows(state))
             if u is None:
                 print("No safe control inputs for state {}".format(state))
                 env.close()
                 f.children[0].mgr.configure(reordering=False)  # Needed because mgr.pick_iter toggles reordering to True
-                return
+                return statehist
             picked_u = {'t': u['t'], 's': u['s']}
 
             state.update(picked_u)
@@ -301,18 +301,25 @@ def simulate(controller: MemorylessController, exclude=None, drop=0):
                 s, _, _, _ = env.step(np.array([picked_u['t'], picked_u['s']]))
                 env.render()
                 time.sleep(.03)
+
+            if step == 0:
+                statehist = s
+            else:
+                statehist = np.vstack([statehist, s])
             
             state = {v: s[idx] for idx, v in enumerate(states)}
 
     except OutOfDomainError:
         print("Out of system domain")
         env.close()
+        return statehist
+
     except:
         env.close()
         raise
 
     env.close()
-    return
+    return statehist
 
 def order_heuristic(mgr, var_priority = None):
     """
@@ -360,6 +367,27 @@ if __name__ is "__main__":
     def count(pred):
         return mgr.count(pred, statebits)
 
+    load_prior_controller = False
+    if load_prior_controller: 
+        f = CompositeModule(tuple(subsys[i] for i in states))
+        target = f['x'].conc2pred(mgr, 'x', (-.1, .1), 7, innerapprox=True)
+        target &= f['y'].conc2pred(mgr, 'y', (1.2, 1.28), 7, innerapprox=False)
+        target &= f['theta'].conc2pred(mgr, 'theta', (-.15, .15), 5, innerapprox=True)
+        target &= f['vy'].conc2pred(mgr, 'vy', (-.8, .1), 6, innerapprox=True)
+        elimorder = [i for i in nextstates]
+        cpre = DecompCPre(f, (('x', 'xnext'), ('y', 'ynext'), ('vx', 'vxnext'), ('vy', 'vynext'), ('theta', 'thetanext'), ('omega', 'omeganext')), 
+                        ('t', 's'),
+                        elim_order=elimorder)
+        from redax.controllers import MemorylessController
+        c = mgr.load("landerreach.dddmp")
+        controller = MemorylessController(cpre, c)
+        del c
+        mgr.reorder(order_heuristic(mgr, ['x', 'y', 'vx', 'vy', 'theta', 'omega', 't', 's', 'xnext', 'ynext', 'vxnext', 'vynext', 'thetanext', 'omeganext']))
+        # exclude = f['x'].conc2pred(mgr, 'x', (-.55, .55), 7, innerapprox=True)
+        # exclude = exclude & f['y'].conc2pred(mgr, 'y', (.55,1.28), 7, innerapprox=False)
+        # a = simulate(controller, exclude= target | exclude, drop = 0)
+
+    # Reach Game
     if False:
         f = CompositeModule(tuple(subsys[i] for i in states))
         target = f['x'].conc2pred(mgr, 'x', (-.1, .1), 7, innerapprox=True)
@@ -382,7 +410,7 @@ if __name__ is "__main__":
             print("XY proj target:", mgr.count(mgr.exist(elimvars, target), precision['x'] + precision['y']))
             pixel2D(mgr, ('x', subsys['x']['x']),
                         ('y', subsys['y']['y']),
-                        mgr.exist(elimvars, w), 70, fname="lunarbasin_{0}".format(gameiter))
+                        pwin, 70, fname="lunarbasin_{0}".format(gameiter))
             del pwin
 
             # Decrease complexity of winning set by eliminating a least significant bit.
@@ -419,27 +447,28 @@ if __name__ is "__main__":
         print("Iter Reach Time: {}".format(time.time() - iterreach_start))
 
         # controller.C = c
-        # exclude = f['x'].conc2pred(mgr, 'x', (-.4, .4), 7, innerapprox=True)
-        # exclude = exclude & f['y'].conc2pred(mgr, 'y', (.9,1.28), 7, innerapprox=False)
+        # exclude = f['x'].conc2pred(mgr, 'x', (-.45, .45), 7, innerapprox=True)
+        # exclude = exclude & f['y'].conc2pred(mgr, 'y', (.8,1.28), 7, innerapprox=False)
         # simulate(controller, exclude= target | exclude)
 
-    # Solve safety operations
+    # Safety Game
+    # controller = None
     if False:
         f = CompositeModule(tuple(subsys[i] for i in states))
-        safe = f['x'].conc2pred(mgr, 'x', (-.4, .4), 6, innerapprox=True)
-        safe &= f['y'].conc2pred(mgr, 'y', (.1, 1.2), 6, innerapprox=True)
+        safe = f['x'].conc2pred(mgr, 'x', (-.6, .6), 7, innerapprox=True)
+        safe &= f['y'].conc2pred(mgr, 'y', (.3, .7), 7, innerapprox=True)
         # safe = mgr.true
         print("Safe Size:", mgr.count(safe, statebits))
 
         w = safe
 
         # coarsenbits = ['x_6', 'y_5', 'vx_5', 'vy_5', 'theta_4', 'omega_4']
-        for gameiter in range(10):
+        for gameiter in range(2):
 
             print("\nStep:", gameiter)
 
             # Decrease complexity of winning set by eliminating a least significant bit.
-            while(len(w) > 7*10**5):
+            while(len(w) > 6*10**5):
                 coarsenbits = {k: max([_idx(n)  for n in w.support if _name(n) == k]) for k in states}
                 coarsenbits = [k + "_" + v for k, v in coarsenbits.items()]
                 coarsenbits.sort(key=lambda x: mgr.count(mgr.exist([x], w), statebits), reverse=False) # Want to grow the least, while simplifying
@@ -450,16 +479,26 @@ if __name__ is "__main__":
                 # w = mgr.forall([coarsenbits[1]], w)
                 # print("After ", coarsenbits[1], "num states", mgr.count(w, statebits), "node complexity", len(w), "\n")
 
-            controller, steps = synthesize_safe(f, w, optimistic=False, steps=1)
+            del controller
+            controller, steps = synthesize_safe(f, w & safe, optimistic=False, steps=1)
             w = controller.winning_set()
 
             elimvars = [v for v in w.support if _name(v) not in ['x', 'y']]
             pwin = mgr.exist(elimvars, w)
             print("XY Proj states:", mgr.count(pwin, precision['x'] + precision['y']))
-            # scatter2D(mgr, ('x', subsys['x']['x']),
-            #                 ('y', subsys['y']['y']),
-            #                 pwin , 70)
+            pixel2D(mgr, ('x', subsys['x']['x']),
+                    ('y', subsys['y']['y']),
+                    mgr.exist(elimvars, pwin), 70, fname="lunarinv_{0}".format(gameiter))
+            del pwin
     
+
+        # exclude = f['x'].conc2pred(mgr, 'x', (-.1, .1), 7, innerapprox=True)
+        # exclude = exclude & f['y'].conc2pred(mgr, 'y', (.5, .6), 7, innerapprox=False)
+        # exclude = exclude & f['theta'].conc2pred(mgr, 'theta', (-.1, .1), 4, innerapprox=False)
+        # exclude = exclude & f['vx'].conc2pred(mgr, 'vx', (-.1, .1), 5, innerapprox=False)
+        # exclude = exclude & f['vy'].conc2pred(mgr, 'vy', (-.1, .1), 5, innerapprox=False)
+        # exclude = ~exclude
+        # simulate(controller, exclude= exclude, drop=50)
 
     if False:
 

@@ -237,10 +237,12 @@ class SafetyGame():
         ----------
         steps: int
             Maximum number of game steps to run
-        winning: int
+        winning: BDD
             Currently winning region
         verbose: bool, False
             If True (not default), then print out intermediate statistics.
+        winningonly: bool, False
+            If true, output safety controller that only stores the invariant region.
 
         Returns
         -------
