@@ -1,3 +1,4 @@
+import os 
 import time
 
 import numpy as np
@@ -12,10 +13,11 @@ from dynamics import lander_box_dynamics, plot_io_bounds
 
 from redax.module import AbstractModule, CompositeModule
 from redax.spaces import DynamicCover, EmbeddedGrid, DiscreteSet, OutOfDomainError
-from redax.synthesis import SafetyGame, ControlPre, DecompCPre, ReachGame, OptimisticSafetyGame
+from redax.synthesis import SafetyGame, DecompCPre, ReachGame, OptimisticSafetyGame
 from redax.controllers import MemorylessController
 from redax.visualizer import scatter2D, plot3D, plot3D_QT, pixel2D
-from redax.utils.bv import bv2pred, int2bv
+
+directory = os.path.dirname(os.path.abspath(__file__))
 
 T = 9
 np.random.seed(1337)
@@ -268,21 +270,18 @@ def synthesize_reach(f, target, steps=None):
 
 def simulate(controller: MemorylessController, exclude=None, drop=0):
 
-    try:
+    from lunar_lander import LunarLanderContinuous
+    env = LunarLanderContinuous()
+    env.seed(1337)
 
-        from lunar_lander import LunarLanderContinuous
-        env = LunarLanderContinuous()
-        env.seed(1337)
+    try:
 
         # Simulate and control
         import funcy as fn
 
         state = fn.first(fn.drop(drop, controller.winning_states(exclude=exclude)))
         state = {k: .5*(v[0] + v[1]) for k, v in state.items()}
-        # state = {k: 0 for k in states}
-        # state['x'] = .03
-        ordered_state = [state[v] for v in states]
-        env.reset(ordered_state)
+        env.reset([state[v] for v in states])
 
         statehist = None 
         for step in range(20):
@@ -361,6 +360,9 @@ if __name__ is "__main__":
     except NameError:
         mgr, subsys = setup(init=init)
         abs_iters = 0
+        # Save abstractions 
+        for f in subsys:
+            mgr._dump_dddmp(subsys[f].pred, "{0}/subsys/{1}.dddmp".format(directory, f))
 
     epoch = 0
 
@@ -388,19 +390,20 @@ if __name__ is "__main__":
         # a = simulate(controller, exclude= target | exclude, drop = 0)
 
     # Reach Game
-    if False:
+    if True:
         f = CompositeModule(tuple(subsys[i] for i in states))
+        controller = None
         target = f['x'].conc2pred(mgr, 'x', (-.1, .1), 7, innerapprox=True)
-        target &= f['y'].conc2pred(mgr, 'y', (1.2, 1.28), 7, innerapprox=False)
+        target &= f['y'].conc2pred(mgr, 'y', (.05, .15), 7, innerapprox=False)
         target &= f['theta'].conc2pred(mgr, 'theta', (-.15, .15), 5, innerapprox=True)
-        target &= f['vy'].conc2pred(mgr, 'vy', (-.8, .1), 6, innerapprox=True)
+        target &= f['vy'].conc2pred(mgr, 'vy', (-.2, .3), 6, innerapprox=True)
         print("Target Size:", mgr.count(target, statebits))
 
         w = target
         c = mgr.false
 
         iterreach_start = time.time()
-        for gameiter in range(20):
+        for gameiter in range(15):
 
             print("\nStep:", gameiter)
 
@@ -410,12 +413,12 @@ if __name__ is "__main__":
             print("XY proj target:", mgr.count(mgr.exist(elimvars, target), precision['x'] + precision['y']))
             pixel2D(mgr, ('x', subsys['x']['x']),
                         ('y', subsys['y']['y']),
-                        pwin, 70, fname="lunarbasin_{0}".format(gameiter))
+                        pwin, 70, fname=directory+"/figs/lunarbasin_{0}".format(gameiter))
             del pwin
 
             # Decrease complexity of winning set by eliminating a least significant bit.
             while(len(w) > (gameiter*.35+5)*10**5):
-                coarsenbits = {k: max([_idx(n)  for n in w.support if _name(n) == k]) for k in states}
+                coarsenbits = {k: max([_idx(n)  for n in w.support if _name(n) == k]) for k in states if k not in ['x','y']}
                 coarsenbits = [k + "_" + v for k, v in coarsenbits.items()]
                 coarsenbits.sort(key=lambda x: mgr.count(mgr.forall([x], w), statebits), reverse=True) # Want to shrink the least, while simplifying
                 print("Coarsening with", coarsenbits[0])
@@ -429,6 +432,7 @@ if __name__ is "__main__":
             pwin = mgr.exist(elimvars, w)
             print("XY Proj states after compression:", mgr.count(pwin, precision['x'] + precision['y']))
 
+            del controller
             controller, steps = synthesize_reach(f, w | target, steps=1)
             c = c | (controller.C & (~controller.cpre.elimcontrol(c)))  # Add new inputs
             
