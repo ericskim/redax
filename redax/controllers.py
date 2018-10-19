@@ -109,10 +109,11 @@ class MemorylessController(SupervisoryController):
                 print(k, v)
                 raise
 
-        # TODO: To compute u should assign x variable... but this works
-        xu = pt_bdd & self.C  # Safe state-input pairs
-        u = self.cpre.elimprestate(xu)  # Safe control inputs
-
+        for i, assignment in enumerate(self.cpre.mgr.pick_iter(pt_bdd)):
+            if i > 0:
+                raise RuntimeError("Multiple discrete states assocaited with argument state.")
+            u = self.cpre.mgr.let(assignment, self.C)
+        
         # Generate allowed controls
         for u_assignment in self.cpre.mgr.pick_iter(u):
             # Translate BDD assignment into concrete counterpart

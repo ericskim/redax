@@ -83,10 +83,17 @@ def test_dynamic_periodic():
                                                              (False, False),
                                                              (False, True)}
 
+    mgr.declare("x_0", "x_1", "x_2")
+
+    x0 = mgr.var("x_0")
+    x1 = mgr.var("x_1")
+    x2 = mgr.var("x_2")
+
     assert x.conc2pred(mgr, 'x', (1, 19), 3) == mgr.true
+
     # assert x.conc2pred(mgr, 'x', (19,1), 3, True) == mgr.false
-    assert x.conc2pred(mgr, 'x', (0, 9.9), 3, False) == mgr.add_expr('~x_0')
-    assert x.conc2pred(mgr, 'x', (0, 9.9), 3, True) == mgr.add_expr('~x_0 & ~x_1') | mgr.add_expr('~x_0 & x_1 & x_2')
+    assert x.conc2pred(mgr, 'x', (0, 9.9), 3, False) == ~x0
+    assert x.conc2pred(mgr, 'x', (0, 9.9), 3, True) == (~x0 & ~x1) | (~x0 & x1 & x2)
 
     assert x.box2indexwindow((.1, 19), 3, False) == (0, 7)
     assert x.box2indexwindow((.1, 19), 3, True) == (1, 6)
@@ -177,13 +184,17 @@ def test_fixed_periodic():
                                                (False, False, True)}
 
     z = FixedCover(0, 10, 5, periodic=True)
+    mgr.declare("z_0", "z_1", "z_2")
     assert y == z
     assert z.box2indexwindow((9.9, .1), innerapprox=True) is None
     assert z.box2indexwindow((1.9, 2.1), innerapprox=True) is None
     assert z.box2indexwindow((9.9, .1), innerapprox=False) == (4, 0)
     assert z.box2indexwindow((4.4, 4.3), innerapprox=False) == (3, 2)
     assert z.box2indexwindow((9.9, 9.8), innerapprox=False) == (0, 4)
-    assert z.conc2pred(mgr, 'z', (4.4, 4.3), innerapprox=False) == mgr.add_expr('~z_0 | (z_0 & ~z_1 & ~z_2)')
+    z0 = mgr.var("z_0")
+    z1 = mgr.var("z_1")
+    z2 = mgr.var("z_2")
+    assert z.conc2pred(mgr, 'z', (4.4, 4.3), innerapprox=False) ==  ~z0  | (z0 & ~z1 & ~z2)
     assert z.box2indexwindow((19.9, 19.8), innerapprox=False) == (0, 4)
 
     # Over and under approximations of boxes that align exactly with the grid are the same
@@ -195,8 +206,15 @@ def test_discrete():
     mgr = BDD()
     x = DiscreteSet(5)
     x.conc2pred(mgr, 'x', 2) # Declares variables x_0, x_1, x_2 in manager
-    assert x.conc2pred(mgr, 'x', 2) == mgr.add_expr('~x_0 & x_1 & ~x_2')
-    assert x.abs_space(mgr, 'x') == mgr.add_expr('x_0 & ~x_1 & ~x_2') | mgr.add_expr('~x_0')
+    
+    mgr.declare("x_0", "x_1", "x_2")
+
+    x0 = mgr.var("x_0")
+    x1 = mgr.var("x_1")
+    x2 = mgr.var("x_2")
+
+    assert x.conc2pred(mgr, 'x', 2) == ~x0 & x1 & ~x2
+    assert x.abs_space(mgr, 'x') == (x0 & ~x1 & ~x2) | ~x0
 
     with raises(AssertionError):
         x.conc2pred(mgr, 'x', -1)

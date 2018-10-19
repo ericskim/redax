@@ -120,7 +120,7 @@ pip install .
   m1 >> m2
 
   # Hide outputs
-  x = module.hidden('x')
+  x = module.ohidden('x')
 
   # Future feature: Compute lower complexity abstractions keeping only the most significant bits
   coarser_model = model.coarsen(x=3, y=4)
@@ -129,7 +129,7 @@ pip install .
   Operations can also be chained together:
 
   ```python
-  simpler_dubins = dubins.hidden('xnext')\
+  simpler_dubins = dubins.ohidden('xnext')\
                          .coarsened(x=5,y=4)\
                          .renamed(ynext = 'nextposition')
   ```
@@ -146,10 +146,10 @@ The core foundations are working and providing meaningful results on some test e
 
 ### TODOs
 
-- Examples
-  - lunar lander
-  - Pair of dubins vehicles
 - Make symbolic backend a class attribute.
+  - How to deal with different imports
+  - Generic predicate manipulation wrapper around py-aiger and dd.
+- Variable = name + types
 - Make the dependencies on the bdd manager more explicit. Reordering with python's quasi-pass-by-value semantics and multiple managers is hard to deal with.
 - Helper classes for different input-output overapproximation procedures
   - Lipschitz
@@ -158,7 +158,7 @@ The core foundations are working and providing meaningful results on some test e
   - Box corners with bloating
 - Different iterators of input space
 - Tests for floating point inequalities for conc2abs method in continuous covers
-  - Iterators for the 2^N reduced grid traversal
+  - Iterators for the $2^{N-1}$ reduced grid traversal
 - Upload to github and add code coverage, travis-ci
 - Rewrite continuous cover grid to have an overlap parameter.
 - source/sink module tests
@@ -167,17 +167,10 @@ The core foundations are working and providing meaningful results on some test e
   - conjoin information about modules
   - Support methods: Collapse to monolithic, split and give a collection, or something in the middle
   - hide certain outputs
-  - compose.py helper functions
 
 ### Future Features
-
-- Concrete executable functions associated with module dynamics
 - Support for disjoint union and product operations for spaces (thus adding support for hybrid spaces)
-  - Requires a better predicate bit name generator
-- Control synthesizer that is aware of the control system structure. Options include:
-  1. Non-eager composition like in neural network packages. Especially useful if we have concrete executables inside the module.
-  2. Provide a collection of modules and have the synthesizer construct a DAG internally.
-- Generic predicate manipulation wrapper around py-aiger and dd.
+  - Requires a predicate bit name generator
 
 ## References
 

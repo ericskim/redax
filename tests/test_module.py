@@ -51,7 +51,7 @@ def test_dynamic_module():
                                                      'z_0', 'z_1', 'z_2'}
 
     assert g.nonblock() == g.input_to_abs({'j': (3.,10.), 'y': (2.5,3.8)}, nbits = precision) # No inputs block
-    assert g.nonblock() == (g.hidden(g.outputs).pred) 
+    assert g.nonblock() == (g.ohidden(g.outputs).pred) 
 
     # Identity test for input and output renaming 
     assert ((g  >> ('r', 'z') ) >> ('z','r')) == g
@@ -131,9 +131,14 @@ def test_embeddedgrid_module():
     m = AbstractModule(mgr, inputs, outputs)
 
     mgr.declare("x_0", "x_1", "y_0", "y_1", "y_2")
-    assert m.io_refined({'x': 2, 'y':4}).pred == mgr.add_expr(r"( x_0 /\ ~x_1)") & mgr.add_expr(r" ~( x_0 /\ ~x_1) | (~y_0 /\ ~y_1 /\ ~y_2)")
+    x0 = mgr.var("x_0")
+    x1 = mgr.var("x_1")
+    y0 = mgr.var("y_0")
+    y1 = mgr.var("y_1")
+    y2 = mgr.var("y_2")
+    assert m.io_refined({'x': 2, 'y':4}).pred == (x0 & ~x1) &  (~(x0 & ~x1) | (~y0 & ~y1 & ~y2))
     
-    assert len(mgr.vars) > 0 
+    assert len(mgr.vars) > 0
 
 def test_module_composition():
     mgr = BDD()
@@ -284,8 +289,8 @@ def test_sin_sqrt_comp():
         comp = comp.io_refined(iobox, nbits=precision)
         assert sqrtmod == comp.children[1]
 
-    # sinroot = (sinmod >> sqrtmod).hidden(['sout'])
-    sinroot = (comp.children[0] >> comp.children[1]).hidden(['sout'])
+    # sinroot = (sinmod >> sqrtmod).ohidden(['sout'])
+    sinroot = (comp.children[0] >> comp.children[1]).ohidden(['sout'])
     assert set(sinroot.vars) == {'sin', 'sqrt'}
     assert sinroot.pred != mgr.false
     sinroot.check()

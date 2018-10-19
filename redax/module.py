@@ -8,7 +8,7 @@ Module container
 
 from __future__ import annotations
 
-from typing import Dict, Generator, List, Union, Collection, Tuple, Set
+from typing import Dict, Generator, List, Union, Collection, Tuple, Set, Sequence 
 import itertools
 
 from toposort import toposort
@@ -16,6 +16,7 @@ from toposort import toposort
 import redax.spaces as sp
 from redax.utils.bv import flatten
 from redax.spaces import OutOfDomainError
+
 
 
 class AbstractModule(object):
@@ -180,7 +181,7 @@ class AbstractModule(object):
             Predicate for :math:`\exists x'. (system /\ outspace(x'))`
 
         """
-        elim_bits = []
+        elim_bits : List[str] = []
         for k in self._out:
             elim_bits += self.pred_bitvars[k]
         return self.mgr.exist(elim_bits, self.pred & self.outspace())
@@ -224,8 +225,10 @@ class AbstractModule(object):
             outputs = {k: v for k, v in concrete.items() if k in self.outputs}
             inpred = self.input_to_abs(inputs, **kwargs)
             outpred = self.output_to_abs(outputs, **kwargs)
-        except:  # TODO: Should catch a custom out of boundaries error
+        except OutOfDomainError:
             return False
+        except: 
+            raise
 
         self._pred = ((~self._nb & inpred & self.inspace()) | self.pred) & (~inpred | outpred)
         self._nb = self._nb | inpred
@@ -241,7 +244,7 @@ class AbstractModule(object):
         concrete: dict(Variable str: concrete values)
 
         silent: bool, optional
-            If true, does not raise an error out of bounds errors
+            If true, does not raise an error for out of bounds errors
             If false, raises an error.
         **kwargs:
             Custom arguments for conc2pred methods in spaces
@@ -369,7 +372,7 @@ class AbstractModule(object):
         Generate for exhaustive search over the concrete input grid.
 
         #FIXME: Implementation assumes dictionary ordering is stable.
-        # This solution is very adhoc!!! Need to accommodate keyword arguments
+        # This solution is very adhoc!!! Should instead use kwargs for space specific items
 
         Parameters
         ----------
@@ -388,9 +391,9 @@ class AbstractModule(object):
         names += [k for k, v in self.inputs.items() if not isinstance(v, sp.DynamicCover)]
 
         iters = [v.conc_iter(precision[k]) for k, v in self.inputs.items()
-                 if isinstance(v, sp.DynamicCover)]
+                    if isinstance(v, sp.DynamicCover)]
         iters += [v.conc_iter() for k, v in self.inputs.items()
-                  if not isinstance(v, sp.DynamicCover)]
+                    if not isinstance(v, sp.DynamicCover)]
 
         for i in itertools.product(*iters):
             yield {names[j]: i[j] for j in range(numin)}
@@ -422,7 +425,7 @@ class AbstractModule(object):
     def count_io_space(self, bits: int) -> float:
         return self.mgr.count(self.iospace(), bits)
 
-    def hidden(self, elim_vars) -> AbstractModule:
+    def ohidden(self, elim_vars) -> AbstractModule:
         r"""
         Hides an output variable and returns another module.
 
@@ -437,55 +440,13 @@ class AbstractModule(object):
             Another abstract module with the removed outputs
 
         """
-        if any(var not in self._out for var in elim_vars):
-            raise ValueError("Can only hide output variables")
+        from redax.ops import ohide
+        return ohide(self, elim_vars)
 
-        elim_bits = []
-        for k in elim_vars:
-            elim_bits += self.pred_bitvars[k]
+    def ihidden(self, elim_vars: Sequence[str]) -> AbstractModule:
 
-        newoutputs = {k: v for k, v in self.outputs.items() if k not in elim_vars}
-
-        elim_bits = set(elim_bits) & self.pred.support
-        return AbstractModule(self.mgr,
-                              self.inputs.copy(),
-                              newoutputs,
-                              self.mgr.exist(elim_bits, self.pred & self.iospace())
-                              )
-
-    def __le__(self, other: AbstractModule) -> bool:
-        r"""
-        Check for a feedback refinement relation between two modules.
-
-        If abs <= conc then we call abs an abstraction of the concrete system
-        conc.
-
-        Returns
-        -------
-        bool:
-            True if the feedback refinement relation holds.
-            False if there is a type or module port mismatch
-
-        """
-        # TODO: Checks between Dynamic and fixed partitions
-
-        # Incomparable
-        if not isinstance(other, AbstractModule):
-            return False
-        if self.inputs != other.inputs:
-            return False
-        if self.outputs != other.outputs:
-            return False
-
-        # Abstract module must accept fewer inputs
-        if (~self._nb | other._nb != self.mgr.true):
-            return False
-
-        # Abstract system outputs must be overapproximations
-        if (~(self._nb & other.pred) | self.pred) != self.mgr.true:
-            return False
-
-        return True
+        from redax.ops import ihide
+        return ihide(self, elim_vars)
 
     def coarsened(self, bits=None, **kwargs) -> AbstractModule:
         r"""Remove less significant bits and coarsen the system representation.
@@ -500,32 +461,9 @@ class AbstractModule(object):
             excluded variables aren't coarsened.
 
         """
-        bits = dict() if bits is None else bits
-        bits.update(kwargs)
-        if any(not isinstance(self[var], sp.DynamicCover) for var in bits):
-            raise ValueError("Can only coarsen dynamic covers.")
 
-        if any(b < 0 for b in bits.values()):
-            raise ValueError("Negative bits are not allowed.")
-
-        # Identify bits that are finer than the desired precision
-        def fine_bits(var, num):
-            return self.pred_bitvars[var][num:]
-
-        outbits = [fine_bits(k, v) for k, v in bits.items() if k in self.outputs]
-        outbits = flatten(outbits)
-        inbits = [fine_bits(k, v) for k, v in bits.items() if k in self.inputs]
-        inbits = flatten(inbits)
-
-        # Shrink nonblocking set
-        nb = self.mgr.forall(inbits, self.nonblock())
-        # Expand outputs with respect to input coarseness
-        newpred = self.mgr.exist(inbits, self.pred)
-        # Constrain outputs to align with nonblocking set
-        newpred = self.mgr.exist(outbits, nb & newpred & self.outspace())
-
-        return AbstractModule(self.mgr, self.inputs, self.outputs,
-                              pred=newpred, nonblocking=nb)
+        from redax.ops import coarsen
+        return coarsen(self, bits, **kwargs)
 
     def renamed(self, names: Dict = None, **kwargs) -> AbstractModule:
         """
@@ -539,31 +477,9 @@ class AbstractModule(object):
             Same dictionary format as names.
 
         """
-        names = dict([]) if names is None else names
-        names.update(kwargs)
 
-        newoutputs = self._out.copy()
-        newinputs = self._in.copy()
-        swapbits = dict()
-
-        for oldname, newname in names.items():
-            if oldname not in self.vars:
-                raise ValueError("Cannot rename non-existent I/O " + oldname)
-            if newname in self.vars:
-                raise ValueError("Don't currently support renaming to an existing variable")
-
-            if oldname in self.outputs:
-                newoutputs[newname] = newoutputs.pop(oldname)
-            elif oldname in self.inputs:
-                newinputs[newname] = newinputs.pop(oldname)
-
-            newbits = [newname + '_' + i.split('_')[1] for i in self.pred_bitvars[oldname]]
-            self.mgr.declare(*newbits)
-            swapbits.update({i: j for i, j in zip(self.pred_bitvars[oldname], newbits)})
-
-        newpred = self.pred if swapbits == {} else self.mgr.let(swapbits, self.pred)
-
-        return AbstractModule(self.mgr, newinputs, newoutputs, newpred)
+        from redax.ops import rename
+        return rename(self, names, **kwargs)
 
     def composed_with(self, other: AbstractModule) -> AbstractModule:
         """
@@ -587,55 +503,9 @@ class AbstractModule(object):
             Composed monolithic module
 
         """
-        if self.mgr != other.mgr:
-            raise ValueError("Module managers do not match")
-        if not set(self._out).isdisjoint(other.outputs):
-            raise ValueError("Outputs are not disjoint")
 
-        inout = set(other._out).intersection(self._in)
-        outin = set(other._in).intersection(self._out)
-        if len(inout) > 0 and len(outin) > 0:
-            raise ValueError("Feedback composition is disallowed")
-
-        # Identify upstream >> downstream modules, or if parallel comp
-        if len(inout) > 0:
-            upstream = other
-            downstream = self
-        if len(outin) > 0:
-            upstream = self
-            downstream = other
-        if len(outin) == 0 and len(inout) == 0:
-            upstream = self
-            downstream = other
-
-        # Outputs are the union of both module outputs
-        newoutputs = upstream._out.copy()
-        newoutputs.update(downstream.outputs)
-
-        # Compute inputs = (self.inputs union other.inputs) and check for differences
-        newinputs = upstream._in.copy()
-        for k in downstream.inputs:
-            # Common existing inputs must have same grid type
-            if k in newinputs and newinputs[k] != downstream.inputs[k]:
-                raise TypeError("Mismatch between input spaces {0}, {1}".format(newinputs[k],
-                                                                                downstream.inputs[k]))
-            newinputs[k] = downstream.inputs[k]
-
-        # Shared vars that are both inputs and outputs
-        overlapping_vars = set(upstream._out) & set(downstream._in)
-        for k in overlapping_vars:
-            newinputs.pop(k)
-
-        # Compute forall outputvars . (self.pred => other.nonblock())
-        nonblocking = ~upstream.outspace() | ~upstream.pred | downstream.nonblock()
-        elim_bits = set(flatten([upstream.pred_bitvars[k] for k in upstream._out]))
-        elim_bits |= set(flatten([downstream.pred_bitvars[k] for k in downstream._out]))
-        elim_bits &= nonblocking.support
-        nonblocking = upstream.mgr.forall(elim_bits, nonblocking)
-        return AbstractModule(upstream.mgr,
-                              newinputs,
-                              newoutputs,
-                              upstream.pred & downstream.pred & nonblocking)
+        from redax.ops import compose
+        return compose(self, other)
 
     def __rshift__(self, other: Union[AbstractModule, tuple]) -> AbstractModule:
         r"""
@@ -697,42 +567,43 @@ class AbstractModule(object):
         else:
             raise TypeError
 
-    # Parallel composition
     def __or__(self, other: AbstractModule) -> AbstractModule:
+
+        from redax.ops import parallelcompose
+        return parallelcompose(self, other)
+
+    def __le__(self, other: AbstractModule) -> bool:
         r"""
-        Parallel composition of modules.
+        Check for a feedback refinement relation between two modules.
+
+        If abs <= conc then we call abs an abstraction of the concrete system
+        conc.
 
         Returns
         -------
-        AbstractModule:
-            Parallel composition of two modules
+        bool:
+            True if the feedback refinement relation holds.
+            False if there is a type or module port mismatch
 
         """
-        if self.mgr != other.mgr:
-            raise ValueError("Module managers do not match")
 
-        # Check for disjointness
-        if not set(self._out).isdisjoint(other.outputs):
-            raise ValueError("Outputs are not disjoint")
-        if not set(self._out).isdisjoint(other.inputs):
-            raise ValueError("Module output feeds into other module input")
-        if not set(self._in).isdisjoint(other.outputs):
-            raise ValueError("Module output feeds into other module input")
+        # Incomparable
+        if not isinstance(other, AbstractModule):
+            return False
+        if self.inputs != other.inputs:
+            return False
+        if self.outputs != other.outputs:
+            return False
 
-        # Take union of inputs and check for type differences
-        newinputs = self._in.copy()
-        for k in other.inputs:
-            # Common existing inputs must have same grid type
-            if k in newinputs and newinputs[k] != other.inputs[k]:
-                raise TypeError("Mismatch between input spaces {0} and {1}".format(newinputs[k], other.inputs[k]))
-            newinputs[k] = other.inputs[k]
+        # Abstract module must accept fewer inputs
+        if (~self._nb | other._nb != self.mgr.true):
+            return False
 
-        # Take union of disjoint output sets.
-        newoutputs = self._out.copy()
-        newoutputs.update(other.outputs)
+        # Abstract system outputs must be overapproximations
+        if (~(self._nb & other.pred) | self.pred) != self.mgr.true:
+            return False
 
-        return AbstractModule(self.mgr, newinputs, newoutputs,
-                              self.pred & other.pred)
+        return True
 
     def _direct_io_refined(self, inpred, outpred) -> AbstractModule:
         """
@@ -755,7 +626,7 @@ class CompositeModule(object):
         if len(modules) < 1:
             raise ValueError("Empty module collection")
 
-        self.children = tuple(modules)
+        self.children : Tuple[AbstractModule] = tuple(modules)
 
         if checktopo:
             self.check()

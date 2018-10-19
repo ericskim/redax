@@ -437,7 +437,7 @@ class DynamicCover(ContinuousCover):
         return predbox
 
 
-    def conc_iter(self, prec: int):
+    def conc_iter(self, nbits: int):
         """
         Generator for iterating over the space with fixed precision
 
@@ -447,8 +447,8 @@ class DynamicCover(ContinuousCover):
             (left, right) box of floats 
         """
         i = 0
-        while(i < 2**prec):
-            yield self.bv2conc(int2bv(i, prec))
+        while(i < 2**nbits):
+            yield self.bv2conc(int2bv(i, nbits))
             i += 1
 
 @dataclass(frozen=True)

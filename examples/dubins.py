@@ -81,39 +81,19 @@ abs_starttime = time.time()
 #     iobox['ynext']     = ywindow(**{k: v for k, v in iobox.items() if k in dubins_y.inputs})
 #     iobox['thetanext'] = thetawindow(**{k: v for k, v in iobox.items() if k in dubins_theta.inputs})
 
-#     # Add new inputs and constrain output nondeterminism
-#     # for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
-#     #     filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
-#     #     if not sys.refine_io(filtered_iobox, nbits=precision):
-#     #         coarse_errors[var] += 1
-
 #     composite = composite.io_refined(iobox, nbits=precision)
-#     # assert composite.children[0] == dubins_x
-#     # assert composite.children[1] == dubins_y
-#     # assert composite.children[2] == dubins_theta
 
-#     coarseiter += 1
-#     # if coarseiter % 2000 == 0:
-#     #     # dubins = (dubins_x | dubins_y | dubins_theta)
-#     #     dubins = composite.children[0] | composite.children[1] | composite.children[2]
-#     #     iotrans = dubins.count_io(bittotal)
-#     #     print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(coarseiter,
-#     #                                                 100*iotrans/possible_transitions,
-#     #                                                 len(dubins.pred),
-#     #                                                 time.time() - abs_starttime))
 
 # Sample generator
 random_errors = {'x': 0, 'y': 0, 'theta': 0}
 np.random.seed(1337)
-for numapplied in range(12000):
+for numapplied in range(5000):
 
     # Shrink window widths over time
     scale = 1/np.log10(1.0*numapplied+10)
 
     # Generate random input windows and points
-    f_width = {#'x':     np.random.rand()*scale*pspace.width(),
-               #'y':     np.random.rand()*scale*pspace.width(),
-               'x':     .05*pspace.width(),
+    f_width = {'x':     .05*pspace.width(),
                'y':     .05*pspace.width(),
                'theta': .05*anglespace.width()}
     f_left = {'x':     pspace.lb + np.random.rand() * (pspace.width() - f_width['x']),
@@ -129,44 +109,18 @@ for numapplied in range(12000):
     iobox['ynext']     = ywindow(**{k: v for k, v in iobox.items() if k in dubins_y.inputs})
     iobox['thetanext'] = thetawindow(**{k: v for k, v in iobox.items() if k in dubins_theta.inputs})
 
-    # Add new inputs and constrain output nondeterminism for each subsystem
-    # for var, sys in {'x': dubins_x, 'y': dubins_y, 'theta': dubins_theta}.items():
-    #     filtered_iobox = {k: v for k, v in iobox.items() if k in sys.vars}
-    #     if not sys.refine_io(filtered_iobox, nbits=precision):
-    #         random_errors[var] += 1
-
     composite = composite.io_refined(iobox, nbits=precision)
-    # assert composite.children[0] == dubins_x
-    # assert composite.children[1] == dubins_y
-    # assert composite.children[2] == dubins_theta
 
-    numapplied += 1
-
-    # if numapplied % 2000 == 0:
-    #     # dubins = (dubins_x | dubins_y | dubins_theta)
-    #     dubins = composite.children[0] | composite.children[1] | composite.children[2]
-    #     iotrans = dubins.count_io(bittotal)
-    #     print("(samples, I/O % trans., bddsize, time(s)) --- ({0}, {1:.3}, {2}, {3})".format(numapplied,
-    #                                                 100*iotrans/possible_transitions,
-    #                                                 len(dubins.pred),
-    #                                                 time.time() - abs_starttime))
-
-        # xdyn = mgr.exist(['v_0'],(dubins_x.pred) & mgr.var('v_0'))
-        # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
 
 print("Abstraction Time: ", time.time() - abs_starttime)
-# composite.check()
-
+composite.check()
 
 from redax.utils.heuristics import order_heuristic
 mgr.reorder(order_heuristic(mgr))
 
-# dubins = (dubins_x | dubins_y | dubins_theta)
-
 # Declare reach set as [0.8] x [-.8, 0] box
-# FIXME: raises an error if this precision is higher than the system precision
-target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 6, innerapprox=False)
-target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 6, innerapprox=False)
+target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 8, innerapprox=False)
+target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 8, innerapprox=False)
 
 # dubins = composite.children[0] | composite.children[1] | composite.children[2]
 # cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
@@ -178,7 +132,7 @@ target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 6, innerapprox=False)
 dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
 dgame = ReachGame(dcpre, target)
 dstarttime = time.time()
-dbasin, steps, controller = dgame.run(verbose=False, excludewinning=True)
+dbasin, steps, controller = dgame.run(verbose=False)
 print("Decomp Solve Time:", time.time() - dstarttime)
 # assert dbasin == basin
 basin = dbasin
