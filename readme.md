@@ -146,9 +146,12 @@ The core foundations are working and providing meaningful results on some test e
 
 ### TODOs
 
+- Rewrite control predecessors to use relational operators instead.
+  - Sink sets are modules
 - Make symbolic backend a class attribute.
   - How to deal with different imports
   - Generic predicate manipulation wrapper around py-aiger and dd.
+- Decompose predicate into assumption-guarantee encoding.
 - Variable = name + types
 - Make the dependencies on the bdd manager more explicit. Reordering with python's quasi-pass-by-value semantics and multiple managers is hard to deal with.
 - Helper classes for different input-output overapproximation procedures
@@ -159,7 +162,7 @@ The core foundations are working and providing meaningful results on some test e
 - Different iterators of input space
 - Tests for floating point inequalities for conc2abs method in continuous covers
   - Iterators for the $2^{N-1}$ reduced grid traversal
-- Upload to github and add code coverage, travis-ci
+- Add code coverage, travis-ci
 - Rewrite continuous cover grid to have an overlap parameter.
 - source/sink module tests
 - Class for named spaces so we don't refer to variables via strings.

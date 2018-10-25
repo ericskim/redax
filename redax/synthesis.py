@@ -7,17 +7,15 @@ from bidict import bidict
 from redax.controllers import MemorylessController, SafetyController
 from redax.utils.bv import flatten
 from redax.module import AbstractModule, CompositeModule
+from redax.ops import ohide, compose, ihide
 
 # flatten = lambda l: [item for sublist in l for item in sublist]
-
 
 def _name(i):
     return i.split('_')[0]
 
-
 def _idx(i):
     return i.split('_')[1]
-
 
 class ControlPre():
     r"""Controlled predecessors calculator."""
@@ -140,6 +138,23 @@ class ControlPre():
         else:
             return self.sys._nb & self.elimpost(Z)
 
+    def modulepre(self, Z: AbstractModule, no_inputs=False):
+
+        if len(Z.outputs) > 0:
+            raise ValueError("Only accept sink modules as inputs.")
+
+        # Rename inputs from pre variables to post.
+        Z = Z.renamed(self.pre_to_post)
+
+        # Compute robust state-input pairs
+        xu = ohide(self.sys.outputs.keys(), compose(self.sys, Z))
+
+        # Return state-input pairs or only states
+        if no_inputs:
+            return ihide(self.control, xu)
+        else:
+            return xu
+
 class DecompCPre(ControlPre):
 
     def __init__(self, mod: CompositeModule, states, control, elim_order = None) -> None:
@@ -166,19 +181,16 @@ class DecompCPre(ControlPre):
         elimbits = tuple(i for i in implies_pred.support if _name(i) == postvar)
         return self.mgr.forall(elimbits, implies_pred)
 
-    def __call__(self, Z, no_inputs=False, verbose=False, excludedstates=None):
+    def __call__(self, Z, no_inputs=False, verbose=False):
         swapvars = self.swappedstates(Z)
         if len(swapvars) > 0:
             self.mgr.declare(*swapvars.values())
             Z = self.mgr.let(swapvars, Z)
 
-        if excludedstates is None:
-            excludedstates = self.mgr.false
-
         if self.elimorder is not None:
-            to_elim_post = [i for i in self.elimorder]
+            to_elim_post = list(self.elimorder)
         else:
-            to_elim_post = [i for i in self.poststate]
+            to_elim_post = list(self.poststate)
 
         while(len(to_elim_post) > 0):
             var = to_elim_post.pop()
@@ -198,7 +210,6 @@ class DecompCPre(ControlPre):
                 nb = nb & mod._nb
 
             Z = nb & self.elimpostslice(Z, var)
-            Z &= ~excludedstates
 
         # TODO: Assert Z's support is in the composite systems input range. Line below hasn't been checked
         # assert Z.support <= set(flatten([self.sys.pred_bitvars[v] for v in self.sys.inputs]))
@@ -208,6 +219,36 @@ class DecompCPre(ControlPre):
             if verbose:
                 print("Eliminating Control")
             return self.elimcontrol(Z)
+        else:
+            return Z
+
+    def modulepre(self, Z: AbstractModule, no_inputs=False):
+
+        Z = Z.renamed(self.pre_to_post)
+
+        if self.elimorder is not None:
+            to_elim_post = list(self.elimorder)
+        else:
+            to_elim_post = list(self.poststate)
+
+        while(len(to_elim_post) > 0):
+            var = to_elim_post.pop()
+
+            # Partition into modules that do/don't depend on var
+            dep_mods = tuple(mod for mod in self.sys.children if var in mod.outputs)
+
+            if len(dep_mods) == 0:
+                continue
+
+            # Find Z bit precision
+            Z_var_bits = len([b for b in Z.pred.support if _name(b) == var])
+            assert Z_var_bits == len(Z.pred_bitvars[var])
+
+            for mod in dep_mods:
+                Z = ohide([var], compose(mod.coarsened(**{var: Z_var_bits}), Z))
+
+        if no_inputs:
+            return ihide(self.control, Z)
         else:
             return Z
 

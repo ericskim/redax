@@ -17,6 +17,8 @@ from redax.visualizer import plot3D, plot3D_QT, pixel2D
 
 from redax.utils.overapprox import maxmincos, maxminsin
 
+import funcy as fn
+
 """
 Specify dynamics and overapproximations
 """
@@ -129,17 +131,17 @@ target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 8, innerapprox=False)
 # basin, steps, controller = game.run(verbose=False)
 # print("Monolithic Solve Time:", time.time() - starttime)
 
-dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
-dgame = ReachGame(dcpre, target)
-dstarttime = time.time()
-dbasin, steps, controller = dgame.run(verbose=False)
-print("Decomp Solve Time:", time.time() - dstarttime)
-# assert dbasin == basin
-basin = dbasin
+# dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
+# dgame = ReachGame(dcpre, target)
+# dstarttime = time.time()
+# dbasin, steps, controller = dgame.run(verbose=False)
+# print("Decomp Solve Time:", time.time() - dstarttime)
+# # assert dbasin == basin
+# basin = dbasin
 
-print("Reach Size:", dubins.mgr.count(basin, len(basin.support)))
-print("Target Size:", dubins.mgr.count(target, len(basin.support)))
-print("Game Steps:", steps)
+# print("Reach Size:", dubins.mgr.count(basin, len(basin.support)))
+# print("Target Size:", dubins.mgr.count(target, len(basin.support)))
+# print("Game Steps:", steps)
 
 # # Plot reachable winning set
 # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin , 60)
@@ -156,14 +158,41 @@ print("Game Steps:", steps)
 # thetadyn = mgr.exist(['v_0', 'omega_0', 'omega_1'],(composite.children[2].pred) & mgr.var('v_0') & mgr.var('omega_0') & ~mgr.var('omega_1') )
 # pixel2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn, 128)
 
-"""Simulate"""
-state = {'x': -1, 'y': .6, 'theta': -.2}
-for step in range(10):
-    print(step, state)
-    u = [i for i in controller.allows(state)]
-    if len(u) == 0:
-        break
-    u = u[0]
-    state.update(u)
-    nextstate = dynamics(**state)
-    state = {'x': nextstate[0], 'y': nextstate[1], 'theta': nextstate[2]}
+
+# """Simulate"""
+# state = {'x': -1, 'y': .6, 'theta': -.2}
+# for step in range(10):
+#     print(step, state)
+
+#     u = fn.first(controller.allows(state))
+#     if u is None:
+#         break
+#     # u = [i for i in controller.allows(state)]
+#     # if len(u) == 0:
+#     #     break
+#     # u = u[0]
+#     state.update(u)
+#     nextstate = dynamics(**state)
+#     state = {'x': nextstate[0], 'y': nextstate[1], 'theta': nextstate[2]}
+
+
+"""
+Test code for moving to a case where everything is an interface. 
+"""
+
+targetmod = AbstractModule(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {})
+targetmod._pred = target
+targetmod._nb = target
+targetmod.check()
+
+# dubins = composite.children[0] | composite.children[1] | composite.children[2]
+cpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
+
+assert cpre.modulepre(targetmod).pred == cpre(target)
+
+for i in range(5):
+    targetmod = cpre.modulepre(targetmod, no_inputs=True)
+    target = cpre(target, no_inputs=True)
+
+    assert targetmod.pred == target
+

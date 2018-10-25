@@ -18,7 +18,6 @@ from redax.utils.bv import flatten
 from redax.spaces import OutOfDomainError
 
 
-
 class AbstractModule(object):
     r"""
     Wrapper for translating between concrete and discrete I/O values.
@@ -86,7 +85,7 @@ class AbstractModule(object):
     def __getitem__(self, var):
         r"""Access an input or output variable from its name."""
         if var not in self.vars:
-            raise ValueError("Variable does not exist")
+            raise ValueError("Variable {} does not exist".format(var))
         return self._in[var] if var in self._in else self._out[var]
 
     def __eq__(self, other) -> bool:
@@ -227,7 +226,7 @@ class AbstractModule(object):
             outpred = self.output_to_abs(outputs, **kwargs)
         except OutOfDomainError:
             return False
-        except: 
+        except:
             raise
 
         self._pred = ((~self._nb & inpred & self.inspace()) | self.pred) & (~inpred | outpred)
@@ -277,7 +276,7 @@ class AbstractModule(object):
         return AbstractModule(self.mgr,
                               self.inputs,
                               self.outputs,
-                              ((~self._nb & inpred & self.inspace()) | self.pred) & (~inpred | outpred),
+                              (self.pred | ((~self._nb & inpred) & self.inspace())) & (~inpred | outpred),
                               self._nb | inpred)
 
     def check(self):
@@ -441,12 +440,16 @@ class AbstractModule(object):
 
         """
         from redax.ops import ohide
-        return ohide(self, elim_vars)
+        return ohide(elim_vars, self)
 
     def ihidden(self, elim_vars: Sequence[str]) -> AbstractModule:
+        r"""
+        Hides input variable for sink and returns another sink.
+        
+        """
 
         from redax.ops import ihide
-        return ihide(self, elim_vars)
+        return ihide(elim_vars, self)
 
     def coarsened(self, bits=None, **kwargs) -> AbstractModule:
         r"""Remove less significant bits and coarsen the system representation.
