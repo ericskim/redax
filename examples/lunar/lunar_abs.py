@@ -2,16 +2,12 @@ import os
 import time
 
 import numpy as np
-try:
-    from dd.cudd import BDD
-except ImportError:
-    from dd.autoref import BDD
 
 import gym
 from dynamics import lander_box_dynamics, plot_io_bounds
 
-
-from redax.module import AbstractModule, CompositeModule
+from redax.predicates.dd import BDD
+from redax.module import Interface, CompositeModule
 from redax.spaces import DynamicCover, EmbeddedGrid, DiscreteSet, OutOfDomainError
 from redax.synthesis import SafetyGame, DecompCPre, ReachGame, OptimisticSafetyGame
 from redax.controllers import MemorylessController
@@ -86,17 +82,17 @@ def setup(init=False):
     mgr = BDD()
     mgr.configure(reordering=False)  # Reordering causes too much time overhead for minimal gain.
     subsys = {}
-    subsys['x'] = AbstractModule(mgr, {'x': xspace, 'vx': vxspace, 'theta': thetaspace, 't': thrust},
+    subsys['x'] = Interface(mgr, {'x': xspace, 'vx': vxspace, 'theta': thetaspace, 't': thrust},
                                       {'xnext': xspace})
-    subsys['y'] = AbstractModule(mgr, {'y': yspace, 'vy': vyspace, 'theta': thetaspace, 't': thrust},
+    subsys['y'] = Interface(mgr, {'y': yspace, 'vy': vyspace, 'theta': thetaspace, 't': thrust},
                                       {'ynext': yspace})
-    subsys['vx'] = AbstractModule(mgr, {'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 't': thrust, 's': side},
+    subsys['vx'] = Interface(mgr, {'vx': vxspace, 'theta': thetaspace, 'omega': omegaspace, 't': thrust, 's': side},
                                        {'vxnext': vxspace})
-    subsys['vy'] = AbstractModule(mgr, {'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 't': thrust, 's': side},
+    subsys['vy'] = Interface(mgr, {'vy': vyspace, 'theta': thetaspace, 'omega': omegaspace, 't': thrust, 's': side},
                                        {'vynext': vyspace})
-    subsys['theta'] = AbstractModule(mgr, {'theta': thetaspace, 'omega': omegaspace, 's': side},
+    subsys['theta'] = Interface(mgr, {'theta': thetaspace, 'omega': omegaspace, 's': side},
                                           {'thetanext': thetaspace})
-    subsys['omega'] = AbstractModule(mgr, {'omega': omegaspace, 's': side},
+    subsys['omega'] = Interface(mgr, {'omega': omegaspace, 's': side},
                                           {'omeganext': omegaspace})
 
     # Coarse, but exhaustive abstraction of submodules.
@@ -130,7 +126,7 @@ def setup(init=False):
     return mgr, subsys
 
 
-def coarse_abstract(f: AbstractModule, iter_coarseness, save_precision, shift_frac = 0.0):
+def coarse_abstract(f: Interface, iter_coarseness, save_precision, shift_frac = 0.0):
     """
     iter_coarseness:
         How many bits along each input dimension

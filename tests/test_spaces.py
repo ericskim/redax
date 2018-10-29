@@ -4,10 +4,7 @@ from pytest import approx, raises
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover, DiscreteSet, OutOfDomainError
 from redax.utils.bv import bv_interval, bvwindow, index_interval
 
-try:
-    from dd.cudd import BDD
-except ImportError:
-    from dd.autoref import BDD
+from redax.predicates.dd import BDD
 
 
 def test_helpers():
@@ -20,7 +17,7 @@ def test_helpers():
 
 
 def test_dynamic_regular():
-    mgr = BDD() 
+    mgr = BDD()
     x = DynamicCover(-2.0, 2.0)
     assert x.pt2index(-2.0, 3) == 0
     assert x.pt2index(2.0, 3) == 8 # TODO: 3 bits = 0-7 but need to return 8 b/c of the right/left align detection

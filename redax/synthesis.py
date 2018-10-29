@@ -6,7 +6,7 @@ from bidict import bidict
 
 from redax.controllers import MemorylessController, SafetyController
 from redax.utils.bv import flatten
-from redax.module import AbstractModule, CompositeModule
+from redax.module import Interface, CompositeModule
 from redax.ops import ohide, compose, ihide
 
 # flatten = lambda l: [item for sublist in l for item in sublist]
@@ -26,7 +26,7 @@ class ControlPre():
 
         Parameters
         ----------
-        mod: redax.AbstractModule
+        mod: redax.Interface
             Module
         states: iterable of (str, str) tuples
             (pre state name, post state name)
@@ -138,7 +138,7 @@ class ControlPre():
         else:
             return self.sys._nb & self.elimpost(Z)
 
-    def modulepre(self, Z: AbstractModule, no_inputs=False, collapser=None):
+    def modulepre(self, Z: Interface, no_inputs:bool=False, collapser:bool=None):
 
 
         if len(Z.outputs) > 0:
@@ -226,7 +226,7 @@ class DecompCPre(ControlPre):
         else:
             return Z
 
-    def modulepre(self, Z: AbstractModule, no_inputs=False, collapser=None):
+    def modulepre(self, Z: Interface, no_inputs=False, collapser=None):
 
         Z = Z.renamed(self.pre_to_post)
 

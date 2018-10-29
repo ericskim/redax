@@ -76,11 +76,11 @@ pip install .
 
   ```python
   # Declare modules
-  dubins_x        = AbstractModule(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace},
+  dubins_x        = Interface(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace},
                                         {'xnext': pspace})
-  dubins_y        = AbstractModule(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace},
+  dubins_y        = Interface(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace},
                                         {'ynext': pspace})
-  dubins_theta    = AbstractModule(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace},
+  dubins_theta    = Interface(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace},
                                         {'thetanext': anglespace})
   ```
 
@@ -114,7 +114,7 @@ pip install .
   dubins = ('z', 'x') >> dubins
 
   # Parallel composition is useful for constructing larger dimensional systems
-  dubins = dubins_x | dubins_y | dubins_theta
+  dubins = dubins_x * dubins_y * dubins_theta
 
   # Series composition resembles function composition m2(m1(.))
   m1 >> m2

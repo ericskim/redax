@@ -10,3 +10,6 @@ docs/_*
 **/*.png
 .mypy_cache/**
 *.txt
+*.dddmp
+*.zip
+*.gif

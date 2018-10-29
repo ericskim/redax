@@ -1,26 +1,25 @@
 import math
 
 import numpy as np
-try:
-    from dd.cudd import BDD
-except ImportError:
-    from dd.autoref import BDD
 from pytest import approx, raises
+from redax.predicates.dd import BDD
 
-from redax.module import AbstractModule, CompositeModule
+import redax.module as mod
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover, OutOfDomainError, ContinuousCover
 
+Interface = mod.Interface
+CompositeModule = mod.CompositeModule
 
 def test_dynamic_module():
-    mgr = BDD() 
-    
+    mgr = BDD()
+
     inputs = {'x': DynamicCover(0, 16),
               'y': DynamicCover(0, 4),
               }
     output = {'z': DynamicCover(0, 4)
              }
 
-    h = AbstractModule(mgr, inputs, output)
+    h = Interface(mgr, inputs, output)
 
     # Rename inputs 
     assert set(h.inputs) == {'x','y'}
@@ -58,14 +57,14 @@ def test_dynamic_module():
     assert (('j','w') >> (('w','j') >> g) ) == g
 
     # Parallel composition 
-    assert set((g | h).outputs) == {'z','r'}
-    assert set((g | h).inputs) == {'x','y','j'}
+    assert set((g * h).outputs) == {'z','r'}
+    assert set((g * h).inputs) == {'x','y','j'}
 
     # Series composition with disjoint I/O yields parallel composition
-    assert (g >> h) == (g | h)
+    assert (g >> h) == (g * h)
     assert (g >> h) == g.composed_with(h)
     assert (g >> h) == h.composed_with(g)
-    assert (g | h) == h.composed_with(g)
+    assert (g * h) == h.composed_with(g)
 
     # Out of bounds errors 
     with raises(OutOfDomainError):
@@ -73,7 +72,7 @@ def test_dynamic_module():
 
 def test_series_comp():
 
-    mgr = BDD() 
+    mgr = BDD()
     
     inputs = {'x': DynamicCover(0, 4),
               'y': DynamicCover(0, 4),
@@ -81,7 +80,7 @@ def test_series_comp():
     output = {'z': DynamicCover(0, 4)
              }
 
-    h = AbstractModule(mgr, inputs, output)
+    h = Interface(mgr, inputs, output)
     g = ('j', 'y') >> h >> ('z', 'r')
     precision = {'j': 4, 'x': 3, 'r': 3}
     g = g.io_refined( {'j': (.75,2.5), 'x': (2.5,3.8), 'r': (2.1,3.1)}, nbits = precision)
@@ -95,10 +94,10 @@ def test_series_comp():
 
 def test_mixed_module():
 
-    from redax.module import AbstractModule
+    from redax.module import Interface
     from redax.spaces import DynamicCover, FixedCover
 
-    mgr = BDD() 
+    mgr = BDD()
     inputs = {'x': DynamicCover(0, 16),
               'y': FixedCover(-10, 10, 10),
               'theta': DynamicCover(-np.pi, np.pi, periodic=True),
@@ -110,7 +109,7 @@ def test_mixed_module():
              'thetanext': DynamicCover(-np.pi, np.pi, periodic=True)
              }
     
-    dubins = AbstractModule(mgr, inputs, outputs) 
+    dubins = Interface(mgr, inputs, outputs) 
 
     # Underspecified input-output
     with raises(AssertionError):
@@ -124,11 +123,11 @@ def test_mixed_module():
     
 def test_embeddedgrid_module():
 
-    mgr = BDD() 
+    mgr = BDD()
     inputs = {'x': EmbeddedGrid(4, 0, 3)}
     outputs = {'y': EmbeddedGrid(8, 4, 11)}
 
-    m = AbstractModule(mgr, inputs, outputs)
+    m = Interface(mgr, inputs, outputs)
 
     mgr.declare("x_0", "x_1", "y_0", "y_1", "y_2")
     x0 = mgr.var("x_0")
@@ -145,8 +144,8 @@ def test_module_composition():
 
     x = DynamicCover(0,10)
 
-    m1 = AbstractModule(mgr, {'a': x}, {'b': x, 'c': x})
-    m2 = AbstractModule(mgr, {'i': x, 'j': x}, {'k': x})
+    m1 = Interface(mgr, {'a': x}, {'b': x, 'c': x})
+    m2 = Interface(mgr, {'i': x, 'j': x}, {'k': x})
 
     m12 = (m1 >> m2.renamed(i = 'c'))
     assert set(m12.inputs) == set(['a', 'j'])
@@ -172,7 +171,7 @@ def test_refinement_and_coarsening():
     x = DynamicCover(-10, 10)
     y = DynamicCover(20, 20)
 
-    linmod = AbstractModule(mgr, {'x': x}, {'y':y})
+    linmod = Interface(mgr, {'x': x}, {'y':y})
 
     width = 15
 
@@ -243,15 +242,15 @@ def test_sin_sqrt_comp():
     sinin = DynamicCover(-2*np.pi, 2*np.pi, periodic=True)
 
     # Sin module 
-    sinmod = AbstractModule(mgr, {'sin': sinin}, {'sout': sinout})
+    sinmod = Interface(mgr, {'sin': sinin}, {'sout': sinout})
 
     # Sqrt module
     sqrtout = DynamicCover(0, 1.2)
-    sqrtmod = AbstractModule(mgr, {'sout': sinout}, {'sqrt': sqrtout})
+    sqrtmod = Interface(mgr, {'sout': sinout}, {'sqrt': sqrtout})
 
     comp = CompositeModule([sinmod, sqrtmod])
 
-    def random_input_gen(module: AbstractModule, scale: float) -> dict:
+    def random_input_gen(module: Interface, scale: float) -> dict:
         iobox = dict()
         for invar, space in module.inputs.items():
             if isinstance(space, ContinuousCover):
@@ -305,8 +304,8 @@ def test_composite_module_topology():
 
     x = DynamicCover(0,10)
 
-    m1 = AbstractModule(mgr, {'a': x}, {'b': x, 'i': x})
-    m2 = AbstractModule(mgr, {'i': x, 'j': x}, {'k': x})
+    m1 = Interface(mgr, {'a': x}, {'b': x, 'i': x})
+    m2 = Interface(mgr, {'i': x, 'j': x}, {'k': x})
 
 
     m12 = CompositeModule([m1, m2])
@@ -315,7 +314,7 @@ def test_composite_module_topology():
     assert set(m12.inputs) == {'a', 'j'}
     assert set(m12.latent) == {'i'}
 
-    m3 = AbstractModule(mgr, {'k': x, 'b': x}, {})
+    m3 = Interface(mgr, {'k': x, 'b': x}, {})
 
     m123 = CompositeModule([m1,m2,m3])
     assert m123.sorted_mods() == ((m1,), (m2,), (m3,))

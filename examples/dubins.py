@@ -5,19 +5,16 @@ Dubins vehicle example.
 import time
 
 import numpy as np
-try:
-    from dd.cudd import BDD
-except ImportError:
-    from dd.autoref import BDD
+import funcy as fn
 
-from redax.module import AbstractModule, CompositeModule
+
+from redax.module import Interface, CompositeModule
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover
 from redax.synthesis import ReachGame, ControlPre, DecompCPre
 from redax.visualizer import plot3D, plot3D_QT, pixel2D
-
 from redax.utils.overapprox import maxmincos, maxminsin
+from redax.predicates.dd import BDD
 
-import funcy as fn
 
 """
 Specify dynamics and overapproximations
@@ -57,14 +54,14 @@ angaccspace = EmbeddedGrid(3, -1.5, 1.5)
 
 
 # Declare modules
-dubins_x        = AbstractModule(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace}, 
+dubins_x        = Interface(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace}, 
                                       {'xnext': pspace})
-dubins_y        = AbstractModule(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace}, 
+dubins_y        = Interface(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace}, 
                                       {'ynext': pspace})
-dubins_theta    = AbstractModule(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace}, 
+dubins_theta    = Interface(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace}, 
                                       {'thetanext': anglespace})
 
-dubins = (dubins_x | dubins_y | dubins_theta)
+dubins = (dubins_x * dubins_y * dubins_theta)
 composite = CompositeModule([dubins_x, dubins_y, dubins_theta])
 
 bits = 7
@@ -124,7 +121,7 @@ mgr.reorder(order_heuristic(mgr))
 target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 8, innerapprox=False)
 target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 8, innerapprox=False)
 
-# dubins = composite.children[0] | composite.children[1] | composite.children[2]
+# dubins = composite.children[0] * composite.children[1] * composite.children[2]
 # cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
 # game = ReachGame(cpre, target)
 # starttime = time.time()
@@ -180,12 +177,12 @@ target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 8, innerapprox=False)
 Test code for moving to a case where everything is an interface. 
 """
 
-targetmod = AbstractModule(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {})
+targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {})
 targetmod._pred = target
 targetmod._nb = target
 targetmod.check()
 
-# dubins = composite.children[0] | composite.children[1] | composite.children[2]
+# dubins = composite.children[0] * composite.children[1] * composite.children[2]
 # cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
 cpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
 

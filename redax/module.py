@@ -14,11 +14,10 @@ import itertools
 from toposort import toposort
 
 import redax.spaces as sp
-from redax.utils.bv import flatten
-from redax.spaces import OutOfDomainError
+from .spaces import OutOfDomainError
 
 
-class AbstractModule(object):
+class Interface(object):
     r"""
     Wrapper for translating between concrete and discrete I/O values.
 
@@ -75,7 +74,7 @@ class AbstractModule(object):
         if len(self.vars) > 0:
             maxvarlen = max(len(v) for v in self.vars)
             maxvarlen = max(maxvarlen, 20) + 4
-        s = "AbstractModule(inputs={"
+        s = "Interface(inputs={"
         s += ", ".join([k + ": " + v.__repr__() for k, v in self._in.items()])
         s += "}, outputs={"
         s += ", ".join([k + ": " + v.__repr__() for k, v in self._out.items()])
@@ -89,7 +88,7 @@ class AbstractModule(object):
         return self._in[var] if var in self._in else self._out[var]
 
     def __eq__(self, other) -> bool:
-        if not isinstance(other, AbstractModule):
+        if not isinstance(other, Interface):
             return False
         if self.mgr != other.mgr:
             return False
@@ -240,7 +239,7 @@ class AbstractModule(object):
 
         return True
 
-    def io_refined(self, concrete: dict, silent: bool=True, **kwargs) -> AbstractModule:
+    def io_refined(self, concrete: dict, silent: bool=True, **kwargs) -> Interface:
         r"""
         Get a module refined with input-output data.
 
@@ -256,7 +255,7 @@ class AbstractModule(object):
 
         Returns
         -------
-        AbstractModule:
+        Interface:
             New refined module
 
         See Also
@@ -279,7 +278,7 @@ class AbstractModule(object):
         except:
             raise
 
-        return AbstractModule(self.mgr,
+        return Interface(self.mgr,
                               self.inputs,
                               self.outputs,
                               (self.pred | ((~self._nb & inpred) & self.inspace())) & (~inpred | outpred),
@@ -430,7 +429,7 @@ class AbstractModule(object):
     def count_io_space(self, bits: int) -> float:
         return self.mgr.count(self.iospace(), bits)
 
-    def ohidden(self, elim_vars) -> AbstractModule:
+    def ohidden(self, elim_vars) -> Interface:
         r"""
         Hides an output variable and returns another module.
 
@@ -441,14 +440,14 @@ class AbstractModule(object):
 
         Returns
         -------
-        AbstractModule:
+        Interface:
             Another abstract module with the removed outputs
 
         """
         from redax.ops import ohide
         return ohide(elim_vars, self)
 
-    def ihidden(self, elim_vars: Sequence[str]) -> AbstractModule:
+    def ihidden(self, elim_vars: Sequence[str]) -> Interface:
         r"""
         Hides input variable for sink and returns another sink.
         
@@ -457,7 +456,7 @@ class AbstractModule(object):
         from redax.ops import ihide
         return ihide(elim_vars, self)
 
-    def coarsened(self, bits=None, **kwargs) -> AbstractModule:
+    def coarsened(self, bits=None, **kwargs) -> Interface:
         r"""Remove less significant bits and coarsen the system representation.
 
         Input bits are universally abstracted ("forall")
@@ -474,7 +473,7 @@ class AbstractModule(object):
         from redax.ops import coarsen
         return coarsen(self, bits, **kwargs)
 
-    def renamed(self, names: Dict = None, **kwargs) -> AbstractModule:
+    def renamed(self, names: Dict = None, **kwargs) -> Interface:
         """
         Rename input and output ports.
 
@@ -490,7 +489,7 @@ class AbstractModule(object):
         from redax.ops import rename
         return rename(self, names, **kwargs)
 
-    def composed_with(self, other: AbstractModule) -> AbstractModule:
+    def composed_with(self, other: Interface) -> Interface:
         """
         Compose two modules.
 
@@ -503,12 +502,12 @@ class AbstractModule(object):
 
         Parameters
         ----------
-        other: AbstractModule
+        other: Interface
             Module to compose with.
 
         Returns
         -------
-        AbstractModule:
+        Interface:
             Composed monolithic module
 
         """
@@ -516,7 +515,7 @@ class AbstractModule(object):
         from redax.ops import compose
         return compose(self, other)
 
-    def __rshift__(self, other: Union[AbstractModule, tuple]) -> AbstractModule:
+    def __rshift__(self, other: Union[Interface, tuple]) -> Interface:
         r"""
         Series composition or output renaming operator.
 
@@ -532,13 +531,13 @@ class AbstractModule(object):
 
         Parameters
         ----------
-        other: Union['AbstractModule', tuple]
-            If AbstractModule then computes the composition self >> other.
+        other: Union['Interface', tuple]
+            If Interface then computes the composition self >> other.
             If tuple(oldname: str, newname: str) then replaces output name.
 
         Returns
         -------
-        AbstractModule:
+        Interface:
             Either the series or parallel composition (if defined)
 
         """
@@ -550,13 +549,13 @@ class AbstractModule(object):
 
             return self.renamed({oldname: newname})
 
-        elif isinstance(other, AbstractModule):
+        elif isinstance(other, Interface):
             return self.composed_with(other)
 
         else:
             raise TypeError
 
-    def __rrshift__(self, other) -> AbstractModule:
+    def __rrshift__(self, other) -> Interface:
         r"""
         Input renaming operator via serial composition notation.
 
@@ -571,17 +570,17 @@ class AbstractModule(object):
 
             return self.renamed({oldname: newname})
 
-        elif isinstance(other, AbstractModule):
+        elif isinstance(other, Interface):
             raise RuntimeError("__rshift__ should be called instead of __rrshift__")
         else:
             raise TypeError
 
-    def __or__(self, other: AbstractModule) -> AbstractModule:
+    def __mul__(self, other: Interface) -> Interface:
 
         from redax.ops import parallelcompose
         return parallelcompose(self, other)
 
-    def __le__(self, other: AbstractModule) -> bool:
+    def __le__(self, other: Interface) -> bool:
         r"""
         Check for a feedback refinement relation between two modules.
 
@@ -597,7 +596,7 @@ class AbstractModule(object):
         """
 
         # Incomparable
-        if not isinstance(other, AbstractModule):
+        if not isinstance(other, Interface):
             return False
         if self.inputs != other.inputs:
             return False
@@ -614,13 +613,13 @@ class AbstractModule(object):
 
         return True
 
-    def _direct_io_refined(self, inpred, outpred) -> AbstractModule:
+    def _direct_io_refined(self, inpred, outpred) -> Interface:
         """
         Apply io refinement directly from abstract predicates.
 
         No conversion from concrete values.
         """
-        return AbstractModule(self.mgr,
+        return Interface(self.mgr,
                               self.inputs,
                               self.outputs,
                               ((~self._nb & inpred & self.inspace()) | self.pred) & (~inpred | outpred),
@@ -630,12 +629,12 @@ class AbstractModule(object):
 
 class CompositeModule(object):
     r"""Container for a collection of modules."""
-    def __init__(self, modules: Collection[AbstractModule], checktopo: bool=True) -> None:
+    def __init__(self, modules: Collection[Interface], checktopo: bool=True) -> None:
 
         if len(modules) < 1:
             raise ValueError("Empty module collection")
 
-        self.children : Tuple[AbstractModule] = tuple(modules)
+        self.children : Tuple[Interface] = tuple(modules)
 
         if checktopo:
             self.check()
@@ -734,7 +733,7 @@ class CompositeModule(object):
     def outspace(self):
         raise NotImplementedError
 
-    def sorted_mods(self) -> Tuple[Tuple[AbstractModule]]:
+    def sorted_mods(self) -> Tuple[Tuple[Interface]]:
 
         # Pass to declare dependencies
         deps: Dict[int, Set[int]] = {idx: set() for idx, _ in enumerate(self.children)}
@@ -865,7 +864,7 @@ class CompositeModule(object):
 
         return CompositeModule(newmods, checktopo=False)
 
-    def atomized(self) -> AbstractModule:
+    def atomized(self) -> Interface:
         r"""Reduce composite module into an atomic one."""
         raise NotImplementedError
 

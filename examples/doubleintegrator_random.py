@@ -7,27 +7,22 @@ import time
 init_time = time.time()
 
 import numpy as np
-try:
-    from dd.cudd import BDD
-except ImportError:
-    from dd.autoref import BDD
-
 import funcy as fn
 
-from redax.module import AbstractModule, CompositeModule
+from redax.module import Interface, CompositeModule
 from redax.spaces import DynamicCover
 from redax.synthesis import SafetyGame, ControlPre, DecompCPre
 from redax.visualizer import scatter2D, plot3D, plot3D_QT, pixel2D
 from redax.utils.overapprox import bloatbox
 
+from redax.predicates.dd import BDD
+mgr = BDD()
+mgr.configure(reordering=True)
 
 ts = .2
 k = .1
 g = 9.8
 
-mgr = BDD()
-
-mgr.configure(reordering=True)
 
 def dynamics(p, v, a):
     vsign = 1 if v > 0 else -1
@@ -38,12 +33,12 @@ vspace = DynamicCover(-16, 16)
 aspace = DynamicCover(0, 20)
 
 # Smaller component modules
-pcomp = AbstractModule(mgr,
+pcomp = Interface(mgr,
                        {'p': pspace,
                         'v': vspace},
                        {'pnext': pspace}
         )
-vcomp = AbstractModule(mgr,
+vcomp = Interface(mgr,
                        {'v': vspace,
                         'a': aspace},
                        {'vnext': vspace}
@@ -52,7 +47,7 @@ vcomp = AbstractModule(mgr,
 bounds = {'p': [-10,10], 'v': [-16,16]}
 
 # Monolithic system
-system = pcomp | vcomp
+system = pcomp * vcomp
 
 # Composite system
 composite = CompositeModule((pcomp, vcomp))
@@ -63,7 +58,7 @@ v_precision = 7
 precision = {'p': p_precision, 'v': v_precision, 'a': 7, 'pnext': p_precision, 'vnext': v_precision}
 bittotal = sum(precision.values())
 outorder = {0: 'pnext', 1: 'vnext'}
-possible_transitions = (pcomp | vcomp).count_io_space(bittotal)
+possible_transitions = (pcomp * vcomp).count_io_space(bittotal)
 
 print("Setup time: ", time.time() - init_time)
 
@@ -113,7 +108,7 @@ np.random.seed(1336)
 
 growing_inv = []
 
-while(numapplied < 400):
+while(numapplied < 3000):
 
     # Shrink window widths over time
     width = 20 * 1/np.log10(2*numapplied+10)
@@ -145,7 +140,7 @@ while(numapplied < 400):
     numapplied += 1
 
     if numapplied % 400 == 0:
-        system = pcomp | vcomp
+        system = pcomp * vcomp
 
         iotrans = system.count_io(bittotal)
         print("(samples, I/O % trans., bddsize, time(s))"
@@ -203,7 +198,7 @@ for i, safeinv in enumerate(growing_inv[::-1]):
 
 print("Abstraction Time: ", time.time() - abs_starttime)
 
-system = pcomp | vcomp
+system = pcomp * vcomp
 
 
 # Control system declaration
@@ -235,7 +230,7 @@ for nbits in [6]:
 
 # plot3D_QT(system.mgr, ('p', vspace), ('v', aspace), ('pnext', vspace), pcomp.pred, 128)
 # plot3D_QT(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
-plot3D(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128, view=(30, -144))
+# plot3D(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128, view=(30, -144))
 
 
 sim_starttime = time.time()
