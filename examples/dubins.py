@@ -89,7 +89,7 @@ abs_starttime = time.time()
 # Sample generator
 random_errors = {'x': 0, 'y': 0, 'theta': 0}
 np.random.seed(1337)
-for numapplied in range(5000):
+for numapplied in range(10000):
 
     # Shrink window widths over time
     scale = 1/np.log10(1.0*numapplied+10)
@@ -186,13 +186,23 @@ targetmod._nb = target
 targetmod.check()
 
 # dubins = composite.children[0] | composite.children[1] | composite.children[2]
+# cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
 cpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
 
-assert cpre.modulepre(targetmod).pred == cpre(target)
+# assert cpre.modulepre(targetmod).pred == cpre(target)
 
-for i in range(5):
-    targetmod = cpre.modulepre(targetmod, no_inputs=True)
-    target = cpre(target, no_inputs=True)
+for i in range(8):
+    pass
+    # targetmod = cpre.modulepre(targetmod, no_inputs=True)
+    # target = cpre(target, no_inputs=True)
 
-    assert targetmod.pred == target
+    # assert targetmod.pred == target
 
+
+from redax.ops import sinkprepend
+for i in range(8):
+    # pass
+    targetmod = cpre.modulepre(targetmod, no_inputs=True, collapser=sinkprepend)
+    # target = cpre(target, no_inputs=True)
+
+    # assert targetmod.pred == target

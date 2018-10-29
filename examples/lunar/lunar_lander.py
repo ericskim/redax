@@ -164,7 +164,7 @@ class LunarLander(gym.Env):
         self.moon.color2 = (0.0,0.0,0.0)
         
         if state is None:
-            xpos = np.random.rand()*.6 + .2 # FIXME: Not part of the actual problem
+            xpos = np.random.rand()*.6 + .2 
             ypos = .5
             angle = .4
             xvel = 0

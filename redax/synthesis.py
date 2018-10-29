@@ -138,7 +138,8 @@ class ControlPre():
         else:
             return self.sys._nb & self.elimpost(Z)
 
-    def modulepre(self, Z: AbstractModule, no_inputs=False):
+    def modulepre(self, Z: AbstractModule, no_inputs=False, collapser=None):
+
 
         if len(Z.outputs) > 0:
             raise ValueError("Only accept sink modules as inputs.")
@@ -147,7 +148,10 @@ class ControlPre():
         Z = Z.renamed(self.pre_to_post)
 
         # Compute robust state-input pairs
-        xu = ohide(self.sys.outputs.keys(), compose(self.sys, Z))
+        if collapser is None:
+            xu = ohide(self.sys.outputs.keys(), compose(self.sys, Z))
+        else:
+            xu = collapser(self.sys, Z)
 
         # Return state-input pairs or only states
         if no_inputs:
@@ -222,7 +226,7 @@ class DecompCPre(ControlPre):
         else:
             return Z
 
-    def modulepre(self, Z: AbstractModule, no_inputs=False):
+    def modulepre(self, Z: AbstractModule, no_inputs=False, collapser=None):
 
         Z = Z.renamed(self.pre_to_post)
 
@@ -233,6 +237,9 @@ class DecompCPre(ControlPre):
 
         while(len(to_elim_post) > 0):
             var = to_elim_post.pop()
+
+            # FIXME: This code assumes that each module only has a single output. 
+            # Should instead iterate over modules
 
             # Partition into modules that do/don't depend on var
             dep_mods = tuple(mod for mod in self.sys.children if var in mod.outputs)
@@ -245,7 +252,11 @@ class DecompCPre(ControlPre):
             assert Z_var_bits == len(Z.pred_bitvars[var])
 
             for mod in dep_mods:
-                Z = ohide([var], compose(mod.coarsened(**{var: Z_var_bits}), Z))
+                if collapser is None:
+                    Z = ohide([var], compose(mod.coarsened(**{var: Z_var_bits}), Z))
+                else:
+                    Z = collapser(mod.coarsened(**{var: Z_var_bits}), Z)
+
 
         if no_inputs:
             return ihide(self.control, Z)

@@ -21,6 +21,7 @@ import numpy as np
 
 from redax.utils.bv import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, bv2int, bintogray, graytobin, increment_bv, bv_interval
 
+
 class OutOfDomainError(Exception):
     pass
 
@@ -450,6 +451,21 @@ class DynamicCover(ContinuousCover):
         while(i < 2**nbits):
             yield self.bv2conc(int2bv(i, nbits))
             i += 1
+
+    def quantizer(self, nbits: int):
+        """
+        Create a quantizer function for inputs and outputs.
+
+        TODO: Figure out how to generate quantizers without circular imports.
+
+        Returns
+        -------
+        Tuple: (Callable, Callable)
+        """        
+        raise NotImplementedError
+
+
+
 
 @dataclass(frozen=True)
 class FixedCover(ContinuousCover):

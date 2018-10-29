@@ -136,6 +136,12 @@ class AbstractModule(object):
             allocbits[prefix].sort()
         return allocbits
 
+    def is_sink(self):
+        return True if len(self.outputs) == 0 else False
+
+    def is_source(self):
+        return True if len(self.inputs) == 0 else False
+
     def inspace(self):
         r"""
         Get input space predicate.

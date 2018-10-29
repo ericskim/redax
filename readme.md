@@ -148,28 +148,17 @@ The core foundations are working and providing meaningful results on some test e
 
 - Rewrite control predecessors to use relational operators instead.
   - Sink sets are modules
+- Overwritten operators for parallel composition "|" --> "*", refine "+", series ">>"
 - Make symbolic backend a class attribute.
   - How to deal with different imports
   - Generic predicate manipulation wrapper around py-aiger and dd.
+  - Make the dependencies on the bdd manager more explicit. Reordering with python's quasi-pass-by-value semantics and multiple managers is hard to deal with.
 - Decompose predicate into assumption-guarantee encoding.
 - Variable = name + types
-- Make the dependencies on the bdd manager more explicit. Reordering with python's quasi-pass-by-value semantics and multiple managers is hard to deal with.
-- Helper classes for different input-output overapproximation procedures
-  - Lipschitz
-  - Mixed monotone
-  - Random sampling in box with bloating
-  - Box corners with bloating
+-  Quantizers for interfaces should be higher order functions
 - Different iterators of input space
-- Tests for floating point inequalities for conc2abs method in continuous covers
   - Iterators for the $2^{N-1}$ reduced grid traversal
-- Add code coverage, travis-ci
 - Rewrite continuous cover grid to have an overlap parameter.
-- source/sink module tests
-- Class for named spaces so we don't refer to variables via strings.
-- Lazy composition
-  - conjoin information about modules
-  - Support methods: Collapse to monolithic, split and give a collection, or something in the middle
-  - hide certain outputs
 
 ### Future Features
 - Support for disjoint union and product operations for spaces (thus adding support for hybrid spaces)
