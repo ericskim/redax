@@ -13,7 +13,7 @@ def io_refine(mod: Interface, concrete: dict, silent: bool=True, **kwargs) -> In
     raise NotImplementedError
 
 
-def shared_refine(ifaces: Container[Interface], safe=True):
+def shared_refine(ifaces: Container[Interface], safecheck=True):
     r"""
     Compute shared refinement of a collection of interfaces.
 
@@ -23,7 +23,6 @@ def shared_refine(ifaces: Container[Interface], safe=True):
     Interface:
         Shared refinement interface
     """
-    raise NotImplementedError
 
     # Managers must be identical
     mgr = fn.first(iface.mgr for iface in ifaces)
@@ -43,12 +42,17 @@ def shared_refine(ifaces: Container[Interface], safe=True):
     pred = mgr.true
 
     for iface in ifaces:
-        nb |= iface._nb
-        pred &= iface._pred
+        nb |= iface.assum
+        pred &= iface.guar
 
-    # TODO: Shared refinability check here
+    if safecheck:
+        raise NotImplementedError     # TODO: Shared refinability check here 
 
-    return Interface(mgr, input_signature, output_signature, pred=pred, nonblocking=nb)
+    return Interface(mgr, 
+                     input_signature, 
+                     output_signature, 
+                     guar=pred, 
+                     assum=nb)
 
 def coarsen(mod: Interface, bits=None, **kwargs) -> Interface:
 
@@ -72,14 +76,17 @@ def coarsen(mod: Interface, bits=None, **kwargs) -> Interface:
     inbits = bv.flatten(inbits)
 
     # Shrink nonblocking set
-    nb = mod.mgr.forall(inbits, mod.nonblock())
+    nb = mod.mgr.forall(inbits, mod.assum)
     # Expand outputs with respect to input coarseness
-    newpred = mod.mgr.exist(inbits, mod.pred)
+    newpred = mod.mgr.exist(inbits, mod.guar)
     # Constrain outputs to align with nonblocking set
-    newpred = mod.mgr.exist(outbits, nb & newpred & mod.outspace())
+    newpred = mod.mgr.exist(outbits, newpred & mod.outspace())
 
-    return Interface(mod.mgr, mod.inputs, mod.outputs,
-                            pred=newpred, nonblocking=nb)
+    return Interface(mod.mgr,
+                     mod.inputs,
+                     mod.outputs,
+                     guar=newpred,
+                     assum=nb)
 
 def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface: 
     """
@@ -116,9 +123,14 @@ def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
         mod.mgr.declare(*newbits)
         swapbits.update({i: j for i, j in zip(mod.pred_bitvars[oldname], newbits)})
 
-    newpred = mod.pred if swapbits == {} else mod.mgr.let(swapbits, mod.pred)
+    newguar = mod.guar if swapbits == {} else mod.mgr.let(swapbits, mod.guar)
+    newassum = mod.assum if swapbits == {} else mod.mgr.let(swapbits, mod.assum)
 
-    return Interface(mod.mgr, newinputs, newoutputs, newpred)
+    return Interface(mod.mgr, 
+                     newinputs, 
+                     newoutputs, 
+                     newguar,
+                     newassum)
 
 def ohide(elim_vars: Container[str], mod: Interface) -> Interface:
     r"""
@@ -126,8 +138,8 @@ def ohide(elim_vars: Container[str], mod: Interface) -> Interface:
 
     Parameters
     ----------
-    elim_vars: iterator
-        Iterable of output variable names
+    elim_vars: Container
+        Iterable container of output variable names
 
     Returns
     -------
@@ -142,15 +154,16 @@ def ohide(elim_vars: Container[str], mod: Interface) -> Interface:
     elim_bits = []
     for k in elim_vars:
         elim_bits += mod.pred_bitvars[k]
+    elim_bits = set(elim_bits) & mod.guar.support
 
     newoutputs = {k: v for k, v in mod.outputs.items() if k not in elim_vars}
 
-    elim_bits = set(elim_bits) & mod.pred.support
     return Interface(mod.mgr,
-                            mod.inputs.copy(),
-                            newoutputs,
-                            mod.mgr.exist(elim_bits, mod.pred & mod.iospace())
-                            )
+                     mod.inputs.copy(),
+                     newoutputs,
+                     guar=mod.mgr.exist(elim_bits, mod._guar & mod.outspace()),
+                     assum=mod._assum
+                     )
 
 def ihide(elim_vars: Container[str], mod: Interface) -> Interface:
     r"""
@@ -168,12 +181,12 @@ def ihide(elim_vars: Container[str], mod: Interface) -> Interface:
     newinputs = {k: v for k, v in mod.inputs.items() if k not in elim_vars}
 
     elim_bits = set(elim_bits) & mod.pred.support
-    return Interface(mod.mgr,
-                          newinputs, 
-                          mod.outputs.copy(),
-                          mod.mgr.exist(elim_bits, mod.pred & mod.iospace())
-                         )
 
+    return Interface(mod.mgr,
+                     newinputs, 
+                     mod.outputs.copy(),
+                     assum = mod.mgr.exist(elim_bits, mod.assum & mod.iospace())
+                     )
 
 
 def compose(mod: Interface, other: Interface) -> Interface:
@@ -221,15 +234,17 @@ def compose(mod: Interface, other: Interface) -> Interface:
         newinputs.pop(k)
 
     # Compute nonblocking == forall outputvars . (mod.pred => other.nonblock())
-    nonblocking = ~upstream.outspace() | ~upstream.pred | downstream.nonblock()
+    nonblocking = ~upstream.outspace() | ~upstream._guar | downstream._assum
     elim_bits = set(bv.flatten([upstream.pred_bitvars[k] for k in upstream._out]))
     elim_bits |= set(bv.flatten([downstream.pred_bitvars[k] for k in downstream._out]))
     elim_bits &= nonblocking.support
     nonblocking = upstream.mgr.forall(elim_bits, nonblocking)
+
     return Interface(upstream.mgr,
-                            newinputs,
-                            newoutputs,
-                            upstream.pred & downstream.pred & nonblocking)
+                     newinputs,
+                     newoutputs,
+                     guar=upstream._guar & downstream._guar,
+                     assum= upstream._assum & nonblocking)
 
 def sinkprepend(iface: Interface, sink: Interface) -> Interface:
     """
@@ -249,6 +264,9 @@ def sinkprepend(iface: Interface, sink: Interface) -> Interface:
     if not sink.is_sink():
         raise ValueError("Sink module is not actually a sink.")
 
+    if not set(iface.outputs) <= set(sink.inputs):
+        raise ValueError("Sink inputs must be a superset of iface outputs.")
+
     newinputs = iface._in.copy()
     for k in sink.inputs:
         # Common existing inputs must have same grid type
@@ -261,17 +279,16 @@ def sinkprepend(iface: Interface, sink: Interface) -> Interface:
     for k in (set(iface._out) & set(sink._in)):
         newinputs.pop(k)    
 
-    newnonblock = ~iface.pred | sink.pred
+    newnonblock = ~iface.guar | sink.assum
     elim_bits = set(bv.flatten([iface.pred_bitvars[k] for k in iface.outputs]))
     elim_bits &= newnonblock.support
-    newnonblock = iface._nb & iface.mgr.forall(elim_bits, newnonblock)
+    newnonblock = iface.assum & iface.mgr.forall(elim_bits, newnonblock)
 
     return Interface(iface.mgr,
-                          newinputs,
-                          dict(),
-                          pred=newnonblock,
-                          nonblocking=newnonblock
-                          )
+                     newinputs,
+                     dict(),
+                     assum=newnonblock
+                     )
 
 
 def parallelcompose(mod: Interface, other: Interface) -> Interface: 
@@ -307,6 +324,9 @@ def parallelcompose(mod: Interface, other: Interface) -> Interface:
     newoutputs = mod._out.copy()
     newoutputs.update(other.outputs)
 
-    return Interface(mod.mgr, newinputs, newoutputs,
-                            mod.pred & other.pred)
+    return Interface(mod.mgr, 
+                     newinputs, 
+                     newoutputs,
+                     mod.guar & other.guar,
+                     mod.assum & other.assum)
 

@@ -177,9 +177,9 @@ target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 8, innerapprox=False)
 Test code for moving to a case where everything is an interface. 
 """
 
-targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {})
-targetmod._pred = target
-targetmod._nb = target
+targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {}, guar=mgr.true, assum=target)
+# targetmod.guar = mgr.true
+# targetmod.assum = target
 targetmod.check()
 
 # dubins = composite.children[0] * composite.children[1] * composite.children[2]
@@ -188,18 +188,29 @@ cpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetane
 
 # assert cpre.modulepre(targetmod).pred == cpre(target)
 
-for i in range(8):
-    pass
-    # targetmod = cpre.modulepre(targetmod, no_inputs=True)
-    # target = cpre(target, no_inputs=True)
+# for i in range(8):
+#     targetmod = cpre.modulepre(targetmod, no_inputs=True)
+#     target = cpre(target, no_inputs=True)
 
-    # assert targetmod.pred == target
+#     assert targetmod.pred == target
 
 
-from redax.ops import sinkprepend
-for i in range(8):
-    # pass
-    targetmod = cpre.modulepre(targetmod, no_inputs=True, collapser=sinkprepend)
-    # target = cpre(target, no_inputs=True)
 
-    # assert targetmod.pred == target
+# target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 8, innerapprox=False)
+# target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 8, innerapprox=False)
+# targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {}, guar=mgr.true, assum=target)
+
+# from redax.ops import sinkprepend
+# for i in range(8):
+#     targetmod = cpre.modulepre(targetmod, no_inputs=True, collapser=sinkprepend)
+#     target = cpre(target, no_inputs=True)
+
+#     assert targetmod.pred == target
+
+
+# target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 8, innerapprox=False)
+# target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 8, innerapprox=False)
+# targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {}, guar=mgr.true, assum=target)
+# modreach = ReachGame(cpre, targetmod)
+
+# basin, steps, controller = modreach.run(verbose=False)
