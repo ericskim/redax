@@ -39,7 +39,7 @@ pip install .
 ### Dependencies
 
 - Core
-  - python 3.6 or above
+  - python 3.7
   - cudd with dd wrapper
   - numpy
   - bidict

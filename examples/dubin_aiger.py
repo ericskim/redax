@@ -74,7 +74,7 @@ abs_starttime = time.time()
 # Sample generator
 random_errors = {'x': 0, 'y': 0, 'theta': 0}
 np.random.seed(1337)
-for numapplied in range(10):
+for numapplied in range(5):
 
     print("Iteration: {}".format(numapplied))
 
