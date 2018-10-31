@@ -134,9 +134,9 @@ class ControlPre():
         Z = ~self.sys.pred | Z
         # Eliminate post states and return
         if no_inputs:
-            return self.elimcontrol(self.sys._nb & self.elimpost(Z))
+            return self.elimcontrol(self.sys.assum & self.elimpost(Z))
         else:
-            return self.sys._nb & self.elimpost(Z)
+            return self.sys.assum & self.elimpost(Z)
 
     def modulepre(self, Z: Interface, no_inputs:bool=False, collapser:bool=None):
 
@@ -211,7 +211,7 @@ class DecompCPre(ControlPre):
             nb = self.mgr.true
             for mod in dep_mods:
                 Z = ~(mod.coarsened(**{var: Z_var_bits})).pred | Z
-                nb = nb & mod._nb
+                nb = nb & mod.assum
 
             Z = nb & self.elimpostslice(Z, var)
 
@@ -415,16 +415,16 @@ class ReachGame():
     ----------
     sys: ControlPre
         Control predecessor of system that needs to satisfy reach property.
-    target: bdd
+    target: Interface
         Target region predicate
 
     """
 
-    def __init__(self, cpre, target):
+    def __init__(self, cpre, target:Interface):
         self.cpre = cpre
         self.target = target # TODO: Check if a subset of the state space
 
-    def run(self, steps=None, winning=None, verbose=False, excludewinning=False):
+    def run(self, steps=None, winning:Interface=None, verbose=False, excludewinning=False):
         """
         Run a reachability game until reaching a fixed point or a maximum number of steps.
 
@@ -454,8 +454,11 @@ class ReachGame():
 
         C = self.cpre.mgr.false
 
-        z = self.cpre.prespace() & self.target if winning is None else winning
-        zz = self.cpre.mgr.true
+        # z = self.cpre.prespace() & self.target if winning is None else winning
+        # zz = self.cpre.mgr.true
+
+        z = self.target if winning is None else winning
+        zz = Interface(self.cpre.mgr, {}, {})
 
         i = 0
         synth_start = time.time()
@@ -466,10 +469,10 @@ class ReachGame():
             zz = z
             step_start = time.time()
             if excludewinning:
-                z = self.cpre(zz, verbose=verbose, excludedstates=zz) | self.target # state-input pairs
+                z = self.cpre(zz, verbose=verbose, excludedstates=zz) + self.target # state-input pairs
             else:
-                z = self.cpre(zz, verbose=verbose) | self.target # state-input pairs
-            C = C | (z & (~self.cpre.elimcontrol(C))) # Add new state-input pairs to controller
+                z = self.cpre(zz, verbose=verbose) + self.target # state-input pairs
+            C = C | (z.assum * (~self.cpre.elimcontrol(C))) # Add new state-input pairs to controller
             if verbose:
                 print("Eliminating control")
             z = self.cpre.elimcontrol(C)
@@ -478,8 +481,8 @@ class ReachGame():
             if verbose:
                 print("Step #: ", i,
                       "Step Time (s): ", time.time() - step_start,
-                      "Size: ", self.cpre.mgr.count(z, len(z.support)),
-                      "Winning nodes:", len(z))
+                      "Size: ", self.cpre.mgr.count(z.assum, len(z.assum.support)),
+                      "Winning nodes:", len(z.assum))
 
         return z, i, MemorylessController(self.cpre, C)
 

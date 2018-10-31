@@ -34,7 +34,7 @@ class Interface(object):
 
     """
 
-    def __init__(self, mgr, inputs, outputs, pred=None, nonblocking=None):
+    def __init__(self, mgr, inputs, outputs, guar=None, assum=None):
         """
         Initialize the abstract module.
 
@@ -67,8 +67,8 @@ class Interface(object):
         if any(var.isalnum() is False for var in self.vars):
             raise ValueError("Non-alphanumeric variable name")
 
-        self._pred = self.mgr.false if pred is None else pred
-        self._nb = self.nonblock() if nonblocking is None else nonblocking
+        self._guar = self.mgr.true if guar is None else guar
+        self._assum = self.mgr.false if assum is None else assum
 
     def __repr__(self):
         if len(self.vars) > 0:
@@ -94,9 +94,9 @@ class Interface(object):
             return False
         if self._in != other.inputs or self._out != other.outputs:
             return False
-        if self.pred != other.pred:
+        if self._guar != other._guar:
             return False
-        if self._nb != other._nb:
+        if self._assum != other._assum:
             return False
         return True
 
@@ -110,7 +110,16 @@ class Interface(object):
 
     @property
     def pred(self):
-        return self._pred
+        return self._assum & self._guar
+        # return self._pred
+
+    @property
+    def guar(self):
+        return self._guar
+
+    @property
+    def assum(self):
+        return self._assum
 
     @property
     def vars(self):
@@ -189,6 +198,7 @@ class Interface(object):
         for k in self._out:
             elim_bits += self.pred_bitvars[k]
         return self.mgr.exist(elim_bits, self.pred & self.outspace())
+        # return self._assum
 
     def refine_io(self, concrete: dict, **kwargs) -> bool:
         r"""
@@ -225,17 +235,17 @@ class Interface(object):
         assert set(concrete) == set(self.inputs) | set(self.outputs)
 
         try:
-            inputs = {k: v for k, v in concrete.items() if k in self.inputs}
+            inputs  = {k: v for k, v in concrete.items() if k in self.inputs}
             outputs = {k: v for k, v in concrete.items() if k in self.outputs}
-            inpred = self.input_to_abs(inputs, **kwargs)
+            inpred  = self.input_to_abs(inputs, **kwargs)
             outpred = self.output_to_abs(outputs, **kwargs)
         except OutOfDomainError:
             return False
         except:
             raise
 
-        self._pred = ((~self._nb & inpred & self.inspace()) | self.pred) & (~inpred | outpred)
-        self._nb = self._nb | inpred
+        self._guar = self._guar & (~inpred | outpred)
+        self._assum = self._assum | inpred
 
         return True
 
@@ -279,10 +289,10 @@ class Interface(object):
             raise
 
         return Interface(self.mgr,
-                              self.inputs,
-                              self.outputs,
-                              (self.pred | ((~self._nb & inpred) & self.inspace())) & (~inpred | outpred),
-                              self._nb | inpred)
+                         self.inputs, 
+                         self.outputs,
+                         self.guar & (~inpred | outpred),
+                         self.assum | inpred)
 
     def check(self):
         r"""Check consistency of internal private attributes.
@@ -293,13 +303,13 @@ class Interface(object):
             Internal inconsistencies detected
 
         """
-        assert self._nb == self.nonblock()
-
-        def varname(bit):
-            return bit.split("_")[0]
+        assert self.assum == self.nonblock()
 
         # Variable support check
+        def varname(bit):
+            return bit.split("_")[0]
         assert {varname(bit) for bit in self.pred.support} <= self.vars
+
         # Check that there aren't any transitions with invalid inputs/outputs
         assert ~self.iospace() & self.pred == self.mgr.false
 
@@ -580,6 +590,10 @@ class Interface(object):
         from redax.ops import parallelcompose
         return parallelcompose(self, other)
 
+    def __add__(self, other: Interface) -> Interface:
+        from redax.ops import shared_refine
+        return shared_refine([self, other], safecheck=False) # TODO: Implement safety check
+
     def __le__(self, other: Interface) -> bool:
         r"""
         Check for a feedback refinement relation between two modules.
@@ -597,18 +611,20 @@ class Interface(object):
 
         # Incomparable
         if not isinstance(other, Interface):
-            return False
+            raise TypeError("<= not supported between instances of {} and {}".format(str(type(self)), str(type(other))))
         if self.inputs != other.inputs:
             return False
         if self.outputs != other.outputs:
             return False
 
-        # Abstract module must accept fewer inputs
-        if (~self._nb | other._nb != self.mgr.true):
+        # Abstract interface self must accept fewer inputs than other
+        if (~self.assum | other.assum != self.mgr.true):
+            breakpoint()
             return False
 
         # Abstract system outputs must be overapproximations
-        if (~(self._nb & other.pred) | self.pred) != self.mgr.true:
+        if (~(self.assum & other.pred) | self.pred) != self.mgr.true:
+            breakpoint()
             return False
 
         return True
@@ -620,10 +636,10 @@ class Interface(object):
         No conversion from concrete values.
         """
         return Interface(self.mgr,
-                              self.inputs,
-                              self.outputs,
-                              ((~self._nb & inpred & self.inspace()) | self.pred) & (~inpred | outpred),
-                              self._nb | inpred)
+                         self.inputs, 
+                         self.outputs,
+                         self.guar & (~inpred | outpred),
+                         self.assum | inpred)
 
 
 
@@ -656,7 +672,7 @@ class CompositeModule(object):
 
         nb = self.children[0].mgr.true
         for mod in self.children:
-            nb &= mod._nb
+            nb &= mod._assum
         return nb
     
     @property
