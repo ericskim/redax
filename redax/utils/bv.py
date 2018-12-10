@@ -1,5 +1,5 @@
 """
-Utilities 
+Utilities
 """
 
 from typing import Sequence, Iterable, List
@@ -13,7 +13,7 @@ def num_with_name(name: str, x) -> int:
 
 def flatten(l):
     """Flatten a singly nested list.
-    
+
     Examples
     --------
     >>> flatten([[0,1,2], [4,5]])
@@ -72,8 +72,13 @@ def index_interval(lb: int, ub: int, nbits=None, graycode=False) -> List[int]:
 
 
 def bv2pred(mgr, name: str, bv: BitVector):
-    """Convert a variable precision bitvector into a predicate."""
+    """
+    Convert a variable precision bitvector into a boolean predicate.
 
+    A bitvector [True, False, True] with name = 'x' will generate a predicate:
+        x_0 & ~x_1 & x_2
+
+    """
     for i in range(len(bv)):
         mgr.declare(name + "_" + str(i))
     b = mgr.true
@@ -149,10 +154,10 @@ def bvwindow(left: int, right: int, nbits: int) -> List[BitVector]:
     bvs: List[BitVector] = []
     # Empty window
     if right < left:
-        return bvs 
+        return bvs
 
     while(True):
-        
+
         if nbits == 0:
             return [(True,), (False,)]
 

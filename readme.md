@@ -104,7 +104,7 @@ pip install .
   abstraction.io_refined(io_pair_1).io_refined(io_pair_2)
   ```
 
-- **Manipulate and Compose Modules**
+- **Manipulate and Compose Interfaces**
 
   Abstract systems can be manipulated with a collection of operations:
 
@@ -120,10 +120,10 @@ pip install .
   m1 >> m2
 
   # Hide outputs
-  x = module.ohidden('x')
+  x = interface.ohidden('x')
 
   # Future feature: Compute lower complexity abstractions keeping only the most significant bits
-  coarser_model = model.coarsen(x=3, y=4)
+  coarser_model = model.coarsened(x=3, y=4)
   ```
 
   Operations can also be chained together:
@@ -133,6 +133,10 @@ pip install .
                          .coarsened(x=5,y=4)\
                          .renamed(ynext = 'nextposition')
   ```
+
+- **Extensible synthesizers**
+
+  Use built-in algorithms for computing controllers enforcing safety and reachability specifications, or customize them using the operators above.
 
 - **Extensible Symbolic Backend**
 
@@ -146,23 +150,19 @@ The core foundations are working and providing meaningful results on some test e
 
 ### TODOs
 
-- Rewrite control predecessors to use relational operators instead.
-  - Sink sets are modules
-- Overwritten operators for parallel composition "|" --> "*", refine "+", series ">>"
-- Make symbolic backend a class attribute.
-  - How to deal with different imports
-  - Generic predicate manipulation wrapper around py-aiger and dd.
-  - Make the dependencies on the bdd manager more explicit. Reordering with python's quasi-pass-by-value semantics and multiple managers is hard to deal with.
-- Decompose predicate into assumption-guarantee encoding.
-- Variable = name + types
--  Quantizers for interfaces should be higher order functions
+- Scale up lunar lander
+  - Fix issues with unnecessary blocking with position modules dependencies on angle.
+  - Iterator for shifted but bounded space.
+- Make a variable = name + types object
 - Different iterators of input space
   - Iterators for the $2^{N-1}$ reduced grid traversal
-- Rewrite continuous cover grid to have an overlap parameter.
+- Rewrite continuous cover grid to have an overlap parameter
 
 ### Future Features
+
 - Support for disjoint union and product operations for spaces (thus adding support for hybrid spaces)
   - Requires a predicate bit name generator
+  - Quantizers for interfaces should be higher order functions. This will support ADTs.
 
 ## References
 

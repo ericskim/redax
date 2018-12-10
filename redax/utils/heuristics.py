@@ -1,5 +1,5 @@
 def order_heuristic(mgr):
-    
+
     def _name(i):
         return i.split('_')[0]
 

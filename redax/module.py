@@ -8,7 +8,7 @@ Module container
 
 from __future__ import annotations
 
-from typing import Dict, Generator, List, Union, Collection, Tuple, Set, Sequence 
+from typing import Dict, Generator, List, Union, Collection, Tuple, Set, Sequence
 import itertools
 
 from toposort import toposort
@@ -67,6 +67,7 @@ class Interface(object):
         if any(var.isalnum() is False for var in self.vars):
             raise ValueError("Non-alphanumeric variable name")
 
+        # TODO: Check bdd supports
         self._guar = self.mgr.true if guar is None else guar
         self._assum = self.mgr.false if assum is None else assum
 
@@ -111,7 +112,6 @@ class Interface(object):
     @property
     def pred(self):
         return self._assum & self._guar
-        # return self._pred
 
     @property
     def guar(self):
@@ -136,12 +136,15 @@ class Interface(object):
     @property
     def pred_bitvars(self) -> Dict[str, List[str]]:
         r"""Get dictionary with variable name keys and BDD bit names as values."""
-        s = self.pred.support
+        bits = self.guar.support | self.assum.support
         allocbits: Dict[str, List[str]] = {v: [] for v in self.vars}
-        for bitvar in s:
+        for bitvar in bits:
             prefix, _ = bitvar.split("_")
             allocbits[prefix].append(bitvar)
-            allocbits[prefix].sort()
+
+        for v in self.vars:
+            allocbits[v].sort()
+
         return allocbits
 
     def is_sink(self):
@@ -194,11 +197,11 @@ class Interface(object):
             Predicate for :math:`\exists x'. (system /\ outspace(x'))`
 
         """
-        elim_bits : List[str] = []
-        for k in self._out:
-            elim_bits += self.pred_bitvars[k]
-        return self.mgr.exist(elim_bits, self.pred & self.outspace())
-        # return self._assum
+        # elim_bits : List[str] = []
+        # for k in self._out:
+        #     elim_bits += self.pred_bitvars[k]
+        # return self.mgr.exist(elim_bits, self.pred & self.outspace())
+        return self.assum
 
     def refine_io(self, concrete: dict, **kwargs) -> bool:
         r"""
@@ -235,9 +238,9 @@ class Interface(object):
         assert set(concrete) == set(self.inputs) | set(self.outputs)
 
         try:
-            inputs  = {k: v for k, v in concrete.items() if k in self.inputs}
+            inputs = {k: v for k, v in concrete.items() if k in self.inputs}
             outputs = {k: v for k, v in concrete.items() if k in self.outputs}
-            inpred  = self.input_to_abs(inputs, **kwargs)
+            inpred = self.input_to_abs(inputs, **kwargs)
             outpred = self.output_to_abs(outputs, **kwargs)
         except OutOfDomainError:
             return False
@@ -289,7 +292,7 @@ class Interface(object):
             raise
 
         return Interface(self.mgr,
-                         self.inputs, 
+                         self.inputs,
                          self.outputs,
                          self.guar & (~inpred | outpred),
                          self.assum | inpred)
@@ -303,7 +306,11 @@ class Interface(object):
             Internal inconsistencies detected
 
         """
-        assert self.assum == self.nonblock()
+        # Check if shared refinability condition violated.
+        elim_bits: List[str] = []
+        for k in self.outputs:
+            elim_bits += self.pred_bitvars[k]
+        assert self.assum == self.mgr.exist(elim_bits, self.pred & self.outspace())
 
         # Variable support check
         def varname(bit):
@@ -405,9 +412,11 @@ class Interface(object):
         names += [k for k, v in self.inputs.items() if not isinstance(v, sp.DynamicCover)]
 
         iters = [v.conc_iter(precision[k]) for k, v in self.inputs.items()
-                    if isinstance(v, sp.DynamicCover)]
+                 if isinstance(v, sp.DynamicCover)
+                 ]
         iters += [v.conc_iter() for k, v in self.inputs.items()
-                    if not isinstance(v, sp.DynamicCover)]
+                  if not isinstance(v, sp.DynamicCover)
+                  ]
 
         for i in itertools.product(*iters):
             yield {names[j]: i[j] for j in range(numin)}
@@ -458,11 +467,7 @@ class Interface(object):
         return ohide(elim_vars, self)
 
     def ihidden(self, elim_vars: Sequence[str]) -> Interface:
-        r"""
-        Hides input variable for sink and returns another sink.
-        
-        """
-
+        r"""Hides input variable for sink and returns another sink."""
         from redax.ops import ihide
         return ihide(elim_vars, self)
 
@@ -479,7 +484,6 @@ class Interface(object):
             excluded variables aren't coarsened.
 
         """
-
         from redax.ops import coarsen
         return coarsen(self, bits, **kwargs)
 
@@ -495,7 +499,6 @@ class Interface(object):
             Same dictionary format as names.
 
         """
-
         from redax.ops import rename
         return rename(self, names, **kwargs)
 
@@ -521,7 +524,6 @@ class Interface(object):
             Composed monolithic module
 
         """
-
         from redax.ops import compose
         return compose(self, other)
 
@@ -554,7 +556,7 @@ class Interface(object):
         if isinstance(other, tuple):
             # Renaming an output
             oldname, newname = other
-            if oldname not in self._out:
+            if oldname not in self.outputs:
                 raise ValueError("Cannot rename non-existent output")
 
             return self.renamed({oldname: newname})
@@ -634,13 +636,13 @@ class Interface(object):
         Apply io refinement directly from abstract predicates.
 
         No conversion from concrete values.
+
         """
         return Interface(self.mgr,
-                         self.inputs, 
+                         self.inputs,
                          self.outputs,
                          self.guar & (~inpred | outpred),
                          self.assum | inpred)
-
 
 
 class CompositeModule(object):
@@ -674,7 +676,7 @@ class CompositeModule(object):
         for mod in self.children:
             nb &= mod._assum
         return nb
-    
+
     @property
     def _outputs(self):
         """Variables that are outputs to some module."""
@@ -735,8 +737,8 @@ class CompositeModule(object):
                 return mod[var]
 
         raise ValueError("Variable does not exist")
-    
-    @property 
+
+    @property
     def vars(self):
         vars = set([])
         for mod in self.children:
@@ -785,10 +787,20 @@ class CompositeModule(object):
             assert mgr == child.mgr
 
         # Check validity of module topology
-        self._inputs
-        self._outputs
+        # Error will be raised if...
+        self._inputs  # Type mismatches between variables with identical name
+        self._outputs # ... module outputs overlap
         self._var_io
-        self.sorted_mods()
+        self.sorted_mods() # Circular dependency detected
+
+    def renamed(self, names: Dict=None, **kwargs) -> CompositeModule:
+        """Renames variables for contained interfaces."""
+
+        names = dict([]) if names is None else names
+        names.update(kwargs)
+
+        return CompositeModule(tuple(child.renamed(**names) for child in self.children))
+
 
     def io_refined(self, concrete, silent: bool=True, **kwargs) -> CompositeModule:
         r"""
@@ -881,7 +893,7 @@ class CompositeModule(object):
         return CompositeModule(newmods, checktopo=False)
 
     def atomized(self) -> Interface:
-        r"""Reduce composite module into an atomic one."""
+        r"""Reduce composite module into a single atomic one."""
         raise NotImplementedError
 
 
@@ -890,12 +902,12 @@ class CompositeModule(object):
         r"""Get dictionary with variable name keys and BDD bit names as values."""
 
 
-        allocbits = {v: set([]) for v in self.vars}
+        allocbits: Dict[str, Set[str]] = {v: set([]) for v in self.vars}
         for mod in self.children:
             for k, v in mod.pred_bitvars.items():
                 allocbits[k].update(v)
 
-        list_allocbits = dict()
+        list_allocbits: Dict[str, List[str]] = dict()
         for k, v in allocbits.items():
             list_allocbits[k] = list(v)
             list_allocbits[k].sort()

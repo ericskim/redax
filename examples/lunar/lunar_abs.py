@@ -1,4 +1,4 @@
-import os 
+import os
 import time
 
 import numpy as np
@@ -9,7 +9,7 @@ from dynamics import lander_box_dynamics, plot_io_bounds
 from redax.predicates.dd import BDD
 from redax.module import Interface, CompositeModule
 from redax.spaces import DynamicCover, EmbeddedGrid, DiscreteSet, OutOfDomainError
-from redax.synthesis import SafetyGame, DecompCPre, ReachGame, OptimisticSafetyGame
+from redax.synthesis import SafetyGame, DecompCPre, ReachGame
 from redax.controllers import MemorylessController
 from redax.visualizer import scatter2D, plot3D, plot3D_QT, pixel2D
 
@@ -114,11 +114,12 @@ def setup(init=False):
             print(len(mgr), "manager nodes after first pass")
             subsys[i].check()
             print("Subsys", i, "ND ratio:", nd_ratio(subsys[i]))
+
             subsys[i] = coarse_abstract(subsys[i], iter_coarseness[i], sysview[i], shift_frac=0.5)
             print(len(mgr), "manager nodes after second pass")
             subsys[i].check()
-            print("Subsys", i, "ND ratio:", nd_ratio(subsys[i]))
-            print("\n")
+            print("Subsys", i, "ND ratio:", nd_ratio(subsys[i]), "\n")
+
             mgr.reorder(order_heuristic(mgr, ['x', 'y', 'vx', 'vy', 'theta', 'omega', 't', 's', 'xnext', 'ynext', 'vxnext', 'vynext', 'thetanext', 'omeganext']))
 
         print("Coarse Initial Abstraction Time (s): ", time.time() - initabs_start)
@@ -155,7 +156,7 @@ def coarse_abstract(f: Interface, iter_coarseness, save_precision, shift_frac = 
         iobox.update(out)
 
         # Refine
-        iobox = {k: v for k, v in iobox.items() if k in f.vars}  # Filter unnecessary input/output slices. 
+        iobox = {k: v for k, v in iobox.items() if k in f.vars}  # Filter unnecessary input/output slices.
         f = f.io_refined(iobox, nbits=save_precision)
 
     f.check()
@@ -166,7 +167,7 @@ def coarse_abstract(f: Interface, iter_coarseness, save_precision, shift_frac = 
 def abstract(subsys, samples=0, maxboxscale = 1.0):
 
     subsys['x'].mgr.configure(reordering=False)
-    
+
     abs_starttime = time.time()
     for numapplied in range(samples):
         # Shrink window widths over time
@@ -215,20 +216,15 @@ def abstract(subsys, samples=0, maxboxscale = 1.0):
 
     return subsys
 
-def synthesize_safe(f, safe, steps=None, optimistic=False):
+def synthesize_safe(f, safe, steps=None):
 
     elimorder = [i for i in nextstates]
-    # elimorder.sort()
     cpre = DecompCPre(f, (('x', 'xnext'), ('y', 'ynext'), ('vx', 'vxnext'), ('vy', 'vynext'), ('theta', 'thetanext'), ('omega', 'omeganext')),
                          ('t', 's'),
                          elim_order=elimorder)
 
     print("Solving Safety Game")
-
-    if optimistic:
-        game = OptimisticSafetyGame(cpre, safe)
-    else:
-        game = SafetyGame(cpre, safe)
+    game = SafetyGame(cpre, safe)
     game_starttime = time.time()
     inv, steps, controller = game.run(verbose=True, steps=steps, winningonly=True)
     print("Solve time: ", time.time() - game_starttime)
@@ -247,7 +243,7 @@ def synthesize_reach(f, target, steps=None):
     # elimorder = ['vxnext', 'xnext', 'vynext', 'ynext', 'thetanext', 'omeganext']
     # elimorder = ['xnext', 'vxnext', 'ynext', 'vynext', 'thetanext', 'omeganext']
     print("Variable Elimination Order (right to left): ", elimorder)
-    cpre = DecompCPre(f, (('x', 'xnext'), ('y', 'ynext'), ('vx', 'vxnext'), ('vy', 'vynext'), ('theta', 'thetanext'), ('omega', 'omeganext')), 
+    cpre = DecompCPre(f, (('x', 'xnext'), ('y', 'ynext'), ('vx', 'vxnext'), ('vy', 'vynext'), ('theta', 'thetanext'), ('omega', 'omeganext')),
                          ('t', 's'),
                          elim_order=elimorder)
 
@@ -279,7 +275,7 @@ def simulate(controller: MemorylessController, exclude=None, drop=0):
         state = {k: .5*(v[0] + v[1]) for k, v in state.items()}
         env.reset([state[v] for v in states])
 
-        statehist = None 
+        statehist = None
         for step in range(20):
             u = fn.first(controller.allows(state))
             if u is None:
@@ -292,7 +288,7 @@ def simulate(controller: MemorylessController, exclude=None, drop=0):
             state.update(picked_u)
             print("Step: ", step, state)
 
-            for i in range(T):
+            for _ in range(T):
                 s, _, _, _ = env.step(np.array([picked_u['t'], picked_u['s']]))
                 env.render()
                 time.sleep(.03)
@@ -301,7 +297,7 @@ def simulate(controller: MemorylessController, exclude=None, drop=0):
                 statehist = s
             else:
                 statehist = np.vstack([statehist, s])
-            
+
             state = {v: s[idx] for idx, v in enumerate(states)}
 
     except OutOfDomainError:
@@ -318,12 +314,12 @@ def simulate(controller: MemorylessController, exclude=None, drop=0):
 
 def order_heuristic(mgr, var_priority = None):
     """
-    Most signifiant bits are ordered first in BDD. 
+    Most signifiant bits are ordered first in BDD.
 
     var_priority is a list of variable names. Resolves ties if two bits, are of the same priority, it resolves based.
-    e.g. var_priority = ['x','y','z'] would impose an order ['x_0', 'y_0', 'z_0'] 
+    e.g. var_priority = ['x','y','z'] would impose an order ['x_0', 'y_0', 'z_0']
     """
-    
+
     def _name(i):
         return i.split('_')[0]
 
@@ -343,7 +339,7 @@ def order_heuristic(mgr, var_priority = None):
     return {var: idx for idx, var in enumerate(order_seed)}
 
 if __name__ is "__main__":
-    
+
     # Run setup only on startup or if user sets cleanse option.
     init = True
     try:
@@ -356,7 +352,7 @@ if __name__ is "__main__":
     except NameError:
         mgr, subsys = setup(init=init)
         abs_iters = 0
-        # Save abstractions 
+        # Save abstractions
         for f in subsys:
             mgr._dump_dddmp(subsys[f].pred, "{0}/subsys/{1}.dddmp".format(directory, f))
 
@@ -366,14 +362,14 @@ if __name__ is "__main__":
         return mgr.count(pred, statebits)
 
     load_prior_controller = False
-    if load_prior_controller: 
+    if load_prior_controller:
         f = CompositeModule(tuple(subsys[i] for i in states))
         target = f['x'].conc2pred(mgr, 'x', (-.1, .1), 7, innerapprox=True)
         target &= f['y'].conc2pred(mgr, 'y', (1.2, 1.28), 7, innerapprox=False)
         target &= f['theta'].conc2pred(mgr, 'theta', (-.15, .15), 5, innerapprox=True)
         target &= f['vy'].conc2pred(mgr, 'vy', (-.8, .1), 6, innerapprox=True)
         elimorder = [i for i in nextstates]
-        cpre = DecompCPre(f, (('x', 'xnext'), ('y', 'ynext'), ('vx', 'vxnext'), ('vy', 'vynext'), ('theta', 'thetanext'), ('omega', 'omeganext')), 
+        cpre = DecompCPre(f, (('x', 'xnext'), ('y', 'ynext'), ('vx', 'vxnext'), ('vy', 'vynext'), ('theta', 'thetanext'), ('omega', 'omeganext')),
                         ('t', 's'),
                         elim_order=elimorder)
         from redax.controllers import MemorylessController
@@ -394,12 +390,17 @@ if __name__ is "__main__":
         target &= f['theta'].conc2pred(mgr, 'theta', (-.15, .15), 5, innerapprox=True)
         target &= f['vy'].conc2pred(mgr, 'vy', (-.2, .3), 6, innerapprox=True)
         print("Target Size:", mgr.count(target, statebits))
+        target = Interface(mgr,
+                           {k:v for k,v in f.inputs.items() if k in states},
+                           {},
+                           guar=mgr.true,
+                           assum=target)
 
         w = target
         c = mgr.false
 
         iterreach_start = time.time()
-        for gameiter in range(15):
+        for gameiter in range(5):
 
             print("\nStep:", gameiter)
 
@@ -431,13 +432,13 @@ if __name__ is "__main__":
             del controller
             controller, steps = synthesize_reach(f, w | target, steps=1)
             c = c | (controller.C & (~controller.cpre.elimcontrol(c)))  # Add new inputs
-            
+
             # # Determinize thrust. If thrust = -.01 is possible, then it must hold.
-            # for i in range(4): 
+            # for i in range(4):
             #     thrust_bdd = thrust.conc2pred(mgr, 't', -.01 + 1/3.0 * i)
             #     c = c & (~controller.cpre.elimcontrol(c & thrust_bdd) | thrust_bdd) | target
             # side_bdd = side.conc2pred(mgr, 's', -.51 * 1.02/3.0 * 1)
-            # c = c & (~controller.cpre.elimcontrol(c & side_bdd) | side_bdd) | target 
+            # c = c & (~controller.cpre.elimcontrol(c & side_bdd) | side_bdd) | target
 
             print("Controller nodes: {0}".format(len(c)))
 
@@ -490,7 +491,7 @@ if __name__ is "__main__":
                     ('y', subsys['y']['y']),
                     mgr.exist(elimvars, pwin), 70, fname="lunarinv_{0}".format(gameiter))
             del pwin
-    
+
 
         # exclude = f['x'].conc2pred(mgr, 'x', (-.1, .1), 7, innerapprox=True)
         # exclude = exclude & f['y'].conc2pred(mgr, 'y', (.5, .6), 7, innerapprox=False)

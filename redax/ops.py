@@ -1,5 +1,5 @@
 
-from typing import Dict, Container
+from typing import Dict, Collection, Set
 
 import funcy as fn
 from .module import Interface
@@ -13,7 +13,7 @@ def io_refine(mod: Interface, concrete: dict, silent: bool=True, **kwargs) -> In
     raise NotImplementedError
 
 
-def shared_refine(ifaces: Container[Interface], safecheck=True):
+def shared_refine(ifaces: Collection[Interface], safecheck=True):
     r"""
     Compute shared refinement of a collection of interfaces.
 
@@ -46,13 +46,15 @@ def shared_refine(ifaces: Container[Interface], safecheck=True):
         pred &= iface.guar
 
     if safecheck:
-        raise NotImplementedError     # TODO: Shared refinability check here 
+        raise NotImplementedError     # TODO: Shared refinability check here
 
-    return Interface(mgr, 
-                     input_signature, 
-                     output_signature, 
-                     guar=pred, 
-                     assum=nb)
+    return Interface(mgr,
+                     input_signature,
+                     output_signature,
+                     guar=pred,
+                     assum=nb
+                     )
+
 
 def coarsen(mod: Interface, bits=None, **kwargs) -> Interface:
 
@@ -86,9 +88,11 @@ def coarsen(mod: Interface, bits=None, **kwargs) -> Interface:
                      mod.inputs,
                      mod.outputs,
                      guar=newpred,
-                     assum=nb)
+                     assum=nb
+                     )
 
-def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface: 
+
+def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
     """
     Rename input and output ports.
 
@@ -126,13 +130,15 @@ def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
     newguar = mod.guar if swapbits == {} else mod.mgr.let(swapbits, mod.guar)
     newassum = mod.assum if swapbits == {} else mod.mgr.let(swapbits, mod.assum)
 
-    return Interface(mod.mgr, 
-                     newinputs, 
-                     newoutputs, 
+    return Interface(mod.mgr,
+                     newinputs,
+                     newoutputs,
                      newguar,
-                     newassum)
+                     newassum
+                     )
 
-def ohide(elim_vars: Container[str], mod: Interface) -> Interface:
+
+def ohide(elim_vars: Collection[str], mod: Interface) -> Interface:
     r"""
     Hides an output variable and returns another interface.
 
@@ -151,7 +157,7 @@ def ohide(elim_vars: Container[str], mod: Interface) -> Interface:
     if any(var not in mod._out for var in elim_vars):
         raise ValueError("Can only hide output variables")
 
-    elim_bits = []
+    elim_bits: Set[str] = []
     for k in elim_vars:
         elim_bits += mod.pred_bitvars[k]
     elim_bits = set(elim_bits) & mod.guar.support
@@ -165,13 +171,15 @@ def ohide(elim_vars: Container[str], mod: Interface) -> Interface:
                      assum=mod._assum
                      )
 
-def ihide(elim_vars: Container[str], mod: Interface) -> Interface:
+
+def ihide(elim_vars: Collection[str], mod: Interface) -> Interface:
     r"""
+
     """
     if any(var not in mod.inputs for var in elim_vars):
         raise ValueError("Can only hide input variables")
 
-    if len(mod.outputs) > 0: 
+    if len(mod.outputs) > 0:
         raise ValueError("Can only hide inputs on sink modules")
 
     elim_bits = []
@@ -183,9 +191,9 @@ def ihide(elim_vars: Container[str], mod: Interface) -> Interface:
     elim_bits = set(elim_bits) & mod.pred.support
 
     return Interface(mod.mgr,
-                     newinputs, 
+                     newinputs,
                      mod.outputs.copy(),
-                     assum = mod.mgr.exist(elim_bits, mod.assum & mod.iospace())
+                     assum=mod.mgr.exist(elim_bits, mod.assum & mod.iospace())
                      )
 
 
@@ -244,14 +252,16 @@ def compose(mod: Interface, other: Interface) -> Interface:
                      newinputs,
                      newoutputs,
                      guar=upstream._guar & downstream._guar,
-                     assum= upstream._assum & nonblocking)
+                     assum=upstream._assum & nonblocking
+                     )
+
 
 def sinkprepend(iface: Interface, sink: Interface) -> Interface:
     """
     Composition of an interface connected in series with a sink.
 
-    Identical to ohide(sharedvars, comp(iface, sinkmod)) where sharedvars is the
-    intersection of iface's outputs and sinkmod's inputs. This is a faster
+    Identical to ohide(sharedvars, comp(iface, sinkmod)) where sharedvars is
+    the intersection of iface's outputs and sinkmod's inputs. This is a faster
     implementation.
 
     Returns
@@ -275,23 +285,22 @@ def sinkprepend(iface: Interface, sink: Interface) -> Interface:
                                                                             sink.inputs[k]))
         newinputs[k] = sink.inputs[k]
 
-    # Shared vars that are both inputs and outputs
+    # Remove shared vars that are both inputs and outputs
     for k in (set(iface._out) & set(sink._in)):
-        newinputs.pop(k)    
+        newinputs.pop(k)
 
     newnonblock = ~iface.guar | sink.assum
     elim_bits = set(bv.flatten([iface.pred_bitvars[k] for k in iface.outputs]))
     elim_bits &= newnonblock.support
-    newnonblock = iface.assum & iface.mgr.forall(elim_bits, newnonblock)
 
     return Interface(iface.mgr,
                      newinputs,
                      dict(),
-                     assum=newnonblock
+                     assum=iface.assum & iface.mgr.forall(elim_bits, newnonblock)
                      )
 
 
-def parallelcompose(mod: Interface, other: Interface) -> Interface: 
+def parallelcompose(mod: Interface, other: Interface) -> Interface:
     r"""
     Parallel composition of interfaces.
 
@@ -324,9 +333,9 @@ def parallelcompose(mod: Interface, other: Interface) -> Interface:
     newoutputs = mod._out.copy()
     newoutputs.update(other.outputs)
 
-    return Interface(mod.mgr, 
-                     newinputs, 
+    return Interface(mod.mgr,
+                     newinputs,
                      newoutputs,
                      mod.guar & other.guar,
-                     mod.assum & other.assum)
-
+                     mod.assum & other.assum
+                     )

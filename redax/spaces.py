@@ -23,7 +23,19 @@ from redax.utils.bv import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, b
 
 
 class OutOfDomainError(Exception):
+    """
+    Exception raisen whenever a concrete value assumes a value that has no
+    corresponding discrete encoding
+
+    For example, a continuous interval [0,1] partitioned into two discrete bins
+    and encoded with a single bit cannot encode the points -1.4 or 3.
+
+    """
     pass
+
+
+# TODO: Composite spaces combined through + and *.
+
 
 
 @dataclass(frozen=True)
@@ -129,7 +141,7 @@ class EmbeddedGrid(DiscreteSet):
         if self.num_vals == 1 and self.lb != self.ub:
             raise ValueError("Single point but left and right are not equal")
 
-    @property 
+    @property
     def pts(self):
         if self.periodic:
             right = self.ub - (self.ub-self.lb)/self.num_vals
@@ -200,13 +212,11 @@ class EmbeddedGrid(DiscreteSet):
         return bv2pred(mgr, name, bv)
 
     def conc_iter(self) -> Iterable:
-        """Iterable of points"""
+        """Iterable of points."""
         return self.pts
 
     def bv2conc(self, bv: BitVector) -> float:
-        """
-        Converts a bitvector into a concrete grid point
-        """
+        """Converts a bitvector into a concrete grid point."""
         return self.pts[bv2int(bv)]
 
 
@@ -218,7 +228,7 @@ class ContinuousCover(SymbolicSet):
 
     lb: float
     ub: float
-    
+
     def __post_init__(self):
         assert self.ub - self.lb >= 0.0, "Upper bound is smaller than lower bound"
 
@@ -271,7 +281,7 @@ class DynamicCover(ContinuousCover):
         Returns
         -------
         Tuple of bools:
-            Left-most element is most significant bit. Encoding is the standard binary encoding or gray code. 
+            Left-most element is most significant bit. Encoding is the standard binary encoding or gray code.
 
         """
         assert isinstance(nbits, int)
@@ -396,16 +406,16 @@ class DynamicCover(ContinuousCover):
             leftidx = self.pt2index(left, nbits, alignleft=False)
             rightidx = self.pt2index(right, nbits, alignleft=True)
 
-            # Left and right were in the same bin. Return empty window! 
+            # Left and right were in the same bin. Return empty window!
             if self.periodic is False and leftidx >= rightidx:
-                return None 
+                return None
             if self.periodic is True and not flip and leftidx >= rightidx:
                 return None
             # Left boundary is near the upper value, right boundary is near lower value
             if flip and leftidx == (2**nbits) and rightidx == 0:
                 return None
-            
-        else: 
+
+        else:
             leftidx = self.pt2index(left, nbits, alignleft=True)
             rightidx = self.pt2index(right, nbits, alignleft=False)
 
@@ -422,6 +432,9 @@ class DynamicCover(ContinuousCover):
 
 
     def conc2pred(self, mgr, name: str, box, nbits: int, innerapprox=False, tol=.00001):
+        """
+        Concrete box [float, float] to a predicate.
+        """
         predbox = mgr.false
 
         window = self.box2indexwindow(box, nbits, innerapprox, tol)
@@ -429,7 +442,7 @@ class DynamicCover(ContinuousCover):
             return predbox
         leftidx, rightidx = window
 
-        if self.periodic: 
+        if self.periodic:
             for bv in bvwindowgray(leftidx, rightidx, nbits):
                 predbox |= bv2pred(mgr, name, bv)
         else:
@@ -445,12 +458,14 @@ class DynamicCover(ContinuousCover):
         Yields
         ------
         Tuple:
-            (left, right) box of floats 
+            (left, right) box of floats
         """
         i = 0
         while(i < 2**nbits):
             yield self.bv2conc(int2bv(i, nbits))
             i += 1
+
+
 
     def quantizer(self, nbits: int):
         """
@@ -461,7 +476,7 @@ class DynamicCover(ContinuousCover):
         Returns
         -------
         Tuple: (Callable, Callable)
-        """        
+        """
         raise NotImplementedError
 
 
@@ -604,16 +619,16 @@ class FixedCover(ContinuousCover):
         if self.periodic:
             left = self._wrap(left)
             right = self._wrap(right)
-        
+
         flip = True if self.periodic and right < left else False
 
         if innerapprox:
             leftidx = self.pt2index(left, alignleft=False)
             rightidx = self.pt2index(right, alignleft=True)
 
-            # Left and right were in the same bin. Return empty window! 
+            # Left and right were in the same bin. Return empty window!
             if self.periodic is False and leftidx >= rightidx:
-                return None 
+                return None
             if self.periodic is True and not flip and leftidx >= rightidx:
                 return None
             # Left boundary is near the upper value, right boundary is near lower value
@@ -622,7 +637,7 @@ class FixedCover(ContinuousCover):
         else:
             leftidx = self.pt2index(left, alignleft=True)
             rightidx = self.pt2index(right, alignleft=False)
-            # Contained in same interval but bloating 
+            # Contained in same interval but bloating
             if flip and (leftidx + 1) == rightidx:
                 return (leftidx + 1) % self.bins, (rightidx-1) % self.bins
             if flip and leftidx == self.bins and rightidx == 0:
@@ -646,7 +661,7 @@ class FixedCover(ContinuousCover):
                 predbox |= bv2pred(mgr, name, bv)
             for bv in bvwindow(0, rightidx, self.num_bits):
                 predbox |= bv2pred(mgr, name, bv)
-        else: 
+        else:
             for bv in bvwindow(leftidx, rightidx, self.num_bits):
                 predbox |= bv2pred(mgr, name, bv)
         return predbox

@@ -21,7 +21,7 @@ def test_dynamic_module():
 
     h = Interface(mgr, inputs, output)
 
-    # Rename inputs 
+    # Rename inputs
     assert set(h.inputs) == {'x','y'}
     assert set(h.outputs) == {'z'}
     g = ('j', 'x') >> h >> ('z', 'r')
@@ -30,17 +30,17 @@ def test_dynamic_module():
     assert g == h.renamed(x='j', z='r')
 
     precision = {'j': 4, 'y': 3, 'r': 3}
-    bittotal = sum(precision.values()) 
-    
+    bittotal = sum(precision.values())
+
     assert g.count_io_space(bittotal) == approx(1024)
     assert g.count_io(bittotal) == approx(0)
     g = g.io_refined( {'j': (2.9,10.1), 'y': (2.4,3.8), 'r': (2.1,3.1)}, nbits = precision)
     assert g.count_io(bittotal) == approx(42) # = 7 * 2 * 3
-    
-    # Adding approximately the same transitions twice does nothing due to quantization 
+
+    # Adding approximately the same transitions twice does nothing due to quantization
     oldpred = g.pred
     g = g.io_refined( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,3.1)}, nbits = precision)
-    assert g.pred == oldpred 
+    assert g.pred == oldpred
 
     assert (g).pred.support == {'j_0', 'j_1', 'j_2', 'j_3',
                                     'y_0', 'y_1', 'y_2',
@@ -50,13 +50,13 @@ def test_dynamic_module():
                                                      'z_0', 'z_1', 'z_2'}
 
     assert g.nonblock() == g.input_to_abs({'j': (3.,10.), 'y': (2.5,3.8)}, nbits = precision) # No inputs block
-    assert g.nonblock() == (g.ohidden(g.outputs).pred) 
+    assert g.nonblock() == (g.ohidden(g.outputs).pred)
 
-    # Identity test for input and output renaming 
+    # Identity test for input and output renaming
     assert ((g  >> ('r', 'z') ) >> ('z','r')) == g
     assert (('j','w') >> (('w','j') >> g) ) == g
 
-    # Parallel composition 
+    # Parallel composition
     assert set((g * h).outputs) == {'z','r'}
     assert set((g * h).inputs) == {'x','y','j'}
 
@@ -66,14 +66,14 @@ def test_dynamic_module():
     assert (g >> h) == h.composed_with(g)
     assert (g * h) == h.composed_with(g)
 
-    # Out of bounds errors 
+    # Out of bounds errors
     with raises(OutOfDomainError):
         g = g.io_refined( {'j': (3.,10.), 'y': (2.5,3.8), 'r': (2.1,4.6)}, silent=False, nbits = precision)
 
 def test_series_comp():
 
     mgr = BDD()
-    
+
     inputs = {'x': DynamicCover(0, 4),
               'y': DynamicCover(0, 4),
               }
@@ -108,19 +108,19 @@ def test_mixed_module():
              'ynext': FixedCover(-10,10,10),
              'thetanext': DynamicCover(-np.pi, np.pi, periodic=True)
              }
-    
-    dubins = Interface(mgr, inputs, outputs) 
+
+    dubins = Interface(mgr, inputs, outputs)
 
     # Underspecified input-output
     with raises(AssertionError):
-        dubins.io_refined( {'v': (3.6,3.7), 'theta': (6,-6), 'y': (2,3), 'ynext': (2.1,3.1)}, 
-                                nbits = {'theta': 3}) 
+        dubins.io_refined( {'v': (3.6,3.7), 'theta': (6,-6), 'y': (2,3), 'ynext': (2.1,3.1)},
+                                nbits = {'theta': 3})
 
     # Test that fixed covers yield correct space cardinality
     assert mgr.count(dubins.inspace(), 4+4+4+3+2) == 16 * 10 * 16 * 5 * 4
     assert mgr.count(dubins.outspace(), 2 + 4 + 4) == 4 * 10 * 16
 
-    
+
 def test_embeddedgrid_module():
 
     mgr = BDD()
@@ -136,7 +136,7 @@ def test_embeddedgrid_module():
     y1 = mgr.var("y_1")
     y2 = mgr.var("y_2")
     assert m.io_refined({'x': 2, 'y':4}).pred == (x0 & ~x1) &  (~(x0 & ~x1) | (~y0 & ~y1 & ~y2))
-    
+
     assert len(mgr.vars) > 0
 
 def test_module_composition():
@@ -161,7 +161,7 @@ def test_module_composition():
     assert m12 == m1.renamed(c = 'i').composed_with(m2).renamed(i = 'c')
     assert m12 == m1.renamed(c = 'i').composed_with(m2) >> ('i', 'c')
 
-def test_refinement_and_coarsening(): 
+def test_refinement_and_coarsening():
 
     mgr = BDD()
 
@@ -195,7 +195,7 @@ def test_refinement_and_coarsening():
         # Check abstract relation relative to coarsened module
         assert linmod.coarsened(x=5,y=5) <= linmod
         assert linmod.coarsened(x=5) <= linmod
-        assert linmod.coarsened(y=5) <= linmod        
+        assert linmod.coarsened(y=5) <= linmod
          # Coarsen should do nothing because it keeps many bits
         assert linmod.coarsened({'x':10},y=10) == linmod
 
@@ -241,7 +241,7 @@ def test_sin_sqrt_comp():
     sinout = DynamicCover(-1.2,1.2)
     sinin = DynamicCover(-2*np.pi, 2*np.pi, periodic=True)
 
-    # Sin module 
+    # Sin module
     sinmod = Interface(mgr, {'sin': sinin}, {'sout': sinout})
 
     # Sqrt module
@@ -256,7 +256,7 @@ def test_sin_sqrt_comp():
             if isinstance(space, ContinuousCover):
                 width = scale * space.width()
                 if space.periodic:
-                    left = space.lb + np.random.rand() * space.width() 
+                    left = space.lb + np.random.rand() * space.width()
                 else:
                     left = space.lb + np.random.rand() * (space.width() - width)
                 right = left + width
@@ -308,7 +308,7 @@ def test_composite_module_topology():
     m2 = Interface(mgr, {'i': x, 'j': x}, {'k': x})
 
 
-    m12 = CompositeModule([m1, m2])
+    m12 = CompositeModule((m1, m2))
     assert m12.sorted_mods() == ((m1,), (m2,))
     assert set(m12.outputs) == {'k', 'b', 'i'}
     assert set(m12.inputs) == {'a', 'j'}
@@ -319,7 +319,12 @@ def test_composite_module_topology():
     m123 = CompositeModule([m1,m2,m3])
     assert m123.sorted_mods() == ((m1,), (m2,), (m3,))
     assert set(m123.outputs) == {'b','i','k'}
+    assert set(m123.inputs) == {'a', 'j'}
 
+    # Renaming
+    m123renamed = m123.renamed(b='r', a = 'q')
+    assert set(m123renamed.outputs) == {'r','i','k'}
+    assert set(m123renamed.inputs) == {'q', 'j'}
 
 def test_sinks():
 
@@ -333,7 +338,7 @@ def test_sinks():
 
     m1 = Interface(mgr, {'x': x}, {}, assum=x1)
     m2 = Interface(mgr, {'x': x}, {}, assum=x2)
-    m3 = Interface(mgr, {'x': x}, {}, assum=x3)    
+    m3 = Interface(mgr, {'x': x}, {}, assum=x3)
     m4 = Interface(mgr, {'x': x}, {}, assum=x4)
 
     assert (m1 * m2).assum == mgr.false

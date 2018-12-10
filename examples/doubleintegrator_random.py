@@ -4,7 +4,7 @@ Double integrator example where the abstraction is constructed via random sampli
 
 import time
 
-init_time = time.time()
+
 
 import numpy as np
 import funcy as fn
@@ -23,6 +23,7 @@ ts = .2
 k = .1
 g = 9.8
 
+init_time = time.time()
 
 def dynamics(p, v, a):
     vsign = 1 if v > 0 else -1
@@ -160,9 +161,10 @@ while(numapplied < 3000):
 
         # Declare safe set
         safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox=True)
+        safesink = Interface(mgr, {'p': pspace, 'v': vspace}, {},  guar = mgr.true, assum=safe)
 
         # Solve game and plot 2D invariant region
-        game = SafetyGame(cpre, safe)
+        game = SafetyGame(cpre, safesink)
         synth_starttime = time.time()
         inv, steps, controller = game.run()
         # print("Solver Time: ", time.time() - synth_starttime)
@@ -177,7 +179,7 @@ while(numapplied < 3000):
         # print("Solving Bits: ", 7)
         # print("Solver Steps: ", steps)
         # print("Safe Size:", system.mgr.count(safe, p_precision + v_precision))
-        print("Invariant Size:", system.mgr.count(inv,  p_precision + v_precision))
+        print("Invariant Size:", inv.count_nb(p_precision + v_precision))
 
         # try:
         #     fig, ax = scatter2D(system.mgr, ('v', vspace), ('p', pspace), inv, fig=fig, ax=ax, alpha = numapplied/3000, fname=str(numapplied))        
@@ -188,45 +190,43 @@ import matplotlib.cm as cm
 offset = 10
 colors = cm.binary(np.linspace(.1,.9,len(growing_inv)))
 
-for i, safeinv in enumerate(growing_inv[::-1]):
-    try:
-        fig, ax = scatter2D(system.mgr, ('v', vspace), ('p', pspace), safeinv, fig=fig, ax=ax, co = colors[i])
-    except:
-        fig, ax = scatter2D(system.mgr, ('v', vspace), ('p', pspace), safeinv, co = colors[i])
+# for i, safeinv in enumerate(growing_inv[::-1]):
+#     try:
+#         fig, ax = scatter2D(system.mgr, ('v', vspace), ('p', pspace), safeinv.assum, fig=fig, ax=ax, co = colors[i])
+#     except:
+#         fig, ax = scatter2D(system.mgr, ('v', vspace), ('p', pspace), safeinv.assum, co = colors[i])
 
 # fig.savefig("asdf.png",  dpi=400)
 
 print("Abstraction Time: ", time.time() - abs_starttime)
 
-system = pcomp * vcomp
+# system = pcomp * vcomp
+# # Control system declaration
+# for nbits in [6]:
 
+#     cpre = ControlPre(system, (('p', 'pnext'), ('v', 'vnext')), ('a'))
+#     # dcpre = DecompCPre(composite, (('p', 'pnext'), ('v', 'vnext')), ('a'))
 
-# Control system declaration
-for nbits in [6]:
+#     # Declare safe set
+#     safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox=True)
 
-    cpre = ControlPre(system, (('p', 'pnext'), ('v', 'vnext')), ('a'))
-    # dcpre = DecompCPre(composite, (('p', 'pnext'), ('v', 'vnext')), ('a'))
+#     # Solve game and plot 2D invariant region
+#     game = SafetyGame(cpre, safe)
+#     synth_starttime = time.time()
+#     inv, steps, controller = game.run()
+#     print("Solver Time: ", time.time() - synth_starttime)
 
-    # Declare safe set
-    safe = pspace.conc2pred(mgr, 'p', [-8,8], 6, innerapprox=True)
+#     # dgame = SafetyGame(dcpre, safe)
+#     # dsynth_starttime = time.time()
+#     # dinv, steps, controller = dgame.run()
+#     # print("Dsolver: ", time.time() - dsynth_starttime)
+#     # assert dinv == inv
 
-    # Solve game and plot 2D invariant region
-    game = SafetyGame(cpre, safe)
-    synth_starttime = time.time()
-    inv, steps, controller = game.run()
-    print("Solver Time: ", time.time() - synth_starttime)
-
-    # dgame = SafetyGame(dcpre, safe)
-    # dsynth_starttime = time.time()
-    # dinv, steps, controller = dgame.run()
-    # print("Dsolver: ", time.time() - dsynth_starttime)
-    # assert dinv == inv
-
-    print("Solving Bits: ", nbits)
-    print("Solver Steps: ", steps)
-    print("Safe Size:", system.mgr.count(safe, p_precision + v_precision))
-    print("Invariant Size:", system.mgr.count(inv,  p_precision + v_precision))
-    # fig, ax = scatter2D(system.mgr, ('v', vspace), ('p', pspace), inv)
+#     print("Solving Bits: ", nbits)
+#     print("Solver Steps: ", steps)
+#     print("Safe Size:", system.mgr.count(safe, p_precision + v_precision))
+#     print("Invariant Size:", system.mgr.count(inv,  p_precision + v_precision))
+#     # fig, ax = scatter2D(system.mgr, ('v', vspace), ('p', pspace), inv)
 
 # plot3D_QT(system.mgr, ('p', vspace), ('v', aspace), ('pnext', vspace), pcomp.pred, 128)
 # plot3D_QT(system.mgr, ('v', vspace), ('a', aspace), ('vnext', vspace), vcomp.pred, 128)
