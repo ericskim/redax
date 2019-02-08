@@ -16,7 +16,8 @@ setup(
         'numpy',
         'toposort',
         'pyqtgraph',
-        'pyopengl'
+        'pyopengl',
+        'funcy'
     ],
     packages=find_packages(),
 )

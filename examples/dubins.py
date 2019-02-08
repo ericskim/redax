@@ -63,14 +63,14 @@ def thetawindow(theta, v, omega):
     """
     Parameters
     ----------
-    y: Tuple(float, float)
-    v: float
     theta: Tuple(float, float)
+    v: float
+    omega: float
 
     Returns
     -------
     Tuple(float, float)
-        Overapproximation of possible values of y + v sin(theta)
+        Overapproximation of possible values of FIXME:
 
     """
     return theta[0] + (1/L) * v * np.sin(omega), theta[1] + (1/L) * v*np.sin(omega)
@@ -114,7 +114,7 @@ precision = {'x': bits, 'y':bits, 'theta': bits,
              'xnext': bits, 'ynext': bits, 'thetanext': bits}
 abs_starttime = time.time()
 np.random.seed(1337)
-for numapplied in range(12000):
+for numapplied in range(20000):
 
     # Shrink window widths over time
     scale = 1/np.log10(1.0*numapplied+10)
@@ -139,6 +139,23 @@ for numapplied in range(12000):
     # Refine abstraction with granularity specified in the precision variable
     composite = composite.io_refined(iobox, nbits=precision)
 
+    if numapplied > 300000000000:
+        target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 6, innerapprox=False)
+        target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 6, innerapprox=False)
+        targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {}, guar=mgr.true, assum=target)
+        targetmod.check()
+
+        dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
+        dgame = ReachGame(dcpre, targetmod)
+        dstarttime = time.time()
+        basin, steps, controller = dgame.run(verbose=False)
+        print("Reach Size:", basin.count_nb(3 * bits))
+        print("Decomp Solve Time:", time.time() - dstarttime)
+        # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, 60)
+        # plot3D(mgr, ('x', pspace),('y', pspace), ('theta', anglespace), basin.coarsened(x=6, y=6, theta=6).pred, view=(30, -144), fname="dubinsbasin{}.png".format(numapplied))
+
+
+
 print("Abstraction Time: ", time.time() - abs_starttime)
 composite.check()
 
@@ -149,13 +166,13 @@ mgr.reorder(order_heuristic(mgr))
 Controller Synthesis with a reach objective
 """
 # Declare reach set as [0.8] x [-.8, 0] box in the x-y space.
-target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 8, innerapprox=False)
-target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 8, innerapprox=False)
+target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 6, innerapprox=False)
+target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 6, innerapprox=False)
 targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {}, guar=mgr.true, assum=target)
 targetmod.check()
 
 # Two algorithms for synthesizing the controller
-decomposed_synthesis = True
+decomposed_synthesis = False
 if decomposed_synthesis:
     # Synthesize using a decomposed model that never recombines multiple components together.
     # Typically more efficient than the monolithic case
@@ -166,9 +183,11 @@ if decomposed_synthesis:
     print("Decomp Solve Time:", time.time() - dstarttime)
 else:
     # Synthesize using a monolithic model that is the parallel composition of components
+    monostart = time.time()
     dubins = composite.children[0] * composite.children[1] * composite.children[2]
+    print("Monolithic Construction Time:", time.time() - monostart)
     cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
-    game = ReachGame(cpre, target)
+    game = ReachGame(cpre, targetmod)
     starttime = time.time()
     basin, steps, controller = game.run(verbose=False)
     print("Monolithic Solve Time:", time.time() - starttime)
@@ -185,11 +204,20 @@ Plotting and visualization
 """
 
 # # Plot reachable winning set
-plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, 60)
+# plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, 60)
+# plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, view=(30, -144), fname="finedubinbasin")
 
 # # Plot x transition relation for v = .5
 # xdyn = mgr.exist(['v_0'],(composite.children[0].pred) & mgr.var('v_0'))
 # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
+
+# plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
+
+# for i in [3,4,5,6,7]:
+#     xdyn = mgr.exist(['v_0'],(composite.children[0].coarsened(x=i, theta=i, xnext=i).pred) & mgr.var('v_0'))
+#     plot3D(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, view=(30, -144), fname="xcomp{}.png".format(i))
+
+
 
 # # Plot y transition relation for v = .5
 # ydyn = mgr.exist(['v_0'],(composite.children[1].pred) & mgr.var('v_0'))
