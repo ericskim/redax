@@ -1,5 +1,4 @@
 **/*.egg
-**/*.txt
 **/*.cpython
 **/__pycache__
 build/
@@ -9,7 +8,6 @@ build/
 docs/_*
 **/*.png
 .mypy_cache/**
-*.txt
 *.dddmp
 *.zip
 *.gif
