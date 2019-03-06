@@ -1,0 +1,6 @@
+bidict==0.17.0
+dd==0.5.5
+numpy==1.14.0
+pyqtgraph==0.10.0
+matplotlib==2.1.2
+funcy==1.10.3
