@@ -8,7 +8,7 @@ setup(
     author_email='eskim@eecs.berkeley.edu',
     license='BSD-3',
     entry_points={
-        
+
     },
     install_requires=[
         'bidict',
@@ -16,7 +16,9 @@ setup(
         'numpy',
         'toposort',
         'pyqtgraph',
-        'pyopengl'
+        'pyopengl',
+        'funcy',
+        'dataclasses'
     ],
     packages=find_packages(),
 )
