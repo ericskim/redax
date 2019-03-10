@@ -63,7 +63,11 @@ possible_transitions = (pcomp * vcomp).count_io_space(bittotal)
 
 print("Setup time: ", time.time() - init_time)
 
-exhaustive = False 
+"""
+Abstraction of each component individually
+"""
+
+exhaustive = False
 if exhaustive:
     # Exhaustive traversal position component
     for i, iobox in enumerate(pcomp.input_iter(precision={'p': 7, 'v': 7})):
@@ -74,7 +78,7 @@ if exhaustive:
 
         lowleft = {k: v[0] for k, v in iobox.items()}
         upright = {k: v[1] for k, v in iobox.items()}
-        
+
         ll = dynamics(**lowleft)
         ur = dynamics(**upright)
         outbox = {outorder[i]: (ll[i], ur[i]) for i in range(2)}
@@ -91,7 +95,7 @@ if exhaustive:
 
         lowleft = {k: v[0] for k, v in iobox.items()}
         upright = {k: v[1] for k, v in iobox.items()}
-        
+
         ll = dynamics(**lowleft)
         ur = dynamics(**upright)
         outbox = {outorder[i]: (ll[i], ur[i]) for i in range(2)}
@@ -145,7 +149,7 @@ while(numapplied < 3000):
 
         iotrans = system.count_io(bittotal)
         print("(samples, I/O % trans., bddsize, time(s))"
-              " --- ({0}, {1:.3}, {2}, {3})".format(numapplied, 
+              " --- ({0}, {1:.3}, {2}, {3})".format(numapplied,
                                                    100*iotrans/possible_transitions,
                                                    len(system.pred),
                                                    time.time() - abs_starttime)
@@ -182,11 +186,11 @@ while(numapplied < 3000):
         print("Invariant Size:", inv.count_nb(p_precision + v_precision))
 
         # try:
-        #     fig, ax = scatter2D(system.mgr, ('v', vspace), ('p', pspace), inv, fig=fig, ax=ax, alpha = numapplied/3000, fname=str(numapplied))        
+        #     fig, ax = scatter2D(system.mgr, ('v', vspace), ('p', pspace), inv, fig=fig, ax=ax, alpha = numapplied/3000, fname=str(numapplied))
         # except:
         #     fig, ax = scatter2D(system.mgr, ('v', vspace), ('p', pspace), inv,alpha = numapplied/3000, fname=str(numapplied))
 
-import matplotlib.cm as cm 
+import matplotlib.cm as cm
 offset = 10
 colors = cm.binary(np.linspace(.1,.9,len(growing_inv)))
 

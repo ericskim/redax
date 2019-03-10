@@ -33,13 +33,13 @@ Clone this repo and run the following commands:
 # Setup script doesn't currently handle all dependency installations.
 # Missing: pytest, sphinx, cudd
 cd /location/of/redax/here/
-pip install .
+pip install -e .
 ```
 
 ### Dependencies
 
 - Core
-  - python 3.7
+  - python 3.6
   - cudd with dd wrapper
   - numpy
   - bidict
@@ -162,7 +162,7 @@ The core foundations are working and providing meaningful results on some test e
 
 - Support for disjoint union and product operations for spaces (thus adding support for hybrid spaces)
   - Requires a predicate bit name generator
-  - Quantizers for interfaces should be higher order functions. This will support ADTs.
+  - Each space should generate a higher order function quantizer.
 
 ## References
 

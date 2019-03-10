@@ -42,6 +42,7 @@ def xwindow(x, v, theta):
     """
     mincos, maxcos = maxmincos(theta[0], theta[1])
     return x[0] + v * mincos, x[1] + v * maxcos
+
 def ywindow(y, v, theta):
     """
     Parameters
@@ -95,7 +96,7 @@ angaccspace = EmbeddedGrid(3, -1.5, 1.5)
 
 
 """
-Declare modules
+Declare interfaces
 """
 dubins_x        = Interface(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace},
                                  {'xnext': pspace})
@@ -114,7 +115,7 @@ precision = {'x': bits, 'y':bits, 'theta': bits,
              'xnext': bits, 'ynext': bits, 'thetanext': bits}
 abs_starttime = time.time()
 np.random.seed(1337)
-for numapplied in range(12000):
+for numapplied in range(6000):
 
     # Shrink window widths over time
     scale = 1/np.log10(1.0*numapplied+10)
@@ -175,8 +176,8 @@ else:
 
 
 # Print statistics about reachability basin
-print("Reach Size:", basin.count_nb(3 * bits))
-print("Target Size:", targetmod.count_nb(3 * bits))
+print("Reach Size:", basin.count_nb( len(basin.pred.support | targetmod.pred.support)))
+print("Target Size:", targetmod.count_nb(len(basin.pred.support | targetmod.pred.support)))
 print("Game Steps:", steps)
 
 
