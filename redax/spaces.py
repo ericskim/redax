@@ -8,8 +8,6 @@ cover = \n
 grid = a countable set of points embedded in continuous space \n
 """
 
-from __future__ import annotations
-
 import itertools
 import math
 from abc import abstractmethod
@@ -666,18 +664,3 @@ class FixedCover(ContinuousCover):
                 predbox |= bv2pred(mgr, name, bv)
         return predbox
 
-
-class NamedSpace():
-    r"""Assign a name to a space for reuse."""
-
-    def __init__(self, name: str, space: SymbolicSet) -> None:
-        self.name = name
-        self.space = space
-
-    def __eq__(self, other: NamedSpace):
-        try:
-            if self.name == other.name and self.space == other.space:
-                return True
-            return False
-        except:
-            return False

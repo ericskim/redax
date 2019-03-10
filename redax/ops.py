@@ -291,6 +291,7 @@ def sinkprepend(iface: Interface, sink: Interface) -> Interface:
 
     newnonblock = ~iface.guar | sink.assum
     elim_bits = set(bv.flatten([iface.pred_bitvars[k] for k in iface.outputs]))
+    elim_bits |= set(bv.flatten([sink.pred_bitvars[k] for k in iface.outputs]))
     elim_bits &= newnonblock.support
 
     return Interface(iface.mgr,
