@@ -1,4 +1,10 @@
 language: python
 python:
 - "3.6"
-script: pytest
+install:
+  # Install dependencies
+  - pip install -r requirements.txt
+  # Install Self
+  - pip install .
+script:
+  pytest
