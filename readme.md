@@ -33,7 +33,7 @@ Clone this repo and run the following commands:
 # Setup script doesn't currently handle all dependency installations.
 # Missing: pytest, sphinx, cudd
 cd /location/of/redax/here/
-pip install -e .
+pip install -r requirements -e .
 ```
 
 ### Dependencies
