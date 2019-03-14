@@ -2,7 +2,7 @@ import numpy as np
 
 from redax.module import Interface, CompositeInterface
 from redax.spaces import DynamicCover
-from redax.synthesis import SafetyGame, ControlPre, DecompCPre
+from redax.synthesis import SafetyGame, ControlPre, DecompCPre, ReachGame
 from redax.visualizer import scatter2D, plot3D, plot3D_QT, pixel2D
 from redax.utils.overapprox import bloatbox
 
@@ -68,7 +68,7 @@ for numapplied in range(300):
     vcomp = vcomp.io_refined({k: v for k, v in iobox.items() if k in vcomp.vars}, nbits=precision)
 
 
-def test_control_declaration():
+def test_safe_control():
     composite = CompositeInterface((pcomp, vcomp))
     dcpre = DecompCPre(composite, (('p', 'pnext'), ('v', 'vnext')), ('a'))
 
@@ -87,6 +87,20 @@ def test_control_declaration():
     assert dinv == inv
 
 
-def test_control_manipulation():
-    pass
+def test_reach_control():
+    composite = CompositeInterface((pcomp, vcomp))
+    dcpre = DecompCPre(composite, (('p', 'pnext'), ('v', 'vnext')), ('a'))
 
+    target = pspace.conc2pred(mgr, 'p', [-2,2], 6, innerapprox=True)
+    targetint = Interface(mgr, {'p': pspace, 'v': vspace}, {},  guar = mgr.true, assum=target)
+
+    # Solve game and plot 2D invariant region
+    game = ReachGame(dcpre, targetint)
+    dbasin, _, _ = game.run()
+
+    system = pcomp * vcomp
+    cpre = ControlPre(system, (('p', 'pnext'), ('v', 'vnext')), ('a'))
+    game = ReachGame(cpre, targetint)
+    basin, _, _ = game.run()
+
+    assert dbasin == basin

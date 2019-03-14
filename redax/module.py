@@ -616,12 +616,10 @@ class Interface(object):
 
         # Abstract interface self must accept fewer inputs than other
         if (~self.assum | other.assum != self.mgr.true):
-            breakpoint()
             return False
 
         # Abstract system outputs must be overapproximations
         if (~(self.assum & other.pred) | self.pred) != self.mgr.true:
-            breakpoint()
             return False
 
         return True
@@ -761,9 +759,6 @@ class CompositeInterface(object):
                         tuple(self.children[i] for i in modidx)
                         for modidx in toposort(deps)
                     )
-
-    def hidden(self, var):
-        raise NotImplementedError
 
     def check(self, verbose=False):
         # Check consistency of children

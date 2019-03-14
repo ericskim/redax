@@ -1,21 +1,14 @@
 import time
 from functools import reduce
-from typing import Optional, Union, Sequence
+from typing import Optional, Union, Sequence, Callable
 
 from bidict import bidict
 
 from redax.controllers import MemorylessController, SafetyController
-from redax.utils.bv import flatten
+from redax.utils.bv import flatten, bv_var_name
 from redax.module import Interface, CompositeInterface
 from redax.ops import ohide, compose, ihide, sinkprepend, coarsen, rename
 
-
-def _name(i):
-    return i.split('_')[0]
-
-
-def _idx(i):
-    return i.split('_')[1]
 
 
 class ControlPre():
@@ -76,12 +69,12 @@ class ControlPre():
     def elimcontrol(self, pred):
         r"""Existentially eliminate control bits from a predicate."""
         pred_in_space = pred & self.controlspace()
-        elimbits = tuple(i for i in pred_in_space.support if _name(i) in self.control)
+        elimbits = tuple(i for i in pred_in_space.support if bv_var_name(i) in self.control)
         return self.mgr.exist(elimbits, pred_in_space)
 
 
-    def modulepre(self, Z: Interface, no_inputs:bool=False, verbose=False):
-
+    def __call__(self, Z: Interface, no_inputs:bool=False, verbose=False):
+        """One step control predecessor"""
         assert Z.is_sink()
 
         if len(Z.outputs) > 0:
@@ -99,10 +92,13 @@ class ControlPre():
         else:
             return xu
 
-class DecompCPre(ControlPre):
-    # TODO: Get rid of inheritance??
+class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
 
-    def __init__(self, mod: CompositeInterface, states, control, elim_order: Sequence = None) -> None:
+    def __init__(self,
+                 mod: CompositeInterface,
+                 states,
+                 control,
+                 elim_order: Sequence = None) -> None:
 
         # Check if all modules aren't just a parallel composition
         if len(mod.sorted_mods()) > 2:
@@ -112,13 +108,14 @@ class DecompCPre(ControlPre):
 
         self.elimorder = elim_order
 
+
     @property
     def mgr(self):
         return self.sys.children[0].mgr
 
 
-    def modulepre(self, Z: Interface, no_inputs=False, verbose=False):
-
+    def __call__(self, Z: Interface, no_inputs=False, verbose=False):
+        """One step control predecessor"""
         assert Z.is_sink()
 
         Z = rename(Z, self.pre_to_post)
@@ -144,7 +141,7 @@ class DecompCPre(ControlPre):
                 continue
 
             # Find Z bit precision.
-            Z_var_bits = len([b for b in Z.assum.support if _name(b) == var])
+            Z_var_bits = len([b for b in Z.assum.support if bv_var_name(b) == var])
             assert Z_var_bits == len(Z.pred_bitvars[var])
 
             for mod in dep_mods:
@@ -156,14 +153,30 @@ class DecompCPre(ControlPre):
             return Z
 
 
-class CompConstrainedPre():
+class CompConstrainedPre(DecompCPre):
     """
     Identical to decomppre but also coarsens the sink until a specific condition is met.
     """
-    def __init__(self):
+    def __init__(self,
+                 mod: CompositeInterface,
+                 states,
+                 control,
+                 condition:Optional[Callable],
+                 heuristic:Optional[Callable],
+                 elim_order: Sequence = None,) -> None:
+        """
+        """
         raise NotImplementedError
+        ControlPre.__init__(self, mod, states, control)
 
-    def modulepre(self, condition):
+        # Default condition never triggers heuristic
+        self.condition = condition if condition else lambda x: False
+
+        # Default heuristic does nothing
+        self.heuristic = heuristic if heuristic else lambda x: x
+
+
+    def __call__(self, Z: Interface, no_inputs=False, verbose=False):
         """
         """
         raise NotImplementedError
@@ -226,7 +239,7 @@ class SafetyGame():
             step_start = time.time()
             zz = z
 
-            z = self.cpre.modulepre(zz, verbose=verbose)
+            z = self.cpre(zz, verbose=verbose)
 
             C = z.assum
             if verbose:
@@ -262,7 +275,7 @@ class ReachGame():
         self.cpre: Interface = cpre
         self.target: Interface = target  # TODO: Check if a subset of the state space
 
-    def run(self, steps: Optional[int]=None, winning: Optional[Interface]=None, verbose:bool=False, excludewinning:bool=False):
+    def run(self, steps: Optional[int]=None, winning: Optional[Interface]=None, verbose:bool=False):
         """
         Run a reachability game until reaching a fixed point or a maximum number of steps.
 
@@ -274,9 +287,6 @@ class ReachGame():
             Currently winning region
         verbose: bool
             If True (not default), then print out intermediate statistics.
-        excludewinning: bool
-            If True, controllable predecessor will avoid synthesizing for
-            states that are already in winning region.
 
         Returns
         -------
@@ -303,10 +313,8 @@ class ReachGame():
 
             zz = z
             step_start = time.time()
-            if excludewinning:
-                z = self.cpre.modulepre(zz, verbose=verbose, excludedstates=zz) + self.target  # state-input pairs
-            else:
-                z = self.cpre.modulepre(zz, verbose=verbose)  # state-input pairs
+            z = self.cpre(zz, verbose=verbose) # state-input pairs
+            # TODO: Change this to shared refinement?
             C = C | (z.assum & ~self.cpre.elimcontrol(C))  # Add new state-input pairs to controller
             if verbose:
                 print("Eliminating control")
@@ -340,7 +348,7 @@ class ReachAvoidGame():
 
     """
 
-    def __init__(self, cpre, safe, target) -> None:
+    def __init__(self, cpre, safe: Interface, target: Interface) -> None:
         raise NotImplementedError("Needs to be refactored to take controllable predecessors")
         self.cpre = cpre
         self.target = target  # TODO: Check if a subset of the state space
@@ -374,8 +382,8 @@ class ReachAvoidGame():
 
         C = self.cpre.mgr.false
 
-        z = self.cpre.prespace() & self.target if winning is None else winning
-        zz = self.cpre.mgr.true
+        z = self.target if winning is None else winning
+        zz = Interface(self.cpre.mgr, {}, {}) # Defaults to false interface.
 
         i = 0
         while (z != zz):
@@ -384,19 +392,21 @@ class ReachAvoidGame():
 
             zz = z
             step_start = time.time()
-            # TODO: Change to interfaces
-            z = (self.cpre(zz, verbose=verbose) & self.safe) | self.target  # State input pairs
-            C = C | (z & (~self.cpre.elimcontrol(C)))  # Add new state-input pairs to controller
+            z = (self.cpre(zz, verbose=verbose) * self.safe) + self.target  # state-input pairs
+            C = C | (z.assum & ~self.cpre.elimcontrol(C))  # Add new state-input pairs to controller
 
             if verbose:
                 print("Eliminating control")
-            z = self.cpre.elimcontrol(C)
+            z = ihide(self.cpre.control, z)
 
             i += 1
             if verbose:
                 print("Step #: ", i,
                       "Step Time (s): ", time.time() - step_start,
-                      "Size: ", self.cpre.mgr.count(z, len(z.support)),
-                      "Winning nodes:", len(z))
+                      "Size: ", self.cpre.mgr.count(z.assum, len(z.assum.support)),
+                      "Winning nodes:", len(z.assum))
+
+
+
 
         return z, i, MemorylessController(self.cpre, C)

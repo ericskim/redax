@@ -5,15 +5,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 from redax.spaces import DynamicCover
-from redax.utils.bv import bv2int, graytobin
+from redax.utils.bv import bv2int, graytobin, bv_var_name, bv_var_idx
 
-
-def _name(i):
-    return i.split('_')[0]
-
-
-def _idx(i):
-    return i.split('_')[1]
 
 
 def center(box):
@@ -55,8 +48,8 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     yname, ygrid = yspace
 
     support = pred.support
-    xbits = len([bit for bit in support if _name(bit) == xname])
-    ybits = len([bit for bit in support if _name(bit) == yname])
+    xbits = len([bit for bit in support if bv_var_name(bit) == xname])
+    ybits = len([bit for bit in support if bv_var_name(bit) == yname])
     xbins = 2**xbits
     ybins = 2**ybits
 
@@ -71,8 +64,8 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     config = mgr.configure()  # pick_iter alters config so save config state
     # Add all BDD assignments to a list of points
     for pt in mgr.pick_iter(pred):
-        xvars = [k for k, v in pt.items() if _name(k) == xname]
-        yvars = [k for k, v in pt.items() if _name(k) == yname]
+        xvars = [k for k, v in pt.items() if bv_var_name(k) == xname]
+        yvars = [k for k, v in pt.items() if bv_var_name(k) == yname]
         xvars.sort()  # Sort by bit names
         yvars.sort()
 
@@ -95,7 +88,7 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
 
     fig, ax = plt.subplots()
     if invertcolor:
-        ax.pcolormesh(mask, edgecolors='w', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)        
+        ax.pcolormesh(mask, edgecolors='w', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)
     else:
         ax.pcolormesh(mask, edgecolors='k', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)
 
@@ -103,7 +96,7 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     ax.set_xlabel(xname)
     # ax.set_ylim(ygrid.lb, ygrid.ub)
     ax.set_ylabel(yname)
-    
+
     if title:
         ax.set_title(title)
     if fname is not None:
@@ -146,8 +139,8 @@ def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None, fig = None, ax 
     config = mgr.configure()  # pick_iter alters config so save config state
     # Add all BDD assignments to a list of points
     for pt in mgr.pick_iter(pred):
-        xvars = [k for k, v in pt.items() if _name(k) == xname]
-        yvars = [k for k, v in pt.items() if _name(k) == yname]
+        xvars = [k for k, v in pt.items() if bv_var_name(k) == xname]
+        yvars = [k for k, v in pt.items() if bv_var_name(k) == yname]
         xvars.sort()  # Sort by bit names
         yvars.sort()
 
@@ -177,7 +170,7 @@ def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None, fig = None, ax 
     return fig, ax
 
 
-def plot3D(mgr, xspace, yspace, zspace, pred, 
+def plot3D(mgr, xspace, yspace, zspace, pred,
            opacity=40, view=None, title=None, fname=None, **kwargs):
     """Matplotlib based plotter with voxels"""
     voxelcolors = '#7A88CC' + format(opacity, "02x")
@@ -188,9 +181,9 @@ def plot3D(mgr, xspace, yspace, zspace, pred,
 
     # Construct spaces
     support = pred.support
-    xbits = len([bit for bit in support if _name(bit) == xname])
-    ybits = len([bit for bit in support if _name(bit) == yname])
-    zbits = len([bit for bit in support if _name(bit) == zname])
+    xbits = len([bit for bit in support if bv_var_name(bit) == xname])
+    ybits = len([bit for bit in support if bv_var_name(bit) == yname])
+    zbits = len([bit for bit in support if bv_var_name(bit) == zname])
     xbins = 2**xbits
     ybins = 2**ybits
     zbins = 2**zbits
@@ -205,9 +198,9 @@ def plot3D(mgr, xspace, yspace, zspace, pred,
     # Construct bitmask
     mask = np.full((xbins, ybins, zbins), False)
     for pt in mgr.pick_iter(pred):
-        xvars = [k for k, v in pt.items() if _name(k) == xname]
-        yvars = [k for k, v in pt.items() if _name(k) == yname]
-        zvars = [k for k, v in pt.items() if _name(k) == zname]
+        xvars = [k for k, v in pt.items() if bv_var_name(k) == xname]
+        yvars = [k for k, v in pt.items() if bv_var_name(k) == yname]
+        zvars = [k for k, v in pt.items() if bv_var_name(k) == zname]
         xvars.sort()  # Sort by bit names
         yvars.sort()
         zvars.sort()
@@ -266,9 +259,9 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
 
     # Construct spaces
     support = pred.support
-    xbits = len([bit for bit in support if _name(bit) == xname])
-    ybits = len([bit for bit in support if _name(bit) == yname])
-    zbits = len([bit for bit in support if _name(bit) == zname])
+    xbits = len([bit for bit in support if bv_var_name(bit) == xname])
+    ybits = len([bit for bit in support if bv_var_name(bit) == yname])
+    zbits = len([bit for bit in support if bv_var_name(bit) == zname])
     xbins = 2**xbits
     ybins = 2**ybits
     zbins = 2**zbits
@@ -280,9 +273,9 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
 
 
     for pt in mgr.pick_iter(pred):
-        xvars = [k for k, v in pt.items() if _name(k) == xname]
-        yvars = [k for k, v in pt.items() if _name(k) == yname]
-        zvars = [k for k, v in pt.items() if _name(k) == zname]
+        xvars = [k for k, v in pt.items() if bv_var_name(k) == xname]
+        yvars = [k for k, v in pt.items() if bv_var_name(k) == yname]
+        zvars = [k for k, v in pt.items() if bv_var_name(k) == zname]
         xvars.sort()  # Sort by bit names
         yvars.sort()
         zvars.sort()
