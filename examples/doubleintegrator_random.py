@@ -9,7 +9,7 @@ import time
 import numpy as np
 import funcy as fn
 
-from redax.module import Interface, CompositeModule
+from redax.module import Interface, CompositeInterface
 from redax.spaces import DynamicCover
 from redax.synthesis import SafetyGame, ControlPre, DecompCPre
 from redax.visualizer import scatter2D, plot3D, plot3D_QT, pixel2D
@@ -51,7 +51,7 @@ bounds = {'p': [-10,10], 'v': [-16,16]}
 system = pcomp * vcomp
 
 # Composite system
-composite = CompositeModule((pcomp, vcomp))
+composite = CompositeInterface((pcomp, vcomp))
 
 # Declare grid precision
 p_precision = 7

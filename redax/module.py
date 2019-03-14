@@ -65,14 +65,11 @@ class Interface(object):
         if any(var.isalnum() is False for var in self.vars):
             raise ValueError("Non-alphanumeric variable name")
 
-        # TODO: Check bdd supports
+        # FIXME: Check bdd supports and make sure these align with the spaces!!! Especially for the guarantee.
         self._guar = self.mgr.true if guar is None else guar
         self._assum = self.mgr.false if assum is None else assum
 
     def __repr__(self):
-        if len(self.vars) > 0:
-            maxvarlen = max(len(v) for v in self.vars)
-            maxvarlen = max(maxvarlen, 20) + 4
         s = "Interface(inputs={"
         s += ", ".join([k + ": " + v.__repr__() for k, v in self._in.items()])
         s += "}, outputs={"
@@ -643,7 +640,7 @@ class Interface(object):
                          self.assum | inpred)
 
 
-class CompositeModule(object):
+class CompositeInterface(object):
     r"""Container for a collection of interfaces."""
     def __init__(self, modules: Collection['Interface'], checktopo: bool=True) -> None:
 
@@ -791,16 +788,16 @@ class CompositeModule(object):
         self._var_io
         self.sorted_mods() # Circular dependency detected
 
-    def renamed(self, names: Dict=None, **kwargs) -> 'CompositeModule':
+    def renamed(self, names: Dict=None, **kwargs) -> 'CompositeInterface':
         """Renames variables for contained interfaces."""
 
         names = dict([]) if names is None else names
         names.update(kwargs)
 
-        return CompositeModule(tuple(child.renamed(**names) for child in self.children))
+        return CompositeInterface(tuple(child.renamed(**names) for child in self.children))
 
 
-    def io_refined(self, concrete, silent: bool=True, **kwargs) -> 'CompositeModule':
+    def io_refined(self, concrete, silent: bool=True, **kwargs) -> 'CompositeInterface':
         r"""
         Refine interior interfaces.
 
@@ -890,7 +887,7 @@ class CompositeModule(object):
             else:
                 newmods.append(mod._direct_io_refined(inbox, outbox))
 
-        return CompositeModule(newmods, checktopo=False)
+        return CompositeInterface(newmods, checktopo=False)
 
     def atomized(self) -> Interface:
         r"""Reduce composite interface into a single atomic one."""

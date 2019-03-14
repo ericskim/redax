@@ -6,13 +6,6 @@ from .module import Interface
 import redax.utils.bv as bv
 
 
-def io_refine(mod: Interface, concrete: dict, silent: bool=True, **kwargs) -> Interface:
-    r"""
-    Compute interface
-    """
-    raise NotImplementedError
-
-
 def shared_refine(ifaces: Collection[Interface], safecheck=True):
     r"""
     Compute shared refinement of a collection of interfaces.

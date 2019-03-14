@@ -7,7 +7,7 @@ import time
 import numpy as np
 import funcy as fn
 
-from redax.module import Interface, CompositeModule
+from redax.module import Interface, CompositeInterface
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover
 from redax.synthesis import ReachGame, ControlPre, DecompCPre
 from redax.visualizer import plot3D, plot3D_QT, pixel2D
@@ -105,7 +105,7 @@ dubins_y        = Interface(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace}
 dubins_theta    = Interface(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace},
                                  {'thetanext': anglespace})
 
-composite = CompositeModule([dubins_x, dubins_y, dubins_theta])
+composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
 
 """
 Abstract the continuous dynamics with randomly generated boxes

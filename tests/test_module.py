@@ -8,7 +8,7 @@ import redax.module as mod
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover, OutOfDomainError, ContinuousCover
 
 Interface = mod.Interface
-CompositeModule = mod.CompositeModule
+CompositeInterface = mod.CompositeInterface
 
 def test_dynamic_module():
     mgr = BDD()
@@ -248,7 +248,7 @@ def test_sin_sqrt_comp():
     sqrtout = DynamicCover(0, 1.2)
     sqrtmod = Interface(mgr, {'sout': sinout}, {'sqrt': sqrtout})
 
-    comp = CompositeModule([sinmod, sqrtmod])
+    comp = CompositeInterface([sinmod, sqrtmod])
 
     def random_input_gen(module: Interface, scale: float) -> dict:
         iobox = dict()
@@ -308,7 +308,7 @@ def test_composite_module_topology():
     m2 = Interface(mgr, {'i': x, 'j': x}, {'k': x})
 
 
-    m12 = CompositeModule((m1, m2))
+    m12 = CompositeInterface((m1, m2))
     assert m12.sorted_mods() == ((m1,), (m2,))
     assert set(m12.outputs) == {'k', 'b', 'i'}
     assert set(m12.inputs) == {'a', 'j'}
@@ -316,7 +316,7 @@ def test_composite_module_topology():
 
     m3 = Interface(mgr, {'k': x, 'b': x}, {})
 
-    m123 = CompositeModule([m1,m2,m3])
+    m123 = CompositeInterface([m1,m2,m3])
     assert m123.sorted_mods() == ((m1,), (m2,), (m3,))
     assert set(m123.outputs) == {'b','i','k'}
     assert set(m123.inputs) == {'a', 'j'}
@@ -349,4 +349,3 @@ def test_sinks():
     assert (m3 * m1)== m1
 
     assert (m4 * m1) <= m4
-

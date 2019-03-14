@@ -7,7 +7,7 @@ import gym
 from dynamics import lander_box_dynamics, plot_io_bounds
 
 from redax.predicates.dd import BDD
-from redax.module import Interface, CompositeModule
+from redax.module import Interface, CompositeInterface
 from redax.spaces import DynamicCover, EmbeddedGrid, DiscreteSet, OutOfDomainError
 from redax.synthesis import SafetyGame, DecompCPre, ReachGame
 from redax.controllers import MemorylessController
@@ -250,7 +250,9 @@ def synthesize_reach(f, target, steps=None):
     print("Solving Reach Game")
     game = ReachGame(cpre, target)
     game_starttime = time.time()
-    basin, steps, controller = game.run(verbose=True, steps=steps, excludewinning=False)
+    basin, steps, controller = game.run(verbose=True,
+                                        steps=steps,
+                                        excludewinning=False)
     print("Solve time: ", time.time() - game_starttime)
     print("Solve steps: ", steps)
     print("Trivial region: ", basin == target)
@@ -363,7 +365,7 @@ if __name__ is "__main__":
 
     load_prior_controller = False
     if load_prior_controller:
-        f = CompositeModule(tuple(subsys[i] for i in states))
+        f = CompositeInterface(tuple(subsys[i] for i in states))
         target = f['x'].conc2pred(mgr, 'x', (-.1, .1), 7, innerapprox=True)
         target &= f['y'].conc2pred(mgr, 'y', (1.2, 1.28), 7, innerapprox=False)
         target &= f['theta'].conc2pred(mgr, 'theta', (-.15, .15), 5, innerapprox=True)
@@ -383,7 +385,7 @@ if __name__ is "__main__":
 
     # Reach Game
     if True:
-        f = CompositeModule(tuple(subsys[i] for i in states))
+        f = CompositeInterface(tuple(subsys[i] for i in states))
         controller = None
         target = f['x'].conc2pred(mgr, 'x', (-.1, .1), 7, innerapprox=True)
         target &= f['y'].conc2pred(mgr, 'y', (.05, .15), 7, innerapprox=False)
@@ -404,33 +406,37 @@ if __name__ is "__main__":
 
             print("\nStep:", gameiter)
 
-            elimvars = [v for v in w.support if _name(v) not in ['x', 'y']]
-            pwin = mgr.exist(elimvars, w)
+            # Monitoring the set of states in the lunar lander reach basin
+            elimvars = [v for v in w.pred.support if _name(v) not in ['x', 'y']]
+            pwin = mgr.exist(elimvars, w.pred)
             print("XY Proj states:", mgr.count(pwin, precision['x'] + precision['y']))
-            print("XY proj target:", mgr.count(mgr.exist(elimvars, target), precision['x'] + precision['y']))
+            print("XY proj target:", mgr.count(mgr.exist(elimvars, target.pred), precision['x'] + precision['y']))
             pixel2D(mgr, ('x', subsys['x']['x']),
-                        ('y', subsys['y']['y']),
-                        pwin, 70, fname=directory+"/figs/lunarbasin_{0}".format(gameiter))
+                         ('y', subsys['y']['y']),
+                         pwin,
+                         70,
+                         fname=directory+"/figs/lunarbasin_{0}".format(gameiter)
+                    )
             del pwin
 
             # Decrease complexity of winning set by eliminating a least significant bit.
-            while(len(w) > (gameiter*.35+5)*10**5):
-                coarsenbits = {k: max([_idx(n)  for n in w.support if _name(n) == k]) for k in states if k not in ['x','y']}
-                coarsenbits = [k + "_" + v for k, v in coarsenbits.items()]
-                coarsenbits.sort(key=lambda x: mgr.count(mgr.forall([x], w), statebits), reverse=True) # Want to shrink the least, while simplifying
+            while(len(w.pred) > (gameiter*.35+5)*10**5):
+                coarsenbits = {k: max([_idx(n)  for n in w.pred.support if _name(n) == k], default=None) for k in states if k not in ['x','y']}
+                coarsenbits = [k + "_" + v for k, v in coarsenbits.items() if v is not None]
+                coarsenbits.sort(key=lambda x: mgr.count(mgr.forall([x], w.pred), statebits), reverse=True) # Want to shrink the least, while simplifying
                 print("Coarsening with", coarsenbits[0])
-                print("Default num states", mgr.count(w, statebits), "node complexity ", len(w))
-                w = mgr.forall([coarsenbits[0]], w)
-                print("After elim", coarsenbits[0], "num states", mgr.count(w, statebits), "node complexity", len(w))
-                controller.C &= w
-                c &= w
+                print("Default num states", mgr.count(w.pred, statebits), "node complexity ", len(w.pred))
+                w._assum = mgr.forall([coarsenbits[0]], w.pred)
+                print("After elim", coarsenbits[0], "num states", mgr.count(w.pred, statebits), "node complexity", len(w.pred))
+                controller.C &= w.pred
+                c &= w.pred
 
-            elimvars = [v for v in w.support if _name(v) not in ['x', 'y']]
-            pwin = mgr.exist(elimvars, w)
+            elimvars = [v for v in w.pred.support if _name(v) not in ['x', 'y']]
+            pwin = mgr.exist(elimvars, w.pred)
             print("XY Proj states after compression:", mgr.count(pwin, precision['x'] + precision['y']))
 
             del controller
-            controller, steps = synthesize_reach(f, w | target, steps=1)
+            controller, steps = synthesize_reach(f, w + target, steps=1)
             c = c | (controller.C & (~controller.cpre.elimcontrol(c)))  # Add new inputs
 
             # # Determinize thrust. If thrust = -.01 is possible, then it must hold.
@@ -455,7 +461,7 @@ if __name__ is "__main__":
     # Safety Game
     # controller = None
     if False:
-        f = CompositeModule(tuple(subsys[i] for i in states))
+        f = CompositeInterface(tuple(subsys[i] for i in states))
         safe = f['x'].conc2pred(mgr, 'x', (-.6, .6), 7, innerapprox=True)
         safe &= f['y'].conc2pred(mgr, 'y', (.3, .7), 7, innerapprox=True)
         # safe = mgr.true
@@ -501,7 +507,7 @@ if __name__ is "__main__":
         # exclude = ~exclude
         # simulate(controller, exclude= exclude, drop=50)
 
-    if False:
+    if False:  # Plotting dynamics components
 
         # # Plot omega component
         side_bdd = side.conc2pred(mgr, 's', -.51 + 1.02/3.0 * 0)

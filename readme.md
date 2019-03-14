@@ -76,7 +76,7 @@ pip install .
   Modules represent stateless input-output maps but can have non-deterministic outputs and may block for some inputs.
 
   ```python
-  # Declare modules
+  # Declare modules. mgr is a BDD manager from dd.
   dubins_x        = Interface(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace},
                                         {'xnext': pspace})
   dubins_y        = Interface(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace},
@@ -110,21 +110,21 @@ pip install .
   Abstract systems can be manipulated with a collection of operations:
 
   ```python
-  # Variable Renaming
-  dubins = dubins >> ('xnext', 'xnext')
-  dubins = ('z', 'x') >> dubins
-
-  # Parallel composition is useful for constructing larger dimensional systems
+  # Parallel composition is useful for constructing larger dimensional systems.
   dubins = dubins_x * dubins_y * dubins_theta
 
-  # Series composition resembles function composition m2(m1(.))
-  m1 >> m2
+  # Variable Renaming.
+  dubins = dubins >> ('xnext', 'newname')
+  dubins = ('z', 'x') >> dubins
 
-  # Hide outputs
+  # Series composition generalizes function composition m2(m1(.)), except with named variables.
+  m12 = m1 >> m2
+
+  # Hide outputs from interfaces.
   x = interface.ohidden('x')
 
-  # Future feature: Compute lower complexity abstractions keeping only the most significant bits
-  coarser_model = model.coarsened(x=3, y=4)
+  # Future feature: Compute lower complexity abstractions keeping only the most significant bits.
+  coarser_model = model.coarsened(x=3, y=4)  # Retain 3 bits for 'x' variable and 4 bits for 'y' variable.
   ```
 
   Operations can also be chained together:
@@ -135,19 +135,19 @@ pip install .
                          .renamed(ynext = 'nextposition')
   ```
 
-- **Extensible synthesizers**
+- **Extensible control synthesizers**
 
   Use built-in algorithms for computing controllers enforcing safety and reachability specifications, or customize them using the operators above.
 
 - **Extensible Symbolic Backend**
 
-  We build on top of libraries for symbolically representing sets and relations. The current implementation uses binary decision diagrams but we plan on supporting aiger circuits as well.
+  We build on top of libraries for symbolically representing sets and relations. The current implementation uses binary decision diagrams via the dd package. Support for aiger circuits is possible with the py-aiger library.
 
-## Notes
+## Development Notes
 
-### Development status
+### Status
 
-The core foundations are working and providing meaningful results on some test examples but the API is fluctuating rapidly.
+The core foundations are working and providing results on some meaningful test examples but the APIs are fluctuating rapidly.
 
 ### TODOs
 
@@ -155,6 +155,7 @@ The core foundations are working and providing meaningful results on some test e
   - Fix issues with unnecessary blocking with position modules dependencies on angle.
   - Iterator for shifted but bounded space.
 - Make a variable = name + types object
+- Controlled predecessor with multiple time scale models and control inputs.
 - Different iterators of input space
   - Iterators for the $2^{N-1}$ reduced grid traversal
 - Rewrite continuous cover grid to have an overlap parameter
@@ -171,7 +172,7 @@ The core foundations are working and providing meaningful results on some test e
 
 - [*Abstractions for Symbolic Controller Synthesis are Composable*, Eric S. Kim, Murat Arcak](https://arxiv.org/abs/1807.09973)
 
-### Similar tools for controller synthesis
+### Similar tools for abstraction-based controller synthesis
 
 - [SCOTS](https://gitlab.lrz.de/hcs/scots)
   - [MASCOT](https://github.com/hsukyle/mascot)
