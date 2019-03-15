@@ -4,11 +4,10 @@ from typing import Optional, Union, Sequence, Callable
 
 from bidict import bidict
 
-from redax.controllers import MemorylessController, SafetyController
+from redax.controllers import MemorylessController
 from redax.utils.bv import flatten, bv_var_name
 from redax.module import Interface, CompositeInterface
 from redax.ops import ohide, compose, ihide, sinkprepend, coarsen, rename
-
 
 
 class ControlPre():
@@ -164,22 +163,57 @@ class CompConstrainedPre(DecompCPre):
                  condition:Optional[Callable],
                  heuristic:Optional[Callable],
                  elim_order: Sequence = None,) -> None:
-        """
-        """
-        raise NotImplementedError
         ControlPre.__init__(self, mod, states, control)
 
         # Default condition never triggers heuristic
         self.condition = condition if condition else lambda x: False
 
-        # Default heuristic does nothing
+        # Default heuristic does nothing and is identity function
         self.heuristic = heuristic if heuristic else lambda x: x
 
 
     def __call__(self, Z: Interface, no_inputs=False, verbose=False):
         """
         """
-        raise NotImplementedError
+        """One step control predecessor"""
+        assert Z.is_sink()
+
+        Z = rename(Z, self.pre_to_post)
+
+        # See if the user has provided a pre-determined order to compose interfaces.
+        if self.elimorder is not None:
+            to_elim_post = list(self.elimorder)
+        else:
+            to_elim_post = list(self.poststate)
+
+        # Eliminate each interface output
+        # FIXME: This code assumes that each module only has a single output.
+        # Should instead iterate over modules. Find a better way to specify the
+        # module to be outputted. Can't hash them unfortunately.
+        # Also doesn't take into account arbitrary DAG topologies and control inputs.
+        while(len(to_elim_post) > 0):
+            var = to_elim_post.pop()
+
+            # Partition into modules that do/don't depend on var
+            dep_mods = tuple(mod for mod in self.sys.children if var in mod.outputs)
+
+            if len(dep_mods) == 0:
+                continue
+
+            if self.condition(Z):
+                Z = self.heuristic(Z)
+
+            # Find Z bit precision.
+            Z_var_bits = len([b for b in Z.assum.support if bv_var_name(b) == var])
+            assert Z_var_bits == len(Z.pred_bitvars[var])
+
+            for mod in dep_mods:
+                Z = sinkprepend(coarsen(mod, **{var: Z_var_bits}), Z)
+
+        if no_inputs:
+            return ihide(self.control, Z)
+        else:
+            return Z
 
 
 class SafetyGame():
@@ -275,7 +309,10 @@ class ReachGame():
         self.cpre: Interface = cpre
         self.target: Interface = target  # TODO: Check if a subset of the state space
 
-    def run(self, steps: Optional[int]=None, winning: Optional[Interface]=None, verbose:bool=False):
+    def run(self,
+            steps: Optional[int]=None,
+            winning: Optional[Interface]=None,
+            verbose:bool=False):
         """
         Run a reachability game until reaching a fixed point or a maximum number of steps.
 
@@ -405,8 +442,6 @@ class ReachAvoidGame():
                       "Step Time (s): ", time.time() - step_start,
                       "Size: ", self.cpre.mgr.count(z.assum, len(z.assum.support)),
                       "Winning nodes:", len(z.assum))
-
-
 
 
         return z, i, MemorylessController(self.cpre, C)

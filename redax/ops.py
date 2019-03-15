@@ -6,7 +6,7 @@ from .module import Interface
 import redax.utils.bv as bv
 
 
-def shared_refine(ifaces: Collection[Interface], safecheck=True):
+def shared_refine(ifaces: Collection, safecheck=True):
     r"""
     Compute shared refinement of a collection of interfaces.
 
@@ -131,7 +131,7 @@ def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
                      )
 
 
-def ohide(elim_vars: Collection[str], mod: Interface) -> Interface:
+def ohide(elim_vars: Collection, mod: Interface) -> Interface:
     r"""
     Hides an output variable and returns another interface.
 
@@ -165,7 +165,7 @@ def ohide(elim_vars: Collection[str], mod: Interface) -> Interface:
                      )
 
 
-def ihide(elim_vars: Collection[str], mod: Interface) -> Interface:
+def ihide(elim_vars: Collection, mod: Interface) -> Interface:
     r"""
 
     """

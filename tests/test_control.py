@@ -1,4 +1,5 @@
 import numpy as np
+import funcy as fn
 
 from redax.module import Interface, CompositeInterface
 from redax.spaces import DynamicCover
@@ -42,7 +43,9 @@ bittotal = sum(precision.values())
 outorder = {0: 'pnext', 1: 'vnext'}
 possible_transitions = (pcomp * vcomp).count_io_space(bittotal)
 
-for numapplied in range(300):
+np.random.seed(1337)
+
+for numapplied in range(600):
 
     # Shrink window widths over time
     width = 20 * 1/np.log10(2*numapplied+10)
@@ -77,7 +80,7 @@ def test_safe_control():
 
     # Solve game and plot 2D invariant region
     game = SafetyGame(dcpre, safesink)
-    dinv, _, _ = game.run()
+    dinv, _, controller = game.run()
 
     system = pcomp * vcomp
     cpre = ControlPre(system, (('p', 'pnext'), ('v', 'vnext')), ('a'))
@@ -85,6 +88,20 @@ def test_safe_control():
     inv, _, _ = game.run()
 
     assert dinv == inv
+
+    # Simulate for initial states
+    state_box = fn.first(controller.winning_states())
+    assert state_box is not None
+    state = {k: .5*(v[0] + v[1]) for k, v in state_box.items()}
+    for step in range(30):
+        u = fn.first(controller.allows(state))
+        assert u is not None
+        picked_u = {'a': u['a'][0]} # Pick lower bound of first allowed control voxel
+
+        state.update(picked_u)
+        nextstate = dynamics(**state)
+        state = {'p': nextstate[0], 'v': nextstate[1]}
+
 
 
 def test_reach_control():
