@@ -47,9 +47,9 @@ class Interface(object):
             Input variable name, SymbolicSet type
         outputs: dict(str: redax.spaces.SymbolicSet)
             Output variable name, SymbolicSet type
-        pred: bdd
+        guar: bdd
             Predicate to initialize the input-output map
-        nonblocking: bdd
+        assum: bdd
             Predicate to initialize nonblocking inputs
 
         """

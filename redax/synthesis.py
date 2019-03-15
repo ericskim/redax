@@ -72,7 +72,7 @@ class ControlPre():
         return self.mgr.exist(elimbits, pred_in_space)
 
 
-    def __call__(self, Z: Interface, no_inputs:bool=False, verbose=False):
+    def __call__(self, Z: Interface, no_inputs:bool=False, verbose=False) -> Interface:
         """One step control predecessor"""
         assert Z.is_sink()
 
@@ -113,7 +113,7 @@ class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
         return self.sys.children[0].mgr
 
 
-    def __call__(self, Z: Interface, no_inputs=False, verbose=False):
+    def __call__(self, Z: Interface, no_inputs=False, verbose=False) -> Interface:
         """One step control predecessor"""
         assert Z.is_sink()
 
@@ -172,7 +172,7 @@ class CompConstrainedPre(DecompCPre):
         self.heuristic = heuristic if heuristic else lambda x: x
 
 
-    def __call__(self, Z: Interface, no_inputs=False, verbose=False):
+    def __call__(self, Z: Interface, no_inputs=False, verbose=False) -> Interface:
         """
         """
         """One step control predecessor"""
@@ -264,7 +264,10 @@ class SafetyGame():
         z = self.safe if winning is None else winning
         zz = Interface(self.cpre.mgr, {}, {}) # Defaults to false interface.
 
-        C = self.cpre.mgr.false
+        # C = self.cpre.mgr.false
+        state_control = self.cpre.prestate.copy()
+        state_control.update(self.cpre.control)
+        # C = Interface(self.cpre.mgr, state_control, {})
 
         i = 0
         while (z != zz):
@@ -275,7 +278,7 @@ class SafetyGame():
 
             z = self.cpre(zz, verbose=verbose)
 
-            C = z.assum
+            C = z
             if verbose:
                 print("Eliminating control")
 
@@ -338,7 +341,9 @@ class ReachGame():
         if steps is not None:
             assert steps >= 0
 
-        C = self.cpre.mgr.false
+        state_control = self.cpre.prestate.copy()
+        state_control.update(self.cpre.control)
+        C = Interface(self.cpre.mgr, state_control, {})
 
         z = self.target if winning is None else winning
         zz = Interface(self.cpre.mgr, {}, {}) # Defaults to false interface.
@@ -352,7 +357,7 @@ class ReachGame():
             step_start = time.time()
             z = self.cpre(zz, verbose=verbose) # state-input pairs
             # TODO: Change this to shared refinement?
-            C = C | (z.assum & ~self.cpre.elimcontrol(C))  # Add new state-input pairs to controller
+            C._assum = C.assum | (z.assum & ~self.cpre.elimcontrol(C.assum))  # Add new state-input pairs to controller
             if verbose:
                 print("Eliminating control")
             z = ihide(self.cpre.control, z)

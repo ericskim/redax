@@ -7,8 +7,9 @@ Controller interface classes
 # from redax.synthesis import ControlPre, DecompCPre
 
 from redax.spaces import OutOfDomainError
+from redax.module import Interface
 from redax.utils.bv import bv_var_name, bv_var_idx
-
+from redax.ops import ihide
 
 
 class MemorylessController():
@@ -29,16 +30,16 @@ class MemorylessController():
 
     """
 
-    def __init__(self, cpre, allowed_controls):
-        # SupervisoryController.__init__(self)
+    def __init__(self, cpre, allowed_controls: Interface):
         self.cpre = cpre
         self.C = allowed_controls
 
     def isempty(self):
-        return self.C == self.cpre.mgr.false
+        return self.C.count_nb == 0
 
     def winning_set(self):
-        return self.cpre.elimcontrol(self.C)
+        return ihide(self.cpre.control.keys(), self.C)
+
 
     def winning_states(self, exclude=None):
         r"""
@@ -54,14 +55,14 @@ class MemorylessController():
         generator
             Yields dictionaries with state var keys and concrete values
         """
-        winning = self.cpre.elimcontrol(self.C)
+        winning = ihide(self.cpre.control.keys(), self.C)
 
         # assert exclude.support.issubset(winning.support)
 
         exclude = self.cpre.mgr.false if exclude is None else exclude
 
         # Generate a winning point
-        for x_assignment in self.cpre.mgr.pick_iter(winning & ~exclude):
+        for x_assignment in self.cpre.mgr.pick_iter(winning.assum & ~exclude):
             # Translate BDD assignment into concrete counterpart
             xval = dict()
             for xvar in self.cpre.prestate:
@@ -104,7 +105,7 @@ class MemorylessController():
         for i, assignment in enumerate(self.cpre.mgr.pick_iter(pt_bdd)):
             if i > 0:
                 raise RuntimeError("Multiple discrete states assocaited with argument state.")
-            u = self.cpre.mgr.let(assignment, self.C)
+            u = self.cpre.mgr.let(assignment, self.C.assum)
 
         # Generate allowed controls
         for u_assignment in self.cpre.mgr.pick_iter(u):

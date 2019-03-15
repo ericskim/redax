@@ -1,3 +1,5 @@
+from pytest import approx
+
 import numpy as np
 import funcy as fn
 
@@ -89,6 +91,8 @@ def test_safe_control():
 
     assert dinv == inv
 
+    assert dinv.count_nb(p_precision + v_precision) == approx(5988)
+
     # Simulate for initial states
     state_box = fn.first(controller.winning_states())
     assert state_box is not None
@@ -121,3 +125,5 @@ def test_reach_control():
     basin, _, _ = game.run()
 
     assert dbasin == basin
+
+    assert dbasin.count_nb(p_precision + v_precision) == approx(5964)
