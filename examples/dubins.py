@@ -9,11 +9,12 @@ import funcy as fn
 
 from redax.module import Interface, CompositeInterface
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover
-from redax.synthesis import ReachGame, ControlPre, DecompCPre
+from redax.synthesis import ReachGame, ControlPre, DecompCPre, CompConstrainedPre
 from redax.visualizer import plot3D, plot3D_QT, pixel2D
 from redax.utils.overapprox import maxmincos, maxminsin
 from redax.predicates.dd import BDD
 from redax.utils.heuristics import order_heuristic
+from redax.ops import coarsen
 
 """
 Specify dynamics and overapproximations
@@ -145,6 +146,7 @@ composite.check()
 
 # Heuristic used to reduce the size or "compress" the abstraction representation.
 mgr.reorder(order_heuristic(mgr))
+mgr.configure(reordering=False)
 
 """
 Controller Synthesis with a reach objective
@@ -155,9 +157,12 @@ target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 8, innerapprox=False)
 targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {}, guar=mgr.true, assum=target)
 targetmod.check()
 
-# Two algorithms for synthesizing the controller
-decomposed_synthesis = True
-if decomposed_synthesis:
+# Three choices for the controlled predecessor used for synthesizing the controller
+# Options: decomp, monolithic, compconstr
+cpretype = "compconstr"
+
+if cpretype is  "decomp":
+
     # Synthesize using a decomposed model that never recombines multiple components together.
     # Typically more efficient than the monolithic case
     dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
@@ -165,18 +170,66 @@ if decomposed_synthesis:
     dstarttime = time.time()
     basin, steps, controller = dgame.run(verbose=False)
     print("Decomp Solve Time:", time.time() - dstarttime)
-else:
+
+elif cpretype is "monolithic":
+
     # Synthesize using a monolithic model that is the parallel composition of components
     dubins = composite.children[0] * composite.children[1] * composite.children[2]
     cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
-    game = ReachGame(cpre, target)
+    game = ReachGame(cpre, targetmod)
     starttime = time.time()
     basin, steps, controller = game.run(verbose=False)
     print("Monolithic Solve Time:", time.time() - starttime)
 
+elif cpretype is "compconstr":
+
+    maxnodes = 4000
+
+    def condition(iface: Interface) ->  bool:
+        """
+        Checks for interface BDD complexity.
+        Returns true if above threshold
+        """
+        if len(iface.pred) > maxnodes:
+            print(len(iface.pred))
+            return True
+        return False
+
+    def heuristic(iface: Interface) -> Interface:
+        """
+        Coarsens sink interface along the dimension that shrinks the set the
+        least until a certain size met.
+        """
+
+        assert iface.is_sink()
+
+        while (len(iface.pred) > maxnodes):
+            granularity = {k: len(v) for k, v in iface.pred_bitvars.items()
+                                if k in ['x', 'y', 'theta', 'xnext', 'ynext', 'thetanext']
+                        }
+            statebits = len(iface.pred.support)
+
+            coarsened_ifaces = [coarsen(iface, bits={k: v-1}) for k, v in granularity.items()]
+            coarsened_ifaces.sort(key = lambda x: x.count_nb(statebits), reverse=True)
+            iface = coarsened_ifaces[0]
+
+        return iface
+
+    cpre = CompConstrainedPre(composite,
+                              (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')),
+                              ('v', 'omega'),
+                              condition,
+                              heuristic)
+    game = ReachGame(cpre, targetmod)
+    starttime = time.time()
+    basin, steps, controller = game.run(steps=20, verbose=False)
+    print("Comp Constrained Solve Time:", time.time() - starttime)
+
+
 
 # Print statistics about reachability basin
 print("Reach Size:", basin.count_nb( len(basin.pred.support | targetmod.pred.support)))
+print("Reach BDD nodes:", len(basin.pred))
 print("Target Size:", targetmod.count_nb(len(basin.pred.support | targetmod.pred.support)))
 print("Game Steps:", steps)
 
@@ -200,7 +253,6 @@ plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred,
 # thetadyn = mgr.exist(['v_0', 'omega_0', 'omega_1'],(composite.children[2].pred) & mgr.var('v_0') & mgr.var('omega_0') & ~mgr.var('omega_1') )
 # pixel2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn, 128)
 
-
 """
 Simulate trajectories
 """
@@ -221,4 +273,3 @@ for step in range(10):
     state = {'x': nextstate[0],
              'y': nextstate[1],
              'theta': nextstate[2]}
-

@@ -160,8 +160,8 @@ class CompConstrainedPre(DecompCPre):
                  mod: CompositeInterface,
                  states,
                  control,
-                 condition:Optional[Callable],
-                 heuristic:Optional[Callable],
+                 condition:Optional[Callable] = None,
+                 heuristic:Optional[Callable] = None,
                  elim_order: Sequence = None,) -> None:
         ControlPre.__init__(self, mod, states, control)
 
@@ -171,11 +171,14 @@ class CompConstrainedPre(DecompCPre):
         # Default heuristic does nothing and is identity function
         self.heuristic = heuristic if heuristic else lambda x: x
 
+        self.elimorder = elim_order
+
 
     def __call__(self, Z: Interface, no_inputs=False, verbose=False) -> Interface:
         """
+        One step decomposed control predecessor
+        Coarsens Z interface whenever its complexity grows too large.
         """
-        """One step control predecessor"""
         assert Z.is_sink()
 
         Z = rename(Z, self.pre_to_post)
@@ -185,6 +188,9 @@ class CompConstrainedPre(DecompCPre):
             to_elim_post = list(self.elimorder)
         else:
             to_elim_post = list(self.poststate)
+
+        if self.condition(Z):
+            Z = self.heuristic(Z)
 
         # Eliminate each interface output
         # FIXME: This code assumes that each module only has a single output.
@@ -199,9 +205,6 @@ class CompConstrainedPre(DecompCPre):
 
             if len(dep_mods) == 0:
                 continue
-
-            if self.condition(Z):
-                Z = self.heuristic(Z)
 
             # Find Z bit precision.
             Z_var_bits = len([b for b in Z.assum.support if bv_var_name(b) == var])
