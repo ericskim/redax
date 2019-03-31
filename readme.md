@@ -151,6 +151,7 @@ The core foundations are working and providing results on some meaningful test e
 
 ### TODOs
 
+- Organize examples folder
 - Scale up lunar lander
   - Fix issues with unnecessary blocking with position modules dependencies on angle.
   - Iterator for shifted but bounded space.

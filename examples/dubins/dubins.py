@@ -77,8 +77,6 @@ def thetawindow(theta, v, omega):
     """
     return theta[0] + (1/L) * v * np.sin(omega), theta[1] + (1/L) * v*np.sin(omega)
 
-outorder = {0: 'xnext', 1: 'ynext', 2: 'thetanext'}
-
 """
 Initialize binary circuit manager
 """
