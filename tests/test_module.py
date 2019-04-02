@@ -320,9 +320,10 @@ def test_composite_module_topology():
     assert m123.sorted_mods() == ((m1,), (m2,), (m3,))
     assert set(m123.outputs) == {'b','i','k'}
     assert set(m123.inputs) == {'a', 'j'}
+    assert set(m123.vars) == {'a','j','b','i','k'}
 
     # Renaming
-    m123renamed = m123.renamed(b='r', a = 'q')
+    m123renamed = m123.renamed(b='r', a='q')
     assert set(m123renamed.outputs) == {'r','i','k'}
     assert set(m123renamed.inputs) == {'q', 'j'}
 

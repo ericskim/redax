@@ -77,197 +77,234 @@ def thetawindow(theta, v, omega):
     """
     return theta[0] + (1/L) * v * np.sin(omega), theta[1] + (1/L) * v*np.sin(omega)
 
-"""
-Initialize binary circuit manager
-"""
-mgr = BDD()
-mgr.configure(reordering=False)
+def setup():
+    """
+    Initialize binary circuit manager
+    """
+    mgr = BDD()
+    mgr.configure(reordering=False)
 
-"""
-Declare spaces and types
-"""
-# Declare continuous state spaces
-pspace      = DynamicCover(-2, 2)
-anglespace  = DynamicCover(-np.pi, np.pi, periodic=True)
-# Declare discrete control spaces
-vspace      = EmbeddedGrid(2, vmax/2, vmax)
-angaccspace = EmbeddedGrid(3, -1.5, 1.5)
+    """
+    Declare spaces and types
+    """
+    # Declare continuous state spaces
+    pspace      = DynamicCover(-2, 2)
+    anglespace  = DynamicCover(-np.pi, np.pi, periodic=True)
+    # Declare discrete control spaces
+    vspace      = EmbeddedGrid(2, vmax/2, vmax)
+    angaccspace = EmbeddedGrid(3, -1.5, 1.5)
+
+    """
+    Declare interfaces
+    """
+    dubins_x        = Interface(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace},
+                                    {'xnext': pspace})
+    dubins_y        = Interface(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace},
+                                    {'ynext': pspace})
+    dubins_theta    = Interface(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace},
+                                    {'thetanext': anglespace})
+
+    return mgr, dubins_x, dubins_y, dubins_theta
 
 
-"""
-Declare interfaces
-"""
-dubins_x        = Interface(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace},
-                                 {'xnext': pspace})
-dubins_y        = Interface(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace},
-                                 {'ynext': pspace})
-dubins_theta    = Interface(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace},
-                                 {'thetanext': anglespace})
+def abstract_composite(composite: CompositeInterface):
+    """
+    Abstract the continuous dynamics with randomly generated boxes
+    """
+    pspace = composite['x']
+    anglespace = composite['theta']
+    bits = 7
+    precision = {'x': bits, 'y':bits, 'theta': bits,
+                'xnext': bits, 'ynext': bits, 'thetanext': bits}
+    abs_starttime = time.time()
+    np.random.seed(1337)
+    for numapplied in range(15000):
 
-composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
+        # Generate random input windows and points
+        f_width = {'x':     .04*pspace.width(),
+                   'y':     .04*pspace.width(),
+                   'theta': .04*anglespace.width()}
+        f_left = {'x':     pspace.lb + np.random.rand() * (pspace.width() - f_width['x']),
+                  'y':     pspace.lb + np.random.rand() * (pspace.width() - f_width['y']),
+                  'theta': anglespace.lb + np.random.rand() * (anglespace.width())}
+        f_right = {k: f_width[k] + f_left[k] for k in f_width}
+        iobox = {'v':     np.random.randint(1, 3) * vmax/2,
+                 'omega': np.random.randint(-1, 2) * 1.5}
+        iobox.update({k: (f_left[k], f_right[k]) for k in f_width})
 
-"""
-Abstract the continuous dynamics with randomly generated boxes
-"""
-bits = 7
-precision = {'x': bits, 'y':bits, 'theta': bits,
-             'xnext': bits, 'ynext': bits, 'thetanext': bits}
-abs_starttime = time.time()
-np.random.seed(1337)
-for numapplied in range(6000):
+        # Generate output windows
+        iobox['xnext']     = xwindow(iobox['x'], iobox['v'], iobox['theta'])
+        iobox['ynext']     = ywindow(iobox['y'], iobox['v'], iobox['theta'])
+        iobox['thetanext'] = thetawindow(iobox['theta'], iobox['v'], iobox['omega'])
 
-    # Shrink window widths over time
-    scale = 1/np.log10(1.0*numapplied+10)
+        # Refine abstraction with granularity specified in the precision variable
+        composite = composite.io_refined(iobox, nbits=precision)
 
-    # Generate random input windows and points
-    f_width = {'x':     .05*pspace.width(),
-               'y':     .05*pspace.width(),
-               'theta': .05*anglespace.width()}
-    f_left = {'x':     pspace.lb + np.random.rand() * (pspace.width() - f_width['x']),
-              'y':     pspace.lb + np.random.rand() * (pspace.width() - f_width['y']),
-              'theta': anglespace.lb + np.random.rand() * (anglespace.width())}
-    f_right = {k: f_width[k] + f_left[k] for k in f_width}
-    iobox = {'v':     np.random.randint(1, 3) * vmax/2,
-             'omega': np.random.randint(-1, 2) * 1.5}
-    iobox.update({k: (f_left[k], f_right[k]) for k in f_width})
+    print("Abstraction Time: ", time.time() - abs_starttime)
+    composite.check()
 
-    # Generate output windows
-    iobox['xnext']     = xwindow(iobox['x'], iobox['v'], iobox['theta'])
-    iobox['ynext']     = ywindow(iobox['y'], iobox['v'], iobox['theta'])
-    iobox['thetanext'] = thetawindow(iobox['theta'], iobox['v'], iobox['omega'])
+    return composite
 
-    # Refine abstraction with granularity specified in the precision variable
-    composite = composite.io_refined(iobox, nbits=precision)
 
-print("Abstraction Time: ", time.time() - abs_starttime)
-composite.check()
+def make_target(mgr, composite: CompositeInterface):
+    """
+    Controller Synthesis with a reach objective
+    """
 
-# Heuristic used to reduce the size or "compress" the abstraction representation.
-mgr.reorder(order_heuristic(mgr))
-mgr.configure(reordering=False)
+    pspace = composite['x']
+    anglespace = composite['theta']
+    # Declare reach set as [0.8] x [-.8, 0] box in the x-y space.
+    target =  pspace.conc2pred(mgr, 'x',  [1.3,1.8], 8, innerapprox=False)
+    target &= pspace.conc2pred(mgr, 'y',  [1.3,1.8], 8, innerapprox=False)
+    targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {}, guar=mgr.true, assum=target)
+    targetmod.check()
 
-"""
-Controller Synthesis with a reach objective
-"""
-# Declare reach set as [0.8] x [-.8, 0] box in the x-y space.
-target =  pspace.conc2pred(mgr, 'x',  [-.4, .4], 8, innerapprox=False)
-target &= pspace.conc2pred(mgr, 'y', [-.4,.4], 8, innerapprox=False)
-targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {}, guar=mgr.true, assum=target)
-targetmod.check()
-
-# Three choices for the controlled predecessor used for synthesizing the controller
-# Options: decomp, monolithic, compconstr
-cpretype = "compconstr"
-
-if cpretype is  "decomp":
-
-    # Synthesize using a decomposed model that never recombines multiple components together.
-    # Typically more efficient than the monolithic case
-    dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
-    dgame = ReachGame(dcpre, targetmod)
-    dstarttime = time.time()
-    basin, steps, controller = dgame.run(verbose=False)
-    print("Decomp Solve Time:", time.time() - dstarttime)
-
-elif cpretype is "monolithic":
-
-    # Synthesize using a monolithic model that is the parallel composition of components
-    dubins = composite.children[0] * composite.children[1] * composite.children[2]
-    cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
-    game = ReachGame(cpre, targetmod)
-    starttime = time.time()
-    basin, steps, controller = game.run(verbose=False)
-    print("Monolithic Solve Time:", time.time() - starttime)
-
-elif cpretype is "compconstr":
-
-    maxnodes = 4000
-
-    def condition(iface: Interface) ->  bool:
-        """
-        Checks for interface BDD complexity.
-        Returns true if above threshold
-        """
-        if len(iface.pred) > maxnodes:
-            print(len(iface.pred))
-            return True
-        return False
-
-    def heuristic(iface: Interface) -> Interface:
-        """
-        Coarsens sink interface along the dimension that shrinks the set the
-        least until a certain size met.
-        """
-
-        assert iface.is_sink()
-
-        while (len(iface.pred) > maxnodes):
-            granularity = {k: len(v) for k, v in iface.pred_bitvars.items()
-                                if k in ['x', 'y', 'theta', 'xnext', 'ynext', 'thetanext']
-                        }
-            statebits = len(iface.pred.support)
-
-            coarsened_ifaces = [coarsen(iface, bits={k: v-1}) for k, v in granularity.items()]
-            coarsened_ifaces.sort(key = lambda x: x.count_nb(statebits), reverse=True)
-            iface = coarsened_ifaces[0]
-
-        return iface
-
-    cpre = CompConstrainedPre(composite,
-                              (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')),
-                              ('v', 'omega'),
-                              condition,
-                              heuristic)
-    game = ReachGame(cpre, targetmod)
-    starttime = time.time()
-    basin, steps, controller = game.run(steps=20, verbose=False)
-    print("Comp Constrained Solve Time:", time.time() - starttime)
+    return targetmod
 
 
 
-# Print statistics about reachability basin
-print("Reach Size:", basin.count_nb( len(basin.pred.support | targetmod.pred.support)))
-print("Reach BDD nodes:", len(basin.pred))
-print("Target Size:", targetmod.count_nb(len(basin.pred.support | targetmod.pred.support)))
-print("Game Steps:", steps)
+def run_reach(targetmod, composite, cpretype = "decomp"):
+    # Three choices for the controlled predecessor used for synthesizing the controller
+    # Options: decomp, monolithic, compconstr
+    # cpretype = "compconstr"
+
+    assert cpretype in ["decomp", "monolithic", "compconstr"]
+
+    if cpretype is  "decomp":
+
+        # Synthesize using a decomposed model that never recombines multiple components together.
+        # Typically more efficient than the monolithic case
+        dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
+        dgame = ReachGame(dcpre, targetmod)
+        dstarttime = time.time()
+        basin, steps, controller = dgame.run(verbose=False)
+        print("Decomp Solve Time:", time.time() - dstarttime)
+
+    elif cpretype is "monolithic":
+
+        # Synthesize using a monolithic model that is the parallel composition of components
+        dubins = composite.children[0] * composite.children[1] * composite.children[2]
+        cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
+        game = ReachGame(cpre, targetmod)
+        starttime = time.time()
+        basin, steps, controller = game.run(verbose=False)
+        print("Monolithic Solve Time:", time.time() - starttime)
+
+    elif cpretype is "compconstr":
+
+        maxnodes = 4000
+
+        def condition(iface: Interface) ->  bool:
+            """
+            Checks for interface BDD complexity.
+            Returns true if above threshold
+            """
+            if len(iface.pred) > maxnodes:
+                print(len(iface.pred))
+                return True
+            return False
+
+        def heuristic(iface: Interface) -> Interface:
+            """
+            Coarsens sink interface along the dimension that shrinks the set the
+            least until a certain size met.
+            """
+
+            assert iface.is_sink()
+
+            while (len(iface.pred) > maxnodes):
+                granularity = {k: len(v) for k, v in iface.pred_bitvars.items()
+                                    if k in ['x', 'y', 'theta', 'xnext', 'ynext', 'thetanext']
+                            }
+                statebits = len(iface.pred.support)
+
+                coarsened_ifaces = [coarsen(iface, bits={k: v-1}) for k, v in granularity.items()]
+                coarsened_ifaces.sort(key = lambda x: x.count_nb(statebits), reverse=True)
+                iface = coarsened_ifaces[0]
+
+            return iface
+
+        cpre = CompConstrainedPre(composite,
+                                (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')),
+                                ('v', 'omega'),
+                                condition,
+                                heuristic)
+        game = ReachGame(cpre, targetmod)
+        starttime = time.time()
+        basin, steps, controller = game.run(steps=20, verbose=False)
+        print("Comp Constrained Solve Time:", time.time() - starttime)
 
 
-"""
-Plotting and visualization
-"""
 
-# # Plot reachable winning set
-plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, 60)
+    # Print statistics about reachability basin
+    print("Reach Size:", basin.count_nb( len(basin.pred.support | targetmod.pred.support)))
+    print("Reach BDD nodes:", len(basin.pred))
+    print("Target Size:", targetmod.count_nb(len(basin.pred.support | targetmod.pred.support)))
+    print("Game Steps:", steps)
 
-# # Plot x transition relation for v = .5
-# xdyn = mgr.exist(['v_0'],(composite.children[0].pred) & mgr.var('v_0'))
-# plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
+    return basin, controller
 
-# # Plot y transition relation for v = .5
-# ydyn = mgr.exist(['v_0'],(composite.children[1].pred) & mgr.var('v_0'))
-# plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
+def plots(mgr, basin, composite):
 
-# # Plot theta component
-# thetadyn = mgr.exist(['v_0', 'omega_0', 'omega_1'],(composite.children[2].pred) & mgr.var('v_0') & mgr.var('omega_0') & ~mgr.var('omega_1') )
-# pixel2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn, 128)
+    """
+    Plotting and visualization
+    """
 
-"""
-Simulate trajectories
-"""
-state = {'x': -1, 'y': .6, 'theta': -.2}
-for step in range(10):
-    print(step, state)
+    pspace = composite['x']
+    anglespace = composite['theta']
 
-    # Sample a valid safe control input from the controller.allows(state) iterator
-    u = fn.first(controller.allows(state))
-    if u is None:
-        print("No more valid control inputs. Terminating simulation.")
-        break
-    state.update(u)
+    # # Plot reachable winning set
+    plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, 60)
 
-    # Iterate dynamics
-    nextstate = dynamics(**state)
+    # # Plot x transition relation for v = .5
+    # xdyn = mgr.exist(['v_0'],(composite.children[0].pred) & mgr.var('v_0'))
+    # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
 
-    state = {'x': nextstate[0],
-             'y': nextstate[1],
-             'theta': nextstate[2]}
+    # # Plot y transition relation for v = .5
+    # ydyn = mgr.exist(['v_0'],(composite.children[1].pred) & mgr.var('v_0'))
+    # plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
+
+    # # Plot theta component
+    # thetadyn = mgr.exist(['v_0', 'omega_0', 'omega_1'],(composite.children[2].pred) & mgr.var('v_0') & mgr.var('omega_0') & ~mgr.var('omega_1') )
+    # pixel2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn, 128)
+
+
+def simulate(controller):
+    """
+    Simulate trajectories
+    """
+    state = {'x': -1, 'y': .6, 'theta': -.2}
+    for step in range(10):
+        print(step, state)
+
+        # Sample a valid safe control input from the controller.allows(state) iterator
+        u = fn.first(controller.allows(state))
+        if u is None:
+            print("No more valid control inputs. Terminating simulation.")
+            break
+        state.update(u)
+
+        # Iterate dynamics
+        nextstate = dynamics(**state)
+
+        state = {'x': nextstate[0],
+                'y': nextstate[1],
+                'theta': nextstate[2]}
+
+
+if __name__ is "__main__":
+    mgr, dubins_x, dubins_y, dubins_theta = setup()
+
+    composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
+    composite = abstract_composite(composite)
+
+    # Heuristic used to reduce the size or "compress" the abstraction representation.
+    mgr.reorder(order_heuristic(mgr))
+    mgr.configure(reordering=False)
+
+    targetmod = make_target(mgr, composite)
+
+    basin, controller = run_reach(targetmod, composite)
+
+    plots(mgr, basin, composite)
+    simulate(controller)

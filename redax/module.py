@@ -16,21 +16,7 @@ from .spaces import OutOfDomainError
 
 
 class Interface(object):
-    r"""
-    Wrapper for translating between concrete and discrete I/O values.
-
-    Attributes
-    ----------
-    mgr: dd manager
-        Manager for manipulating predicates as bdds
-    inputs: dict
-        Dictionary {str: symbolicintervals}
-    outputs: dict
-        Dictionary {str: symbolicintervals}
-    pred: bdd
-        Predicate encoding the interface I/O relation
-
-    """
+    r"""Wrapper for translating between concrete and discrete I/O values."""
 
     def __init__(self, mgr, inputs, outputs, guar=None, assum=None):
         """
@@ -41,15 +27,15 @@ class Interface(object):
 
         Parameters
         ----------
-        mgr: bdd manager
-
+        mgr: dd manager
+            Manager for manipulating predicates as bdds
         inputs: dict(str: redax.spaces.SymbolicSet)
             Input variable name, SymbolicSet type
         outputs: dict(str: redax.spaces.SymbolicSet)
             Output variable name, SymbolicSet type
-        guar: bdd
+        guar: dd predicate
             Predicate to initialize the input-output map
-        assum: bdd
+        assum: dd predicate
             Predicate to initialize nonblocking inputs
 
         """
@@ -106,6 +92,7 @@ class Interface(object):
 
     @property
     def pred(self):
+        r"""Interface predicate. Equivalent to self.assum & self.guar."""
         return self._assum & self._guar
 
     @property
@@ -644,11 +631,18 @@ class CompositeInterface(object):
 
         if len(modules) < 1:
             raise ValueError("Empty interface collection")
+        mgr = modules[0].mgr
+        for child in modules:
+            assert mgr == child.mgr
 
         self.children : Tuple['Interface'] = tuple(modules)
 
         if checktopo:
             self.check()
+
+    @property
+    def mgr(self):
+        return self.children[0].mgr
 
     @property
     def _inputs(self):
@@ -785,12 +779,14 @@ class CompositeInterface(object):
 
     def renamed(self, names: Dict=None, **kwargs) -> 'CompositeInterface':
         """Renames variables for contained interfaces."""
-
+        from redax.ops import rename
         names = dict([]) if names is None else names
         names.update(kwargs)
 
-        return CompositeInterface(tuple(child.renamed(**names) for child in self.children))
-
+        return CompositeInterface(tuple(rename(child, **names)
+                                            for child in self.children
+                                    )
+                                 )
 
     def io_refined(self, concrete, silent: bool=True, **kwargs) -> 'CompositeInterface':
         r"""

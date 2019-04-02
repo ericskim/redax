@@ -25,11 +25,11 @@ def shared_refine(ifaces: Collection, safecheck=True):
     # Same inputs and outputs
     input_signature = fn.first(iface.inputs for iface in ifaces)
     if any(input_signature != iface.inputs for iface in ifaces):
-        raise RuntimeError("Interface inputs do not match")
+        raise RuntimeError("Interface inputs do not match:\n{}".format(input_signature))
 
     output_signature = fn.first(iface.outputs for iface in ifaces)
     if any(output_signature != iface.outputs for iface in ifaces):
-        raise RuntimeError("Interface outputs do not match")
+        raise RuntimeError("Interface outputs do not match:\n{}".format(output_signature))
 
     nb = mgr.false
     pred = mgr.true
@@ -91,6 +91,8 @@ def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
 
     Parameters
     ----------
+    ignore_spurious_vars: bool
+        If true, doesn't raise error if variable is non-existant
     names: dict, default = dict()
         Keys are str of old names, values are str of new names
     **kwargs:
@@ -106,10 +108,11 @@ def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
 
     for oldname, newname in names.items():
         if oldname not in mod.vars:
+            #FIXME: Should raise an error instead of being silent
             # raise ValueError("Cannot rename non-existent I/O " + oldname)
             continue
         if newname in mod.vars:
-            raise ValueError("Don't currently support renaming to an existing variable")
+            raise ValueError("Cannot rename to an existing interface variable")
 
         if oldname in mod.outputs:
             newoutputs[newname] = newoutputs.pop(oldname)

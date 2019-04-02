@@ -227,12 +227,14 @@ class SafetyGame():
     ----------
     sys: ControlPre
         Control predecessor of system that needs to satisfy safety/invariance property.
-    safe: bdd
+    safe: Interface
         Safe region predicate
 
     """
 
-    def __init__(self, cpre: Union[ControlPre, DecompCPre], safeset: Interface) -> None:
+    def __init__(self,
+                 cpre: Union[ControlPre, DecompCPre, CompConstrainedPre],
+                 safeset: Interface) -> None:
         self.cpre = cpre
         self.safe = safeset  # TODO: Check if a subset of the state space
 
@@ -253,7 +255,7 @@ class SafetyGame():
 
         Returns
         -------
-        bdd:
+        Interface:
             Safe invariant region
         int:
             Actualy number of game steps run.
@@ -293,8 +295,8 @@ class SafetyGame():
             if verbose:
                 print("Step #: ", i,
                       "Step Time (s): {0:.3f}".format(time.time() - step_start),
-                      "Winning Size:", self.cpre.mgr.count(z, len(z.support)),
-                      "Winning nodes:", len(z))
+                      "Winning Size:", self.cpre.mgr.count(z.assum, len(z.assum.support)),
+                      "Winning nodes:", len(z.assum))
 
         return z, i, MemorylessController(self.cpre, C)
 
@@ -311,7 +313,9 @@ class ReachGame():
 
     """
 
-    def __init__(self, cpre: Union[ControlPre, DecompCPre], target: Interface) -> None:
+    def __init__(self,
+                 cpre: Union[ControlPre, DecompCPre, CompConstrainedPre],
+                 target: Interface) -> None:
         self.cpre: Interface = cpre
         self.target: Interface = target  # TODO: Check if a subset of the state space
 
@@ -333,7 +337,7 @@ class ReachGame():
 
         Returns
         -------
-        bdd:
+        Interface:
             Backward reachable set
         int:
             Number of game steps run
@@ -341,7 +345,7 @@ class ReachGame():
                 Controller for the reach game
 
         """
-        if steps is not None:
+        if steps:
             assert steps >= 0
 
         state_control = self.cpre.prestate.copy()
@@ -386,20 +390,29 @@ class ReachAvoidGame():
     ----------
     sys: ControlPre
         Control system to synthesize for
-    safe: bdd
+    safe: Interface
         Safety region predicate
-    target: bdd
+    target: Interface
         Target region predicate
 
     """
 
-    def __init__(self, cpre, safe: Interface, target: Interface) -> None:
-        raise NotImplementedError("Needs to be refactored to take controllable predecessors")
+    def __init__(self,
+                 cpre: Union[ControlPre, DecompCPre, CompConstrainedPre],
+                 safe: Interface,
+                 target: Interface) -> None:
+
         self.cpre = cpre
         self.target = target  # TODO: Check if a subset of the state space
         self.safe = safe
 
-    def run(self, steps=None, winning=None, verbose=False):
+        assert set(cpre.prestate.keys()) == set(target.inputs.keys())
+        assert set(cpre.prestate.keys()) == set(safe.inputs.keys())
+
+    def run(self,
+            steps: Optional[int]=None,
+            winning: Optional[Interface]=None,
+            verbose:bool=False):
         """
         Run a reach-avoid game until reaching a fixed point or a maximum number of steps.
 
@@ -412,7 +425,7 @@ class ReachAvoidGame():
 
         Returns
         -------
-        bdd:
+        Interface:
             Safe backward reachable set
         int:
             Number of game steps run
@@ -420,12 +433,13 @@ class ReachAvoidGame():
             Controller for the reach-avoid game
 
         """
-        raise NotImplementedError
 
-        if steps is not None:
+        if steps:
             assert steps >= 0
 
-        C = self.cpre.mgr.false
+        state_control_vars = self.cpre.prestate.copy()
+        state_control_vars.update(self.cpre.control)
+        C = Interface(self.cpre.mgr, state_control_vars, {})
 
         z = self.target if winning is None else winning
         zz = Interface(self.cpre.mgr, {}, {}) # Defaults to false interface.
@@ -433,16 +447,22 @@ class ReachAvoidGame():
         i = 0
         while (z != zz):
             if steps and i == steps:
+                print("Reached step limit")
                 break
 
             zz = z
             step_start = time.time()
-            z = (self.cpre(zz, verbose=verbose) * self.safe) + self.target  # state-input pairs
-            C = C | (z.assum & ~self.cpre.elimcontrol(C))  # Add new state-input pairs to controller
+            z = self.cpre(zz, verbose=verbose) # state-input pairs
+            # z = (self.cpre(zz, verbose=verbose) * self.safe) + self.target  # state-input pairs
+            # C = C | (z.assum & ~self.cpre.elimcontrol(C))  # Add new state-input pairs to controller
+            C._assum = C.assum | (z.assum & ~self.cpre.elimcontrol(C.assum))  # Add new state-input pairs to controller
+            C._assum &= self.safe.assum
 
             if verbose:
                 print("Eliminating control")
             z = ihide(self.cpre.control, z)
+
+            z = (z * self.safe) + self.target
 
             i += 1
             if verbose:
