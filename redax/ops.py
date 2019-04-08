@@ -134,12 +134,14 @@ def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
                      )
 
 
-def ohide(elim_vars: Collection, mod: Interface) -> Interface:
+def ohide(mod: Interface, elim_vars: Collection) -> Interface:
     r"""
     Hides an output variable and returns another interface.
 
     Parameters
     ----------
+    mod: Interface
+        Interface with output variable to be eliminated
     elim_vars: Container
         Iterable container of output variable names
 
@@ -168,7 +170,7 @@ def ohide(elim_vars: Collection, mod: Interface) -> Interface:
                      )
 
 
-def ihide(elim_vars: Collection, mod: Interface) -> Interface:
+def ihide(mod: Interface, elim_vars: Collection) -> Interface:
     r"""
 
     """
@@ -256,7 +258,7 @@ def sinkprepend(iface: Interface, sink: Interface) -> Interface:
     """
     Composition of an interface connected in series with a sink.
 
-    Identical to ohide(sharedvars, comp(iface, sinkmod)) where sharedvars is
+    Identical to ohide(comp(iface, sinkmod), sharedvars) where sharedvars is
     the intersection of iface's outputs and sinkmod's inputs. This is a faster
     implementation.
 

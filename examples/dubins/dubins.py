@@ -98,16 +98,36 @@ def setup():
     Declare interfaces
     """
     dubins_x        = Interface(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace},
-                                    {'xnext': pspace})
+                                     {'xnext': pspace})
     dubins_y        = Interface(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace},
-                                    {'ynext': pspace})
+                                     {'ynext': pspace})
     dubins_theta    = Interface(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace},
-                                    {'thetanext': anglespace})
+                                     {'thetanext': anglespace})
 
     return mgr, dubins_x, dubins_y, dubins_theta
 
 
-def abstract_composite(composite: CompositeInterface):
+def generate_random_io(pspace, anglespace):
+    # Generate random input windows and points
+    f_width = {'x':     .04*pspace.width(),
+                'y':     .04*pspace.width(),
+                'theta': .04*anglespace.width()}
+    f_left = {'x':     pspace.lb + np.random.rand() * (pspace.width() - f_width['x']),
+                'y':     pspace.lb + np.random.rand() * (pspace.width() - f_width['y']),
+                'theta': anglespace.lb + np.random.rand() * (anglespace.width())}
+    f_right = {k: f_width[k] + f_left[k] for k in f_width}
+    iobox = {'v':     np.random.randint(1, 3) * vmax/2,
+                'omega': np.random.randint(-1, 2) * 1.5}
+    iobox.update({k: (f_left[k], f_right[k]) for k in f_width})
+
+    # Generate output windows
+    iobox['xnext']     = xwindow(iobox['x'], iobox['v'], iobox['theta'])
+    iobox['ynext']     = ywindow(iobox['y'], iobox['v'], iobox['theta'])
+    iobox['thetanext'] = thetawindow(iobox['theta'], iobox['v'], iobox['omega'])
+
+    return iobox
+
+def abstract_composite(composite: CompositeInterface, samples = 10000):
     """
     Abstract the continuous dynamics with randomly generated boxes
     """
@@ -118,24 +138,9 @@ def abstract_composite(composite: CompositeInterface):
                 'xnext': bits, 'ynext': bits, 'thetanext': bits}
     abs_starttime = time.time()
     np.random.seed(1337)
-    for numapplied in range(15000):
+    for _ in range(samples):
 
-        # Generate random input windows and points
-        f_width = {'x':     .04*pspace.width(),
-                   'y':     .04*pspace.width(),
-                   'theta': .04*anglespace.width()}
-        f_left = {'x':     pspace.lb + np.random.rand() * (pspace.width() - f_width['x']),
-                  'y':     pspace.lb + np.random.rand() * (pspace.width() - f_width['y']),
-                  'theta': anglespace.lb + np.random.rand() * (anglespace.width())}
-        f_right = {k: f_width[k] + f_left[k] for k in f_width}
-        iobox = {'v':     np.random.randint(1, 3) * vmax/2,
-                 'omega': np.random.randint(-1, 2) * 1.5}
-        iobox.update({k: (f_left[k], f_right[k]) for k in f_width})
-
-        # Generate output windows
-        iobox['xnext']     = xwindow(iobox['x'], iobox['v'], iobox['theta'])
-        iobox['ynext']     = ywindow(iobox['y'], iobox['v'], iobox['theta'])
-        iobox['thetanext'] = thetawindow(iobox['theta'], iobox['v'], iobox['omega'])
+        iobox = generate_random_io(pspace, anglespace)
 
         # Refine abstraction with granularity specified in the precision variable
         composite = composite.io_refined(iobox, nbits=precision)
@@ -154,16 +159,15 @@ def make_target(mgr, composite: CompositeInterface):
     pspace = composite['x']
     anglespace = composite['theta']
     # Declare reach set as [0.8] x [-.8, 0] box in the x-y space.
-    target =  pspace.conc2pred(mgr, 'x',  [1.3,1.8], 8, innerapprox=False)
-    target &= pspace.conc2pred(mgr, 'y',  [1.3,1.8], 8, innerapprox=False)
+    target =  pspace.conc2pred(mgr, 'x',  [1.0,1.5], 5, innerapprox=False)
+    target &= pspace.conc2pred(mgr, 'y',  [1.0,1.5], 5, innerapprox=False)
     targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {}, guar=mgr.true, assum=target)
     targetmod.check()
 
     return targetmod
 
 
-
-def run_reach(targetmod, composite, cpretype = "decomp"):
+def run_reach(targetmod, composite, cpretype="decomp", steps=None):
     # Three choices for the controlled predecessor used for synthesizing the controller
     # Options: decomp, monolithic, compconstr
     # cpretype = "compconstr"
@@ -177,7 +181,7 @@ def run_reach(targetmod, composite, cpretype = "decomp"):
         dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
         dgame = ReachGame(dcpre, targetmod)
         dstarttime = time.time()
-        basin, steps, controller = dgame.run(verbose=False)
+        basin, steps, controller = dgame.run(verbose=False, steps=steps)
         print("Decomp Solve Time:", time.time() - dstarttime)
 
     elif cpretype is "monolithic":
@@ -187,12 +191,12 @@ def run_reach(targetmod, composite, cpretype = "decomp"):
         cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
         game = ReachGame(cpre, targetmod)
         starttime = time.time()
-        basin, steps, controller = game.run(verbose=False)
+        basin, steps, controller = game.run(verbose=False, steps=steps)
         print("Monolithic Solve Time:", time.time() - starttime)
 
     elif cpretype is "compconstr":
 
-        maxnodes = 4000
+        maxnodes = 5000
 
         def condition(iface: Interface) ->  bool:
             """
@@ -200,7 +204,7 @@ def run_reach(targetmod, composite, cpretype = "decomp"):
             Returns true if above threshold
             """
             if len(iface.pred) > maxnodes:
-                print(len(iface.pred))
+                print("Interface # nodes {} exceeds maximum {}".format(len(iface.pred), maxnodes))
                 return True
             return False
 
@@ -218,11 +222,18 @@ def run_reach(targetmod, composite, cpretype = "decomp"):
                             }
                 statebits = len(iface.pred.support)
 
-                coarsened_ifaces = [coarsen(iface, bits={k: v-1}) for k, v in granularity.items()]
-                coarsened_ifaces.sort(key = lambda x: x.count_nb(statebits), reverse=True)
-                iface = coarsened_ifaces[0]
+                # List of (varname, # of coarsened interface nonblock input assignments)
+                coarsened_ifaces = [ (k, coarsen(iface, bits={k: v-1}).count_nb(statebits))
+                                            for k, v in granularity.items()
+                                ]
+                coarsened_ifaces.sort(key = lambda x: x[1], reverse=True)
+                best_var = coarsened_ifaces[0][0]
+                # print(coarsened_ifaces)
+                # print("Coarsening along dimension {}".format(best_var))
+                iface = coarsen(iface, bits={best_var: granularity[best_var]-1})
 
             return iface
+
 
         cpre = CompConstrainedPre(composite,
                                 (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')),
@@ -231,9 +242,8 @@ def run_reach(targetmod, composite, cpretype = "decomp"):
                                 heuristic)
         game = ReachGame(cpre, targetmod)
         starttime = time.time()
-        basin, steps, controller = game.run(steps=20, verbose=False)
+        basin, steps, controller = game.run(steps=steps, verbose=False)
         print("Comp Constrained Solve Time:", time.time() - starttime)
-
 
 
     # Print statistics about reachability basin
@@ -296,9 +306,10 @@ if __name__ is "__main__":
     mgr, dubins_x, dubins_y, dubins_theta = setup()
 
     composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
-    composite = abstract_composite(composite)
+    composite = abstract_composite(composite, samples=15000)
 
     # Heuristic used to reduce the size or "compress" the abstraction representation.
+    # Higher significant bits first
     mgr.reorder(order_heuristic(mgr))
     mgr.configure(reordering=False)
 

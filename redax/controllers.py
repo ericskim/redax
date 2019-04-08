@@ -38,8 +38,7 @@ class MemorylessController():
         return self.C.count_nb == 0
 
     def winning_set(self):
-        return ihide(self.cpre.control.keys(), self.C)
-
+        return ihide(self.C, self.cpre.control.keys())
 
     def winning_states(self, exclude=None):
         r"""
@@ -55,7 +54,7 @@ class MemorylessController():
         generator
             Yields dictionaries with state var keys and concrete values
         """
-        winning = ihide(self.cpre.control.keys(), self.C)
+        winning = ihide(self.C, self.cpre.control.keys())
 
         # assert exclude.support.issubset(winning.support)
 

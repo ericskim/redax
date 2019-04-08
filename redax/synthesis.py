@@ -7,7 +7,7 @@ from bidict import bidict
 from redax.controllers import MemorylessController
 from redax.utils.bv import flatten, bv_var_name
 from redax.module import Interface, CompositeInterface
-from redax.ops import ohide, compose, ihide, sinkprepend, coarsen, rename
+from redax.ops import compose, ihide, sinkprepend, coarsen, rename
 
 
 class ControlPre():
@@ -87,7 +87,7 @@ class ControlPre():
 
         # Return state-input pairs or only states
         if no_inputs:
-            return ihide(self.control, xu)
+            return ihide(xu, self.control)
         else:
             return xu
 
@@ -147,7 +147,7 @@ class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
                 Z = sinkprepend(coarsen(mod, **{var: Z_var_bits}), Z)
 
         if no_inputs:
-            return ihide(self.control, Z)
+            return ihide(Z, self.control)
         else:
             return Z
 
@@ -214,7 +214,7 @@ class CompConstrainedPre(DecompCPre):
                 Z = sinkprepend(coarsen(mod, **{var: Z_var_bits}), Z)
 
         if no_inputs:
-            return ihide(self.control, Z)
+            return ihide(Z, self.control)
         else:
             return Z
 
@@ -287,7 +287,7 @@ class SafetyGame():
             if verbose:
                 print("Eliminating control")
 
-            z = ihide(self.cpre.control, z)
+            z = ihide(z, self.cpre.control)
             z = z * self.safe
 
             i = i + 1
@@ -367,7 +367,7 @@ class ReachGame():
             C._assum = C.assum | (z.assum & ~self.cpre.elimcontrol(C.assum))  # Add new state-input pairs to controller
             if verbose:
                 print("Eliminating control")
-            z = ihide(self.cpre.control, z)
+            z = ihide(z, self.cpre.control)
             z = z + self.target
 
             i += 1
@@ -460,7 +460,7 @@ class ReachAvoidGame():
 
             if verbose:
                 print("Eliminating control")
-            z = ihide(self.cpre.control, z)
+            z = ihide(z, self.cpre.control)
 
             z = (z * self.safe) + self.target
 

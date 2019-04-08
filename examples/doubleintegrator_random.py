@@ -35,14 +35,14 @@ aspace = DynamicCover(0, 20)
 
 # Smaller component modules
 pcomp = Interface(mgr,
-                       {'p': pspace,
-                        'v': vspace},
-                       {'pnext': pspace}
+                  {'p': pspace,
+                   'v': vspace},
+                  {'pnext': pspace}
         )
 vcomp = Interface(mgr,
-                       {'v': vspace,
-                        'a': aspace},
-                       {'vnext': vspace}
+                  {'v': vspace,
+                   'a': aspace},
+                  {'vnext': vspace}
         )
 
 bounds = {'p': [-10,10], 'v': [-16,16]}

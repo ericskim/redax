@@ -446,12 +446,12 @@ class Interface(object):
 
         """
         from redax.ops import ohide
-        return ohide(elim_vars, self)
+        return ohide(self, elim_vars)
 
     def ihidden(self, elim_vars: Sequence[str]) -> 'Interface':
         r"""Hides input variable for sink and returns another sink."""
         from redax.ops import ihide
-        return ihide(elim_vars, self)
+        return ihide(self, elim_vars)
 
     def coarsened(self, bits=None, **kwargs) -> 'Interface':
         r"""Remove less significant bits and coarsen the system representation.
