@@ -154,7 +154,7 @@ class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
 
 class CompConstrainedPre(DecompCPre):
     """
-    Identical to decomppre but also coarsens the sink until a specific condition is met.
+    Identical to decomppre but calls a heuristic to reduce the size of the output.
     """
     def __init__(self,
                  mod: CompositeInterface,
@@ -189,9 +189,6 @@ class CompConstrainedPre(DecompCPre):
         else:
             to_elim_post = list(self.poststate)
 
-        if self.condition(Z):
-            Z = self.heuristic(Z)
-
         # Eliminate each interface output
         # FIXME: This code assumes that each module only has a single output.
         # Should instead iterate over modules. Find a better way to specify the
@@ -212,6 +209,9 @@ class CompConstrainedPre(DecompCPre):
 
             for mod in dep_mods:
                 Z = sinkprepend(coarsen(mod, **{var: Z_var_bits}), Z)
+
+        if self.condition(Z):
+            Z = self.heuristic(Z)
 
         if no_inputs:
             return ihide(Z, self.control)
@@ -447,7 +447,8 @@ class ReachAvoidGame():
         i = 0
         while (z != zz):
             if steps and i == steps:
-                print("Reached step limit")
+                if verbose:
+                    print("Reached step limit")
                 break
 
             zz = z

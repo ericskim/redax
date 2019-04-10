@@ -5,9 +5,11 @@ def shiftbox(box, fraction=0.0):
     return box[0] + fraction*width, box[1] + fraction*width
 
 def bloatbox(box, factor = .001):
-    assert factor > -1.0
+    assert factor >= 0.0
+    assert box[0] <= box[1]
     center = box[0] + .5 * (box[1]-box[0])
     return box[0] - factor*(center - box[0]), box[1] + factor*(box[1] - center)
+
 
 def containszero(left, right):
     """Determine if 0 is contained in a periodic interval [left,right]."""

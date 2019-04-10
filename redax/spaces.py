@@ -465,21 +465,6 @@ class DynamicCover(ContinuousCover):
 
 
 
-    def quantizer(self, nbits: int):
-        """
-        Create a quantizer function for inputs and outputs.
-
-        TODO: Figure out how to generate quantizers without circular imports.
-
-        Returns
-        -------
-        Tuple: (Callable, Callable)
-        """
-        raise NotImplementedError
-
-
-
-
 @dataclass(frozen=True)
 class FixedCover(ContinuousCover):
     """

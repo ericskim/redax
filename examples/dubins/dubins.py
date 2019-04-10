@@ -10,8 +10,8 @@ import funcy as fn
 from redax.module import Interface, CompositeInterface
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover
 from redax.synthesis import ReachGame, ControlPre, DecompCPre, CompConstrainedPre
-from redax.visualizer import plot3D, plot3D_QT, pixel2D
-from redax.utils.overapprox import maxmincos, maxminsin
+from redax.visualizer import plot3D, plot3D_QT, pixel2D, scatter2D
+from redax.utils.overapprox import maxmincos, maxminsin, shiftbox, bloatbox
 from redax.predicates.dd import BDD
 from redax.utils.heuristics import order_heuristic
 from redax.ops import coarsen
@@ -106,17 +106,38 @@ def setup():
 
     return mgr, dubins_x, dubins_y, dubins_theta
 
+def coarse_abstract(f: Interface, concrete):
+    bits = 6
+    iter_precision = {'x': bits, 'y':bits, 'theta': bits,
+                 'xnext': bits, 'ynext': bits, 'thetanext': bits}
+    save_precision = {k: v+1 for k,v in iter_precision.items()}
+    outvar = fn.first(f.outputs)
+
+    for shift in [0.0, 0.5]:
+        iter = f.input_iter(precision=iter_precision)
+        for iobox in iter:
+
+            for k, v in iobox.copy().items():
+                if isinstance(v, tuple):
+                    iobox[k] = bloatbox(shiftbox(v, shift), .001)
+
+            # Assign output
+            iobox[outvar] = concrete(**iobox)
+
+            f = f.io_refined(iobox, nbits=save_precision)
+
+    return f
 
 def generate_random_io(pspace, anglespace):
     # Generate random input windows and points
-    f_width = {'x':     .04*pspace.width(),
-                'y':     .04*pspace.width(),
-                'theta': .04*anglespace.width()}
-    f_left = {'x':     pspace.lb + np.random.rand() * (pspace.width() - f_width['x']),
+    f_width = {'x':     .05*pspace.width(),
+                'y':     .05*pspace.width(),
+                'theta': .05*anglespace.width()}
+    f_left  = {'x':     pspace.lb + np.random.rand() * (pspace.width() - f_width['x']),
                 'y':     pspace.lb + np.random.rand() * (pspace.width() - f_width['y']),
                 'theta': anglespace.lb + np.random.rand() * (anglespace.width())}
     f_right = {k: f_width[k] + f_left[k] for k in f_width}
-    iobox = {'v':     np.random.randint(1, 3) * vmax/2,
+    iobox   = {'v':     np.random.randint(1, 3) * vmax/2,
                 'omega': np.random.randint(-1, 2) * 1.5}
     iobox.update({k: (f_left[k], f_right[k]) for k in f_width})
 
@@ -127,7 +148,7 @@ def generate_random_io(pspace, anglespace):
 
     return iobox
 
-def abstract_composite(composite: CompositeInterface, samples = 10000):
+def rand_abstract_composite(composite: CompositeInterface, samples = 10000):
     """
     Abstract the continuous dynamics with randomly generated boxes
     """
@@ -159,8 +180,10 @@ def make_target(mgr, composite: CompositeInterface):
     pspace = composite['x']
     anglespace = composite['theta']
     # Declare reach set as [0.8] x [-.8, 0] box in the x-y space.
-    target =  pspace.conc2pred(mgr, 'x',  [1.0,1.5], 5, innerapprox=False)
-    target &= pspace.conc2pred(mgr, 'y',  [1.0,1.5], 5, innerapprox=False)
+    # target =  pspace.conc2pred(mgr, 'x',  [1.0,1.5], 5, innerapprox=False)
+    # target &= pspace.conc2pred(mgr, 'y',  [1.0,1.5], 5, innerapprox=False)
+    target =  pspace.conc2pred(mgr, 'x',  [-.4,.4], 5, innerapprox=False)
+    target &= pspace.conc2pred(mgr, 'y',  [-.4,.4], 5, innerapprox=False)
     targetmod = Interface(mgr, {'x': pspace, 'y': pspace, 'theta': anglespace}, {}, guar=mgr.true, assum=target)
     targetmod.check()
 
@@ -255,7 +278,6 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
     return basin, controller
 
 def plots(mgr, basin, composite):
-
     """
     Plotting and visualization
     """
@@ -268,15 +290,15 @@ def plots(mgr, basin, composite):
 
     # # Plot x transition relation for v = .5
     # xdyn = mgr.exist(['v_0'],(composite.children[0].pred) & mgr.var('v_0'))
-    # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
+    # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, opacity=128, raisebiterror=False)
 
     # # Plot y transition relation for v = .5
     # ydyn = mgr.exist(['v_0'],(composite.children[1].pred) & mgr.var('v_0'))
-    # plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
+    # plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, opacity=128, raisebiterror=False)
 
-    # # Plot theta component
+    # Plot theta component
     # thetadyn = mgr.exist(['v_0', 'omega_0', 'omega_1'],(composite.children[2].pred) & mgr.var('v_0') & mgr.var('omega_0') & ~mgr.var('omega_1') )
-    # pixel2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn, 128)
+    # scatter2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn)
 
 
 def simulate(controller):
@@ -305,8 +327,13 @@ def simulate(controller):
 if __name__ is "__main__":
     mgr, dubins_x, dubins_y, dubins_theta = setup()
 
+    # composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
+    # composite = rand_abstract_composite(composite, samples=30000)
+
+    dubins_x = coarse_abstract(dubins_x, xwindow)
+    dubins_y = coarse_abstract(dubins_y, ywindow)
+    dubins_theta = coarse_abstract(dubins_theta, thetawindow)
     composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
-    composite = abstract_composite(composite, samples=15000)
 
     # Heuristic used to reduce the size or "compress" the abstraction representation.
     # Higher significant bits first
