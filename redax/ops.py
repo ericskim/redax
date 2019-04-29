@@ -6,14 +6,7 @@ from .module import Interface
 import redax.utils.bv as bv
 
 
-def io_refine(mod: Interface, concrete: dict, silent: bool=True, **kwargs) -> Interface:
-    r"""
-    Compute interface
-    """
-    raise NotImplementedError
-
-
-def shared_refine(ifaces: Collection[Interface], safecheck=True):
+def shared_refine(ifaces: Collection, safecheck=True):
     r"""
     Compute shared refinement of a collection of interfaces.
 
@@ -32,11 +25,11 @@ def shared_refine(ifaces: Collection[Interface], safecheck=True):
     # Same inputs and outputs
     input_signature = fn.first(iface.inputs for iface in ifaces)
     if any(input_signature != iface.inputs for iface in ifaces):
-        raise RuntimeError("Interface inputs do not match")
+        raise RuntimeError("Interface inputs do not match:\n{}".format(input_signature))
 
     output_signature = fn.first(iface.outputs for iface in ifaces)
     if any(output_signature != iface.outputs for iface in ifaces):
-        raise RuntimeError("Interface outputs do not match")
+        raise RuntimeError("Interface outputs do not match:\n{}".format(output_signature))
 
     nb = mgr.false
     pred = mgr.true
@@ -98,11 +91,14 @@ def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
 
     Parameters
     ----------
+    ignore_spurious_vars: bool
+        If true, doesn't raise error if variable is non-existant
     names: dict, default = dict()
         Keys are str of old names, values are str of new names
     **kwargs:
         Same dictionary format as names.
 
+    FIXME: Issues arise when swapping names or renaming to an existing variable.
     """
     names = dict([]) if names is None else names
     names.update(kwargs)
@@ -113,10 +109,11 @@ def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
 
     for oldname, newname in names.items():
         if oldname not in mod.vars:
+            #FIXME: Should raise an error instead of being silent
             # raise ValueError("Cannot rename non-existent I/O " + oldname)
             continue
         if newname in mod.vars:
-            raise ValueError("Don't currently support renaming to an existing variable")
+            raise ValueError("Cannot rename to an existing interface variable")
 
         if oldname in mod.outputs:
             newoutputs[newname] = newoutputs.pop(oldname)
@@ -138,12 +135,14 @@ def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
                      )
 
 
-def ohide(elim_vars: Collection[str], mod: Interface) -> Interface:
+def ohide(mod: Interface, elim_vars: Collection) -> Interface:
     r"""
     Hides an output variable and returns another interface.
 
     Parameters
     ----------
+    mod: Interface
+        Interface with output variable to be eliminated
     elim_vars: Container
         Iterable container of output variable names
 
@@ -172,7 +171,7 @@ def ohide(elim_vars: Collection[str], mod: Interface) -> Interface:
                      )
 
 
-def ihide(elim_vars: Collection[str], mod: Interface) -> Interface:
+def ihide(mod: Interface, elim_vars: Collection) -> Interface:
     r"""
 
     """
@@ -187,8 +186,6 @@ def ihide(elim_vars: Collection[str], mod: Interface) -> Interface:
         elim_bits += mod.pred_bitvars[k]
 
     newinputs = {k: v for k, v in mod.inputs.items() if k not in elim_vars}
-
-    elim_bits = set(elim_bits) & mod.pred.support
 
     return Interface(mod.mgr,
                      newinputs,
@@ -260,7 +257,7 @@ def sinkprepend(iface: Interface, sink: Interface) -> Interface:
     """
     Composition of an interface connected in series with a sink.
 
-    Identical to ohide(sharedvars, comp(iface, sinkmod)) where sharedvars is
+    Identical to ohide(comp(iface, sinkmod), sharedvars) where sharedvars is
     the intersection of iface's outputs and sinkmod's inputs. This is a faster
     implementation.
 
@@ -291,6 +288,7 @@ def sinkprepend(iface: Interface, sink: Interface) -> Interface:
 
     newnonblock = ~iface.guar | sink.assum
     elim_bits = set(bv.flatten([iface.pred_bitvars[k] for k in iface.outputs]))
+    elim_bits |= set(bv.flatten([sink.pred_bitvars[k] for k in iface.outputs]))
     elim_bits &= newnonblock.support
 
     return Interface(iface.mgr,

@@ -7,6 +7,12 @@ from typing import Sequence, Iterable, List
 BitVector = Sequence[bool]
 
 
+def bv_var_name(i: str) -> str:
+    return i.split('_')[0]
+
+def bv_var_idx(i: str) -> str:
+    return i.split('_')[1]
+
 def num_with_name(name: str, x) -> int:
     return len([i for i in x if name in i])
 

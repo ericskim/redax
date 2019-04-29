@@ -5,15 +5,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 from redax.spaces import DynamicCover
-from redax.utils.bv import bv2int, graytobin
+from redax.utils.bv import bv2int, graytobin, bv_var_name, bv_var_idx
 
-
-def _name(i):
-    return i.split('_')[0]
-
-
-def _idx(i):
-    return i.split('_')[1]
 
 
 def center(box):
@@ -30,7 +23,7 @@ def dynamicperiodic(space):
         return True
     return False
 
-def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False, opacity=1.0):
+def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False, opacity=1.0, raisebiterror=True):
     """
     Plot a 2D set represented by a predicate as a pixel image.
 
@@ -55,8 +48,8 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     yname, ygrid = yspace
 
     support = pred.support
-    xbits = len([bit for bit in support if _name(bit) == xname])
-    ybits = len([bit for bit in support if _name(bit) == yname])
+    xbits = len([bit for bit in support if bv_var_name(bit) == xname])
+    ybits = len([bit for bit in support if bv_var_name(bit) == yname])
     xbins = 2**xbits
     ybins = 2**ybits
 
@@ -69,15 +62,34 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     ypts = []
 
     config = mgr.configure()  # pick_iter alters config so save config state
+    missing_bit_dims = set([])
     # Add all BDD assignments to a list of points
     for pt in mgr.pick_iter(pred):
-        xvars = [k for k, v in pt.items() if _name(k) == xname]
-        yvars = [k for k, v in pt.items() if _name(k) == yname]
+        xvars = [k for k, v in pt.items() if bv_var_name(k) == xname]
+        yvars = [k for k, v in pt.items() if bv_var_name(k) == yname]
         xvars.sort()  # Sort by bit names
         yvars.sort()
 
-        xbv = [pt[bit] for bit in xvars] # FIXME: Issues if a bit is skipped. Assumes no gaps in bit range.
-        ybv = [pt[bit] for bit in yvars]
+        # Error detection for missing bits
+        if len(xvars) != xbits:
+            missing_bit_dims.add(xname)
+        if len(yvars) != ybits:
+            missing_bit_dims.add(yname)
+        if len(missing_bit_dims) > 0 and raisebiterror:
+            raise ValueError("Missing bits from dimension: {}".format(missing_bit_dims))
+
+        # xbv = [pt[bit] for bit in xvars] # FIXME: Issues if a bit is skipped. Assumes no gaps in bit range.
+        # ybv = [pt[bit] for bit in yvars]
+        xbv = [False] * xbits
+        for i in range(xbits):
+            bitname = xname + '_' + str(i)
+            xbv[i] = pt[bitname] if bitname in pt else False
+
+        ybv = [False] * ybits
+        for i in range(ybits):
+            bitname = yname + '_' + str(i)
+            ybv[i] = pt[bitname] if bitname in pt else False
+
 
         # bv2int(xbv)
         ycoord = bv2int(ybv)
@@ -95,7 +107,7 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
 
     fig, ax = plt.subplots()
     if invertcolor:
-        ax.pcolormesh(mask, edgecolors='w', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)        
+        ax.pcolormesh(mask, edgecolors='w', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)
     else:
         ax.pcolormesh(mask, edgecolors='k', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)
 
@@ -103,7 +115,7 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     ax.set_xlabel(xname)
     # ax.set_ylim(ygrid.lb, ygrid.ub)
     ax.set_ylabel(yname)
-    
+
     if title:
         ax.set_title(title)
     if fname is not None:
@@ -117,7 +129,7 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     # return fig, ax
 
 # Organize into bitvectors
-def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None, fig = None, ax = None, alpha=None, co=None):
+def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None, fig = None, ax = None, alpha=None, co=None, raisebiterror=True):
     """
     Plot a 2D set represented by a predicate as a scatter plot.
 
@@ -140,19 +152,41 @@ def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None, fig = None, ax 
     xname, xgrid = xspace
     yname, ygrid = yspace
 
+    support = pred.support
+    xbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == xname]) + 1
+    ybits = max([int(bv_var_idx(bit))for bit in support if bv_var_name(bit) == yname]) + 1
+
     xpts = []
     ypts = []
 
     config = mgr.configure()  # pick_iter alters config so save config state
+    missing_bit_dims = set([])
     # Add all BDD assignments to a list of points
     for pt in mgr.pick_iter(pred):
-        xvars = [k for k, v in pt.items() if _name(k) == xname]
-        yvars = [k for k, v in pt.items() if _name(k) == yname]
+        xvars = [k for k, v in pt.items() if bv_var_name(k) == xname]
+        yvars = [k for k, v in pt.items() if bv_var_name(k) == yname]
         xvars.sort()  # Sort by bit names
         yvars.sort()
 
-        xbv = [pt[bit] for bit in xvars]
-        ybv = [pt[bit] for bit in yvars]
+        # Error detection for missing bits
+        if len(xvars) != xbits:
+            missing_bit_dims.add(xname)
+        if len(yvars) != ybits:
+            missing_bit_dims.add(yname)
+        if len(missing_bit_dims) > 0 and raisebiterror:
+            raise ValueError("Missing bits from dimension: {}".format(missing_bit_dims))
+
+        # xbv = [pt[bit] for bit in xvars] # FIXME: Issues if a bit is skipped. Assumes no gaps in bit range.
+        # ybv = [pt[bit] for bit in yvars]
+        xbv = [False] * xbits
+        for i in range(xbits):
+            bitname = xname + '_' + str(i)
+            xbv[i] = pt[bitname] if bitname in pt else False
+
+        ybv = [False] * ybits
+        for i in range(ybits):
+            bitname = yname + '_' + str(i)
+            ybv[i] = pt[bitname] if bitname in pt else False
 
         xpts.append(xgrid.bv2conc(xbv))
         ypts.append(ygrid.bv2conc(ybv))
@@ -177,7 +211,7 @@ def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None, fig = None, ax 
     return fig, ax
 
 
-def plot3D(mgr, xspace, yspace, zspace, pred, 
+def plot3D(mgr, xspace, yspace, zspace, pred, raisebiterror=True,
            opacity=40, view=None, title=None, fname=None, **kwargs):
     """Matplotlib based plotter with voxels"""
     voxelcolors = '#7A88CC' + format(opacity, "02x")
@@ -188,9 +222,9 @@ def plot3D(mgr, xspace, yspace, zspace, pred,
 
     # Construct spaces
     support = pred.support
-    xbits = len([bit for bit in support if _name(bit) == xname])
-    ybits = len([bit for bit in support if _name(bit) == yname])
-    zbits = len([bit for bit in support if _name(bit) == zname])
+    xbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == xname]) + 1
+    ybits = max([int(bv_var_idx(bit))for bit in support if bv_var_name(bit) == yname]) + 1
+    zbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == zname]) + 1
     xbins = 2**xbits
     ybins = 2**ybits
     zbins = 2**zbits
@@ -203,24 +237,49 @@ def plot3D(mgr, xspace, yspace, zspace, pred,
     config = mgr.configure()  # pick_iter alters config so save config state
 
     # Construct bitmask
+    missing_bit_dims = set([])
     mask = np.full((xbins, ybins, zbins), False)
     for pt in mgr.pick_iter(pred):
-        xvars = [k for k, v in pt.items() if _name(k) == xname]
-        yvars = [k for k, v in pt.items() if _name(k) == yname]
-        zvars = [k for k, v in pt.items() if _name(k) == zname]
+        xvars = [k for k, v in pt.items() if bv_var_name(k) == xname]
+        yvars = [k for k, v in pt.items() if bv_var_name(k) == yname]
+        zvars = [k for k, v in pt.items() if bv_var_name(k) == zname]
         xvars.sort()  # Sort by bit names
         yvars.sort()
         zvars.sort()
 
-        xbv = [pt[bit] for bit in xvars]
-        ybv = [pt[bit] for bit in yvars]
-        zbv = [pt[bit] for bit in zvars]
+        # Error detection for missing bits
+        if len(xvars) != xbits:
+            missing_bit_dims.add(xname)
+        if len(yvars) != ybits:
+            missing_bit_dims.add(yname)
+        if len(zvars) != zbits:
+            missing_bit_dims.add(zname)
+        if len(missing_bit_dims) > 0 and raisebiterror:
+            raise ValueError("Missing bits from dimension: {}".format(missing_bit_dims))
+
+        xbv = [False] * xbits
+        for i in range(xbits):
+            bitname = xname + '_' + str(i)
+            xbv[i] = pt[bitname] if bitname in pt else False
+
+        ybv = [False] * ybits
+        for i in range(ybits):
+            bitname = yname + '_' + str(i)
+            ybv[i] = pt[bitname] if bitname in pt else False
+
+        zbv = [False] * zbits
+        for i in range(zbits):
+            bitname = zname + '_' + str(i)
+            zbv[i] = pt[bitname] if bitname in pt else False
 
         x_idx = bv2int(xbv) if not dynamicperiodic(xgrid) else graytobin(bv2int(xbv))
         y_idx = bv2int(ybv) if not dynamicperiodic(ygrid) else graytobin(bv2int(ybv))
         z_idx = bv2int(zbv) if not dynamicperiodic(zgrid) else graytobin(bv2int(zbv))
 
         mask[x_idx, y_idx, z_idx] = True
+
+    if missing_bit_dims:
+        print("Missing bits from dimensions: ", missing_bit_dims)
 
     mgr.configure(reordering=config['reordering'])  # Reinstate config state
 
@@ -243,7 +302,7 @@ def plot3D(mgr, xspace, yspace, zspace, pred,
     # return fig, ax
 
 
-def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
+def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255, raisebiterror=True):
     """Somewhat buggy pyqtgraph plotting"""
     from pyqtgraph.Qt import QtCore, QtGui
     import pyqtgraph.opengl as gl
@@ -266,9 +325,9 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
 
     # Construct spaces
     support = pred.support
-    xbits = len([bit for bit in support if _name(bit) == xname])
-    ybits = len([bit for bit in support if _name(bit) == yname])
-    zbits = len([bit for bit in support if _name(bit) == zname])
+    xbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == xname]) + 1
+    ybits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == yname]) + 1
+    zbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == zname]) + 1
     xbins = 2**xbits
     ybins = 2**ybits
     zbins = 2**zbits
@@ -278,24 +337,47 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255):
 
     config = mgr.configure()  # pick_iter alters config so save config state
 
-
+    missing_bit_dims = set([])
     for pt in mgr.pick_iter(pred):
-        xvars = [k for k, v in pt.items() if _name(k) == xname]
-        yvars = [k for k, v in pt.items() if _name(k) == yname]
-        zvars = [k for k, v in pt.items() if _name(k) == zname]
+        xvars = [k for k, v in pt.items() if bv_var_name(k) == xname]
+        yvars = [k for k, v in pt.items() if bv_var_name(k) == yname]
+        zvars = [k for k, v in pt.items() if bv_var_name(k) == zname]
         xvars.sort()  # Sort by bit names
         yvars.sort()
         zvars.sort()
 
-        xbv = [pt[bit] for bit in xvars]
-        ybv = [pt[bit] for bit in yvars]
-        zbv = [pt[bit] for bit in zvars]
+        if len(xvars) != xbits:
+            missing_bit_dims.add(xname)
+        if len(yvars) != ybits:
+            missing_bit_dims.add(yname)
+        if len(zvars) != zbits:
+            missing_bit_dims.add(zname)
+        if len(missing_bit_dims) > 0 and raisebiterror:
+            raise ValueError("Missing bits from dimension: {}".format(missing_bit_dims))
+
+        xbv = [False] * xbits
+        for i in range(xbits):
+            bitname = xname + '_' + str(i)
+            xbv[i] = pt[bitname] if bitname in pt else False
+
+        ybv = [False] * ybits
+        for i in range(ybits):
+            bitname = yname + '_' + str(i)
+            ybv[i] = pt[bitname] if bitname in pt else False
+
+        zbv = [False] * zbits
+        for i in range(zbits):
+            bitname = zname + '_' + str(i)
+            zbv[i] = pt[bitname] if bitname in pt else False
 
         x_idx = bv2int(xbv) if not dynamicperiodic(xgrid) else graytobin(bv2int(xbv))
         y_idx = bv2int(ybv) if not dynamicperiodic(ygrid) else graytobin(bv2int(ybv))
         z_idx = bv2int(zbv) if not dynamicperiodic(zgrid) else graytobin(bv2int(zbv))
 
         mask[x_idx, y_idx, z_idx] = True
+
+    if missing_bit_dims:
+        print("Missing bits from dimensions: ", missing_bit_dims)
 
     d2 = np.empty(mask.shape + (4,), dtype=np.ubyte)
     d2[..., 0] = mask.astype(np.float) * 255

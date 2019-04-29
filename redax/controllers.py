@@ -7,20 +7,13 @@ Controller interface classes
 # from redax.synthesis import ControlPre, DecompCPre
 
 from redax.spaces import OutOfDomainError
-
-def _name(i):
-    return i.split('_')[0]
-
-
-def _idx(i):
-    return i.split('_')[1]
+from redax.module import Interface
+from redax.utils.bv import bv_var_name, bv_var_idx
+from redax.ops import ihide
+from typing import Optional
 
 
-class SupervisoryController(object):
-    pass
-
-
-class MemorylessController(SupervisoryController):
+class MemorylessController():
     """
     MemorylessController.
 
@@ -33,29 +26,29 @@ class MemorylessController(SupervisoryController):
 
     Methods
     -------
-    allows(state: dict) -> generator: 
+    allows(state: dict) -> generator:
         Maps state dict to a generator outputing dicts of allowed inputs
 
     """
 
-    def __init__(self, cpre, allowed_controls):
-        SupervisoryController.__init__(self)
+    def __init__(self, cpre, allowed_controls: Interface):
         self.cpre = cpre
+        assert allowed_controls.is_sink()
         self.C = allowed_controls
 
     def isempty(self):
-        return self.C == self.cpre.mgr.false
+        return self.C.count_nb == 0
 
     def winning_set(self):
-        return self.cpre.elimcontrol(self.C)
+        return ihide(self.C, self.cpre.control.keys())
 
-    def winning_states(self, exclude=None):
+    def winning_states(self, exclude : Optional[Interface]=None):
         r"""
         Generator for states from the winning set.
 
         Parameters
         ----------
-        exclude: bdd
+        exclude: Interface
             Set of states to exclude from generation.
 
         Returns
@@ -63,18 +56,18 @@ class MemorylessController(SupervisoryController):
         generator
             Yields dictionaries with state var keys and concrete values
         """
-        winning = self.cpre.elimcontrol(self.C)
-        
+        winning = ihide(self.C, self.cpre.control.keys())
+
         # assert exclude.support.issubset(winning.support)
 
-        exclude = self.cpre.mgr.false if exclude is None else exclude
+        exclude = self.cpre.mgr.false if exclude is None else exclude.assum
 
         # Generate a winning point
-        for x_assignment in self.cpre.mgr.pick_iter(winning & ~exclude):
+        for x_assignment in self.cpre.mgr.pick_iter(winning.assum & ~exclude):
             # Translate BDD assignment into concrete counterpart
             xval = dict()
             for xvar in self.cpre.prestate:
-                xbits = [k for k in x_assignment if _name(k) == xvar]
+                xbits = [k for k in x_assignment if bv_var_name(k) == xvar]
                 xbits.sort()
                 bv = [x_assignment[bit] for bit in xbits]
                 xval[xvar] = self.cpre.prestate[xvar].bv2conc(bv)
@@ -86,9 +79,9 @@ class MemorylessController(SupervisoryController):
         Compute the set of allowed inputs associated with a state.
 
         Parameters
-        ---------- 
+        ----------
         state: dict
-            Keys are module variables and values are concrete values 
+            Keys are module variables and values are concrete values
 
         Returns
         ----------
@@ -109,33 +102,20 @@ class MemorylessController(SupervisoryController):
                 print(k, v)
                 raise
 
+        # Get collection of admissible control inputs
         for i, assignment in enumerate(self.cpre.mgr.pick_iter(pt_bdd)):
             if i > 0:
                 raise RuntimeError("Multiple discrete states assocaited with argument state.")
-            u = self.cpre.mgr.let(assignment, self.C)
-        
+            u = self.cpre.mgr.let(assignment, self.C.assum)
+
         # Generate allowed controls
         for u_assignment in self.cpre.mgr.pick_iter(u):
             # Translate BDD assignment into concrete counterpart
             uval = dict()
             for uvar in self.cpre.control:
-                ubits = [k for k in u_assignment if _name(k) == uvar]
+                ubits = [k for k in u_assignment if bv_var_name(k) == uvar]
                 ubits.sort()
                 bv = [u_assignment[bit] for bit in ubits]
                 uval[uvar] = self.cpre.control[uvar].bv2conc(bv)
             yield uval
 
-class SafetyController(MemorylessController):
-    """
-    A MemorylessController enforcing a safety constraint.
-
-    Only stores the safe region and not all permitted state-action pairs.
-    Computes safe actions at runtime.
-    """
-
-
-    def __init__(self, cpre, allowed_controls):
-        MemorylessController.__init__(self, cpre, cpre.elimcontrol(allowed_controls))
-
-    def run(self, state):
-        pass # TODO: Implement this!!

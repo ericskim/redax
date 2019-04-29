@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/ericskim/redax.svg?branch=master)](https://travis-ci.org/ericskim/redax)
+
 # REDAX: Control Synthesizer in Python with (Dynamic|Declarative|Robust) Abstractions
 
 REDAX is a controller synthesis tool that constructs finite state machines that mimic continuous dynamics. We call the finite state machines *abstractions* because they abstract out low level state information.
@@ -6,8 +8,8 @@ REDAX is a controller synthesis tool that constructs finite state machines that 
 
 - [About](#About)
 - [Installation](#installation)
-- [Features](#distinguishing-features)
-- [Notes](#notes)
+- [Distinguishing Features](#distinguishing-features)
+- [Development Notes](#development-notes)
 - [References](#references)
 
 ## About
@@ -30,26 +32,27 @@ Ideally for:
 Clone this repo and run the following commands:
 
 ```shellscript
-# Setup script doesn't currently handle all dependency installations.
-# Missing: pytest, sphinx, cudd
 cd /location/of/redax/here/
+pip install -r requirements
 pip install .
 ```
 
 ### Dependencies
 
-- Core
-  - python 3.7
-  - cudd with dd wrapper
+- Primary
+  - python 3.6
+  - cudd with [dd](https://github.com/tulip-control/dd) wrapper
   - numpy
   - bidict
+  - funcy
+  - toposort
+  - dataclasses
 - Secondary
   - Visualization:
     - matplotlib
     - pyqtgraph
-  - Testing and Documentation:
+  - Testing:
     - pytest
-    - sphinx
 
 ## Distinguishing Features
 
@@ -57,8 +60,8 @@ pip install .
 
   Abstracting a set means grouping together points and constructing a lower cardinality set. We support a number of methods such as:
 
-  - Fixed vs. dynamic precision covers: Union of rectangles where each one is uniquely identified by a bitvector. Throwing away lower precision bits implicitly makes the cover more coarse. Adding addtional bits implies higher precision.
-  - Linear vs. periodic covers: Use the traditional binary encoding to identify hyperrectangles in the grid. Periodic grids use [gray code](https://en.wikipedia.org/wiki/Gray_code).
+  - Fixed vs. dynamic precision covers: Union of rectangles where each one is uniquely identified by a bitvector. Throwing away lower precision bits implicitly makes the cover more coarse. Adding additional bits implies higher precision.
+  - Linear vs. periodic covers: Use the traditional binary encoding to encode hyperrectangles in the grid. Periodic grids use [gray code](https://en.wikipedia.org/wiki/Gray_code).
   - Embedded grids: A grid of discrete points embedded in continuous space, like the integers.
 
   ```python
@@ -72,16 +75,67 @@ pip install .
 
 - **Small Reusable Modules**
 
-  Modules represent stateless input-output maps but can have non-deterministic outputs and may block for some inputs.
+  Interfaces are like functions, but have named inputs/outputs and may exhibit non-deterministic outputs or block for some inputs.
 
   ```python
-  # Declare modules
-  dubins_x        = Interface(mgr, {'x': pspace, 'theta': anglespace, 'v': vspace},
-                                        {'xnext': pspace})
-  dubins_y        = Interface(mgr, {'y': pspace, 'theta': anglespace, 'v': vspace},
-                                        {'ynext': pspace})
-  dubins_theta    = Interface(mgr, {'theta': anglespace, 'v': vspace, 'omega': angaccspace},
-                                        {'thetanext': anglespace})
+  # Declare modules. mgr is a BDD manager from dd.
+  dubins_x      = Interface(mgr,
+                            inputs={'x': pspace, 'theta': anglespace, 'v': vspace},
+                            outputs={'xnext': pspace}
+                  )
+
+  dubins_y      = Interface(mgr,
+                            inputs={'y': pspace, 'theta': anglespace, 'v': vspace},
+                            outputs={'ynext': pspace}
+                  )
+
+  dubins_theta  = Interface(mgr,
+                            inputs={'theta': anglespace, 'v': vspace, 'omega': angaccspace},
+                            outputs={'thetanext': anglespace}
+                  )
+  ```
+
+- **Manipulate and Compose Interfaces**
+
+  Abstract systems can be manipulated with a collection of operations:
+
+  ```python
+  from redax.ops import rename, ohide, coarsen, rename
+
+  # Parallel composition is useful for constructing larger dimensional systems.
+  dubins = dubins_x * dubins_y * dubins_theta # Parallel composition shorthand
+  assert dubins == compose(dubins_x, compose(dubins_y, dubins_theta))
+
+  # Series composition is a robust version of function composition m2(m1(...)).
+  # Composition accounts m1's output non-determinism and m2's blocking inputs.
+  m1 = Interface(mgr, {'x': DummySpace1}, {'y': DummySpace2})
+  m2 = Interface(mgr, {'y': DummySpace2}, {'z': DummySpace3})
+  m12 = compose(m1, m2)
+  assert m12 == m1 >> m2 # Series composition shorthand
+
+  # Input and output variable renaming.
+  dubins_renamed = rename(dubins_x, {'xnext': 'xposnext', 'x': 'xpos'})
+
+  # Hide outputs from interfaces.
+  x = ohide(dubins_x, {'xnext'})
+
+  # Future feature: Compute lower complexity abstractions keeping only the most significant bits.
+  coarser_model = coarsen(model, x=3, y=4)  # Retain 3 bits for 'x' variable and 4 bits for 'y' variable.
+  ```
+
+- **Refinement checks**
+
+  A built in notion of one interface refining another or vice versa where an interface is an abstraction of another.
+
+  ```python
+  # Coarser model abstracts the original model
+  coarser_model = coarsen(model, x=3, y=4)
+  assert coarser_model <= model
+
+  # Variable hiding, renaming, and interface compose operations preserve refinement order
+  assert ohide('y', coarser_model) <= ohide('y', model)
+  assert rename(coarser_model, {'y': 'z'}) <= rename(model, {'y': 'z'})
+  assert coarsen(dubins_x, ynext=4) * dubins_y * dubins_theta <= dubins_x * dubins_y * dubins_theta
   ```
 
 - **Flexible Abstraction Construction**
@@ -90,63 +144,61 @@ pip install .
 
   - [Input set] -> [Overapproximation of the set of possible outputs]
 
-  The samples do NOT need disjoint input sets or have input-output sets align with a grid. The controller synthesis results get better as sample quality and quantity increase.
+  The samples do NOT need disjoint input sets or have input-output sets align with a grid. The controller synthesis results get better as sample quantity increases and the overapproximation tightens.
 
   ```python
   # Collections of input-output pairs can be generated any number of ways!
   collection = database/file or iterator or odesolver/simulator or random input generator
 
   # Anytime algorithm for abstraction construction
+  refined_interface = initial_interface
   for io_pair in collection:
-    abstraction = abstraction.io_refined(io_pair)
+    refined_interface = refined_interface.io_refined(io_pair)
+    assert initial_interface <= refined_interface
 
   # Refinement operations can be chained together
   abstraction.io_refined(io_pair_1).io_refined(io_pair_2)
   ```
 
-- **Manipulate and Compose Interfaces**
+- **Extensible control synthesizers**
 
-  Abstract systems can be manipulated with a collection of operations:
-
-  ```python
-  # Variable Renaming
-  dubins = dubins >> ('xnext', 'xnext')
-  dubins = ('z', 'x') >> dubins
-
-  # Parallel composition is useful for constructing larger dimensional systems
-  dubins = dubins_x * dubins_y * dubins_theta
-
-  # Series composition resembles function composition m2(m1(.))
-  m1 >> m2
-
-  # Hide outputs
-  x = interface.ohidden('x')
-
-  # Future feature: Compute lower complexity abstractions keeping only the most significant bits
-  coarser_model = model.coarsened(x=3, y=4)
-  ```
-
-  Operations can also be chained together:
+  Use multiple built-in control predecessors constructed using the above operators to solve safety, reach, and reach-avoid games.
 
   ```python
-  simpler_dubins = dubins.ohidden('xnext')\
-                         .coarsened(x=5,y=4)\
-                         .renamed(ynext = 'nextposition')
+  from redax.synthesis import ReachGame, DecompCPre, ControlPre
+
+  target = get_target_interface()
+
+  # Monolithic Control Predecessor
+  dubins = dubins_x * dubins_y * dubins_theta # Construct monolithic representation
+  cpre = ControlPre(dubins,
+                    states=(('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')),
+                    control=('v', 'omega')
+                   )
+  game = ReachGame(cpre, target)
+  reach_basin, steps, controller = game.run()
+
+  # Decomposed Control Predecessor exploits decomposed structure and is faster
+  composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
+  dcpre = DecompCPre(composite,
+                     states=(('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')),
+                     control=('v', 'omega')
+                    )
+  dgame = ReachGame(dcpre, target)
+  dreach_basin, steps, controller = dgame.run()
+
+  assert reach_basin == dreach_basin
   ```
 
-- **Extensible synthesizers**
+- **Swappable Symbolic Backend**
 
-  Use built-in algorithms for computing controllers enforcing safety and reachability specifications, or customize them using the operators above.
+  We build on top of libraries for symbolically representing finite sets and relations. The current implementation uses binary decision diagrams via the dd package. Support for aiger circuits is possible with the [py-aiger](https://github.com/mvcisback/py-aiger) library.
 
-- **Extensible Symbolic Backend**
+## Development Notes
 
-  We build on top of libraries for symbolically representing sets and relations. The current implementation uses binary decision diagrams but we plan on supporting aiger circuits as well.
+### Status
 
-## Notes
-
-### Development status
-
-The core foundations are working and providing meaningful results on some test examples but the API is fluctuating rapidly.
+The core foundations is working and providing results on some meaningful test examples but the APIs are fluctuating rapidly.
 
 ### TODOs
 
@@ -154,15 +206,17 @@ The core foundations are working and providing meaningful results on some test e
   - Fix issues with unnecessary blocking with position modules dependencies on angle.
   - Iterator for shifted but bounded space.
 - Make a variable = name + types object
+- Controlled predecessor with multiple time scale models and control inputs.
 - Different iterators of input space
   - Iterators for the $2^{N-1}$ reduced grid traversal
 - Rewrite continuous cover grid to have an overlap parameter
+- Make the BDD manager a class attribute instead of instance attribute?
 
 ### Future Features
 
 - Support for disjoint union and product operations for spaces (thus adding support for hybrid spaces)
   - Requires a predicate bit name generator
-  - Quantizers for interfaces should be higher order functions. This will support ADTs.
+  - Each space should generate a higher order function quantizer.
 
 ## References
 
@@ -170,7 +224,7 @@ The core foundations are working and providing meaningful results on some test e
 
 - [*Abstractions for Symbolic Controller Synthesis are Composable*, Eric S. Kim, Murat Arcak](https://arxiv.org/abs/1807.09973)
 
-### Similar tools for controller synthesis
+### Similar tools for abstraction-based controller synthesis
 
 - [SCOTS](https://gitlab.lrz.de/hcs/scots)
   - [MASCOT](https://github.com/hsukyle/mascot)

@@ -1,12 +1,10 @@
 """
-.. module::module
+.. interface::interface
 
-Module container
+Interface container
 
 
 """
-
-from __future__ import annotations
 
 from typing import Dict, Generator, List, Union, Collection, Tuple, Set, Sequence
 import itertools
@@ -18,40 +16,26 @@ from .spaces import OutOfDomainError
 
 
 class Interface(object):
-    r"""
-    Wrapper for translating between concrete and discrete I/O values.
-
-    Attributes
-    ----------
-    mgr: dd manager
-        Manager for manipulating predicates as bdds
-    inputs: dict
-        Dictionary {str: symbolicintervals}
-    outputs: dict
-        Dictionary {str: symbolicintervals}
-    pred: bdd
-        Predicate encoding the module I/O relation
-
-    """
+    r"""Wrapper for translating between concrete and discrete I/O values."""
 
     def __init__(self, mgr, inputs, outputs, guar=None, assum=None):
         """
-        Initialize the abstract module.
+        Initialize the abstract interface.
 
         The pred and nonblocking parameters should only be used for fast
-        initialization of the module.
+        initialization of the interface.
 
         Parameters
         ----------
-        mgr: bdd manager
-
+        mgr: dd manager
+            Manager for manipulating predicates as bdds
         inputs: dict(str: redax.spaces.SymbolicSet)
             Input variable name, SymbolicSet type
         outputs: dict(str: redax.spaces.SymbolicSet)
             Output variable name, SymbolicSet type
-        pred: bdd
+        guar: dd predicate
             Predicate to initialize the input-output map
-        nonblocking: bdd
+        assum: dd predicate
             Predicate to initialize nonblocking inputs
 
         """
@@ -67,14 +51,11 @@ class Interface(object):
         if any(var.isalnum() is False for var in self.vars):
             raise ValueError("Non-alphanumeric variable name")
 
-        # TODO: Check bdd supports
+        # FIXME: Check bdd supports and make sure these align with the spaces!!! Especially for the guarantee.
         self._guar = self.mgr.true if guar is None else guar
         self._assum = self.mgr.false if assum is None else assum
 
     def __repr__(self):
-        if len(self.vars) > 0:
-            maxvarlen = max(len(v) for v in self.vars)
-            maxvarlen = max(maxvarlen, 20) + 4
         s = "Interface(inputs={"
         s += ", ".join([k + ": " + v.__repr__() for k, v in self._in.items()])
         s += "}, outputs={"
@@ -111,6 +92,7 @@ class Interface(object):
 
     @property
     def pred(self):
+        r"""Interface predicate. Equivalent to self.assum & self.guar."""
         return self._assum & self._guar
 
     @property
@@ -146,6 +128,16 @@ class Interface(object):
             allocbits[v].sort()
 
         return allocbits
+
+    @property
+    def pred_precision(self) -> Dict[str, int]:
+        from redax.utils.bv import bv_var_idx
+        precision = {k: 0 for k in self.pred_bitvars.keys()}
+        for bit, rawbits in self.pred_bitvars.items():
+            var_bits = max([int(bv_var_idx(bit)) for bit in rawbits], default = -1) + 1
+            precision[bit] = var_bits
+
+        return precision
 
     def is_sink(self):
         return True if len(self.outputs) == 0 else False
@@ -189,7 +181,7 @@ class Interface(object):
         r"""
         Compute a predicate of the inputs for which there exists an output.
 
-        Equivalent to the predicate from hiding all module outputs.
+        Equivalent to the predicate from hiding all interface outputs.
 
         Returns
         -------
@@ -205,7 +197,7 @@ class Interface(object):
 
     def refine_io(self, concrete: dict, **kwargs) -> bool:
         r"""
-        Abstracts a concrete I/O transition and refines the module.
+        Abstracts a concrete I/O transition and refines the interface.
 
         Side effects:
             Mutates the pred attribute
@@ -232,7 +224,7 @@ class Interface(object):
         See Also
         --------
         io_refined:
-            Returns a new module instead of mutating it.
+            Returns a new interface instead of mutating it.
 
         """
         assert set(concrete) == set(self.inputs) | set(self.outputs)
@@ -252,9 +244,9 @@ class Interface(object):
 
         return True
 
-    def io_refined(self, concrete: dict, silent: bool=True, **kwargs) -> Interface:
+    def io_refined(self, concrete: dict, silent: bool=True, **kwargs) -> 'Interface':
         r"""
-        Get a module refined with input-output data.
+        Get a interface refined with input-output data.
 
         Parameters
         ----------
@@ -269,12 +261,12 @@ class Interface(object):
         Returns
         -------
         Interface:
-            New refined module
+            New refined interface
 
         See Also
         --------
         refine_io:
-            Mutates the module instead of returning a new one.
+            Mutates the interface directly instead of returning a new one.
 
         """
         assert set(concrete) >= set(self.inputs).union(set(self.outputs))
@@ -307,7 +299,7 @@ class Interface(object):
 
         """
         # Check if shared refinability condition violated.
-        elim_bits: List[str] = []
+        elim_bits: List[str] = [i for i in self.outspace().support]
         for k in self.outputs:
             elim_bits += self.pred_bitvars[k]
         assert self.assum == self.mgr.exist(elim_bits, self.pred & self.outspace())
@@ -448,9 +440,9 @@ class Interface(object):
     def count_io_space(self, bits: int) -> float:
         return self.mgr.count(self.iospace(), bits)
 
-    def ohidden(self, elim_vars) -> Interface:
+    def ohidden(self, elim_vars) -> 'Interface':
         r"""
-        Hides an output variable and returns another module.
+        Hides an output variable and returns another interface.
 
         Parameters
         ----------
@@ -460,18 +452,18 @@ class Interface(object):
         Returns
         -------
         Interface:
-            Another abstract module with the removed outputs
+            Another abstract interface with the removed outputs
 
         """
         from redax.ops import ohide
-        return ohide(elim_vars, self)
+        return ohide(self, elim_vars)
 
-    def ihidden(self, elim_vars: Sequence[str]) -> Interface:
+    def ihidden(self, elim_vars: Sequence[str]) -> 'Interface':
         r"""Hides input variable for sink and returns another sink."""
         from redax.ops import ihide
-        return ihide(elim_vars, self)
+        return ihide(self, elim_vars)
 
-    def coarsened(self, bits=None, **kwargs) -> Interface:
+    def coarsened(self, bits=None, **kwargs) -> 'Interface':
         r"""Remove less significant bits and coarsen the system representation.
 
         Input bits are universally abstracted ("forall")
@@ -487,7 +479,7 @@ class Interface(object):
         from redax.ops import coarsen
         return coarsen(self, bits, **kwargs)
 
-    def renamed(self, names: Dict = None, **kwargs) -> Interface:
+    def renamed(self, names: Dict = None, **kwargs) -> 'Interface':
         """
         Rename input and output ports.
 
@@ -502,9 +494,9 @@ class Interface(object):
         from redax.ops import rename
         return rename(self, names, **kwargs)
 
-    def composed_with(self, other: Interface) -> Interface:
+    def composed_with(self, other: 'Interface') -> 'Interface':
         """
-        Compose two modules.
+        Compose two interfaces.
 
         Automatically detects if the composition is parallel or series composition.
 
@@ -516,23 +508,23 @@ class Interface(object):
         Parameters
         ----------
         other: Interface
-            Module to compose with.
+            Interface to compose with.
 
         Returns
         -------
         Interface:
-            Composed monolithic module
+            Composed monolithic interface
 
         """
         from redax.ops import compose
         return compose(self, other)
 
-    def __rshift__(self, other: Union[Interface, tuple]) -> Interface:
+    def __rshift__(self, other: Union['Interface', tuple]) -> 'Interface':
         r"""
         Series composition or output renaming operator.
 
         Series composition reduces to parallel composition if no output
-        variables feed into the other module's input.
+        variables feed into the other interface's input.
 
         See Also
         --------
@@ -567,11 +559,11 @@ class Interface(object):
         else:
             raise TypeError
 
-    def __rrshift__(self, other) -> Interface:
+    def __rrshift__(self, other) -> 'Interface':
         r"""
         Input renaming operator via serial composition notation.
 
-        Example: module = ("a", "b") >> module
+        Example: interface = ("a", "b") >> interface
 
         """
         if isinstance(other, tuple):
@@ -587,18 +579,18 @@ class Interface(object):
         else:
             raise TypeError
 
-    def __mul__(self, other: Interface) -> Interface:
+    def __mul__(self, other: 'Interface') -> 'Interface':
 
         from redax.ops import parallelcompose
         return parallelcompose(self, other)
 
-    def __add__(self, other: Interface) -> Interface:
+    def __add__(self, other: 'Interface') -> 'Interface':
         from redax.ops import shared_refine
         return shared_refine([self, other], safecheck=False) # TODO: Implement safety check
 
-    def __le__(self, other: Interface) -> bool:
+    def __le__(self, other: 'Interface') -> bool:
         r"""
-        Check for a feedback refinement relation between two modules.
+        Check for a feedback refinement relation between two interfaces.
 
         If abs <= conc then we call abs an abstraction of the concrete system
         conc.
@@ -607,7 +599,7 @@ class Interface(object):
         -------
         bool:
             True if the feedback refinement relation holds.
-            False if there is a type or module port mismatch
+            False if there is a type or interface port mismatch
 
         """
 
@@ -621,17 +613,15 @@ class Interface(object):
 
         # Abstract interface self must accept fewer inputs than other
         if (~self.assum | other.assum != self.mgr.true):
-            breakpoint()
             return False
 
         # Abstract system outputs must be overapproximations
         if (~(self.assum & other.pred) | self.pred) != self.mgr.true:
-            breakpoint()
             return False
 
         return True
 
-    def _direct_io_refined(self, inpred, outpred) -> Interface:
+    def _direct_io_refined(self, inpred, outpred) -> 'Interface':
         """
         Apply io refinement directly from abstract predicates.
 
@@ -645,21 +635,28 @@ class Interface(object):
                          self.assum | inpred)
 
 
-class CompositeModule(object):
-    r"""Container for a collection of modules."""
-    def __init__(self, modules: Collection[Interface], checktopo: bool=True) -> None:
+class CompositeInterface(object):
+    r"""Container for a collection of interfaces."""
+    def __init__(self, modules: Collection['Interface'], checktopo: bool=True) -> None:
 
         if len(modules) < 1:
-            raise ValueError("Empty module collection")
+            raise ValueError("Empty interface collection")
+        mgr = modules[0].mgr
+        for child in modules:
+            assert mgr == child.mgr
 
-        self.children : Tuple[Interface] = tuple(modules)
+        self.children : Tuple['Interface'] = tuple(modules)
 
         if checktopo:
             self.check()
 
     @property
+    def mgr(self):
+        return self.children[0].mgr
+
+    @property
     def _inputs(self):
-        """Variables that are inputs to some module."""
+        """Variables that are inputs to some interface."""
         inputs = dict()
         for mod in self.children:
             for var in mod.inputs:
@@ -679,12 +676,12 @@ class CompositeModule(object):
 
     @property
     def _outputs(self):
-        """Variables that are outputs to some module."""
+        """Variables that are outputs to some interface."""
         outputs = dict()
         for mod in self.children:
             for var in mod.outputs:
                 if var in outputs:
-                    raise ValueError("Multiple modules own output {0}".format(var))
+                    raise ValueError("Multiple interfaces own output {0}".format(var))
                 if var in self._inputs:
                     assert self._inputs[var] == mod.outputs[var]
                 outputs[var] = mod.outputs[var]
@@ -692,6 +689,11 @@ class CompositeModule(object):
 
     @property
     def _var_io(self):
+        """
+        Dict[str, Dict[str, int]]
+        vario[var]['i'] = collection of interface indices that use var as an input
+        vario[var]['o'] = collection of interface indices that use var as an output
+        """
         vario = dict()
         for idx, mod in enumerate(self.children):
             for var in mod.inputs:
@@ -704,27 +706,27 @@ class CompositeModule(object):
                     vario[var] = {'i': [], 'o': []}
                 vario[var]['o'].append(idx)
 
-                # Cannot have output defined by multiple modules
+                # Cannot have output defined by multiple interfaces
                 if len(vario[var]['o']) > 1:
                     raise ValueError
         return vario
 
     @property
     def inputs(self):
-        r"""Variables that are inputs to the composite module."""
+        r"""Variables that are inputs to the composite interface."""
         invars = (var for var, io in self._var_io.items() if len(io['o']) == 0)
         return {var: self._inputs[var] for var in invars}
 
     @property
     def outputs(self):
-        r"""Variables that are outputs to the composite module."""
+        r"""Variables that are outputs to the composite interface."""
         outvars = (var for var, io in self._var_io.items() if len(io['o']) > 0)
         return {var: self._outputs[var] for var in outvars}
 
     @property
     def latent(self):
         r"""
-        Variables that are internal to the composite module.
+        Variables that are internal to the composite interface.
 
         Note: All latent variables are also output variables from self.outputs
         """
@@ -752,7 +754,10 @@ class CompositeModule(object):
         raise NotImplementedError
 
     def sorted_mods(self) -> Tuple[Tuple[Interface]]:
+        """
+        TODO: What order right to left or left to right?
 
+        """
         # Pass to declare dependencies
         deps: Dict[int, Set[int]] = {idx: set() for idx, _ in enumerate(self.children)}
         for _, io in self._var_io.items():
@@ -761,14 +766,15 @@ class CompositeModule(object):
                     deps[inmods].add(io['o'][0])
 
         # Toposort requires that elements are hashable.
-        # self.children[i] converts from an index back to a module
+        # self.children[i] converts from an index back to a interface
         return tuple(
                         tuple(self.children[i] for i in modidx)
                         for modidx in toposort(deps)
                     )
 
-    def hidden(self, var):
-        raise NotImplementedError
+    def is_parallel(self):
+        """ Returns True if the interfaces are composed in parallel"""
+        return True if len(self.sorted_mods()) == 1 else False
 
     def check(self, verbose=False):
         # Check consistency of children
@@ -786,30 +792,34 @@ class CompositeModule(object):
         for child in self.children:
             assert mgr == child.mgr
 
-        # Check validity of module topology
+        # Check validity of interface topology
         # Error will be raised if...
         self._inputs  # Type mismatches between variables with identical name
-        self._outputs # ... module outputs overlap
+        self._outputs # ... interface outputs overlap
         self._var_io
         self.sorted_mods() # Circular dependency detected
 
-    def renamed(self, names: Dict=None, **kwargs) -> CompositeModule:
+    def renamed(self, names: Dict=None, **kwargs) -> 'CompositeInterface':
         """Renames variables for contained interfaces."""
-
+        from redax.ops import rename
         names = dict([]) if names is None else names
         names.update(kwargs)
 
-        return CompositeModule(tuple(child.renamed(**names) for child in self.children))
+        return CompositeInterface(tuple(rename(child, **names)
+                                            for child in self.children
+                                    )
+                                 )
 
-
-    def io_refined(self, concrete, silent: bool=True, **kwargs) -> CompositeModule:
+    def io_refined(self, concrete, silent: bool=True, **kwargs) -> 'CompositeInterface':
         r"""
-        Refine interior modules.
+        Refine interior interfaces.
 
         Minimizes redundant computations of predicates by memoizing.
 
-        Internal modules only updated when all inputs + outputs are provided
+        Internal interfaces only updated when all inputs + outputs are provided
         as keys in 'concrete'.
+
+        TODO: Simplify this function
 
         """
         newmods = []
@@ -817,7 +827,7 @@ class CompositeModule(object):
         # Memoize input/output predicates
         pred_memo = dict()
 
-        # Refine each module individually and append to newmods
+        # Refine each interface individually and append to newmods
         for mod in self.children:
 
 
@@ -890,17 +900,16 @@ class CompositeModule(object):
             else:
                 newmods.append(mod._direct_io_refined(inbox, outbox))
 
-        return CompositeModule(newmods, checktopo=False)
+        return CompositeInterface(newmods, checktopo=False)
 
     def atomized(self) -> Interface:
-        r"""Reduce composite module into a single atomic one."""
+        r"""Reduce composite interface into a single atomic one."""
         raise NotImplementedError
 
 
     @property
     def pred_bitvars(self) -> Dict[str, List[str]]:
         r"""Get dictionary with variable name keys and BDD bit names as values."""
-
 
         allocbits: Dict[str, Set[str]] = {v: set([]) for v in self.vars}
         for mod in self.children:
@@ -913,4 +922,3 @@ class CompositeModule(object):
             list_allocbits[k].sort()
 
         return list_allocbits
-
