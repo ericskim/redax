@@ -129,6 +129,16 @@ class Interface(object):
 
         return allocbits
 
+    @property
+    def pred_precision(self) -> Dict[str, int]:
+        from redax.utils.bv import bv_var_idx
+        precision = {k: 0 for k in self.pred_bitvars.keys()}
+        for bit, rawbits in self.pred_bitvars.items():
+            var_bits = max([int(bv_var_idx(bit)) for bit in rawbits], default = -1) + 1
+            precision[bit] = var_bits
+
+        return precision
+
     def is_sink(self):
         return True if len(self.outputs) == 0 else False
 
@@ -679,6 +689,11 @@ class CompositeInterface(object):
 
     @property
     def _var_io(self):
+        """
+        Dict[str, Dict[str, int]]
+        vario[var]['i'] = collection of interface indices that use var as an input
+        vario[var]['o'] = collection of interface indices that use var as an output
+        """
         vario = dict()
         for idx, mod in enumerate(self.children):
             for var in mod.inputs:
@@ -739,7 +754,10 @@ class CompositeInterface(object):
         raise NotImplementedError
 
     def sorted_mods(self) -> Tuple[Tuple[Interface]]:
+        """
+        TODO: What order right to left or left to right?
 
+        """
         # Pass to declare dependencies
         deps: Dict[int, Set[int]] = {idx: set() for idx, _ in enumerate(self.children)}
         for _, io in self._var_io.items():
@@ -753,6 +771,10 @@ class CompositeInterface(object):
                         tuple(self.children[i] for i in modidx)
                         for modidx in toposort(deps)
                     )
+
+    def is_parallel(self):
+        """ Returns True if the interfaces are composed in parallel"""
+        return True if len(self.sorted_mods()) == 1 else False
 
     def check(self, verbose=False):
         # Check consistency of children

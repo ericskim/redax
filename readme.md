@@ -162,7 +162,7 @@ pip install .
 
 - **Extensible control synthesizers**
 
-  Use multiple built-in control predecessors constructed using the above operators and solvers for enforcing safety, reach, and reach-avoid specifications.
+  Use multiple built-in control predecessors constructed using the above operators to solve safety, reach, and reach-avoid games.
 
   ```python
   from redax.synthesis import ReachGame, DecompCPre, ControlPre

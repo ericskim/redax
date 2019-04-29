@@ -250,6 +250,8 @@ def test_sin_sqrt_comp():
 
     comp = CompositeInterface([sinmod, sqrtmod])
 
+    assert comp.is_parallel() == False
+
     def random_input_gen(module: Interface, scale: float) -> dict:
         iobox = dict()
         for invar, space in module.inputs.items():
@@ -310,6 +312,7 @@ def test_composite_module_topology():
 
     m12 = CompositeInterface((m1, m2))
     assert m12.sorted_mods() == ((m1,), (m2,))
+    assert m12.is_parallel() == False
     assert set(m12.outputs) == {'k', 'b', 'i'}
     assert set(m12.inputs) == {'a', 'j'}
     assert set(m12.latent) == {'i'}

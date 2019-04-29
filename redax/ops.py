@@ -98,6 +98,7 @@ def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
     **kwargs:
         Same dictionary format as names.
 
+    FIXME: Issues arise when swapping names or renaming to an existing variable.
     """
     names = dict([]) if names is None else names
     names.update(kwargs)
@@ -185,8 +186,6 @@ def ihide(mod: Interface, elim_vars: Collection) -> Interface:
         elim_bits += mod.pred_bitvars[k]
 
     newinputs = {k: v for k, v in mod.inputs.items() if k not in elim_vars}
-
-    elim_bits = set(elim_bits) & mod.pred.support
 
     return Interface(mod.mgr,
                      newinputs,

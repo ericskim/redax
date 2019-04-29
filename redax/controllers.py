@@ -10,6 +10,7 @@ from redax.spaces import OutOfDomainError
 from redax.module import Interface
 from redax.utils.bv import bv_var_name, bv_var_idx
 from redax.ops import ihide
+from typing import Optional
 
 
 class MemorylessController():
@@ -32,6 +33,7 @@ class MemorylessController():
 
     def __init__(self, cpre, allowed_controls: Interface):
         self.cpre = cpre
+        assert allowed_controls.is_sink()
         self.C = allowed_controls
 
     def isempty(self):
@@ -40,13 +42,13 @@ class MemorylessController():
     def winning_set(self):
         return ihide(self.C, self.cpre.control.keys())
 
-    def winning_states(self, exclude=None):
+    def winning_states(self, exclude : Optional[Interface]=None):
         r"""
         Generator for states from the winning set.
 
         Parameters
         ----------
-        exclude: bdd
+        exclude: Interface
             Set of states to exclude from generation.
 
         Returns
@@ -58,7 +60,7 @@ class MemorylessController():
 
         # assert exclude.support.issubset(winning.support)
 
-        exclude = self.cpre.mgr.false if exclude is None else exclude
+        exclude = self.cpre.mgr.false if exclude is None else exclude.assum
 
         # Generate a winning point
         for x_assignment in self.cpre.mgr.pick_iter(winning.assum & ~exclude):

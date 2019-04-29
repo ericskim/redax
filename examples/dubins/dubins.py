@@ -9,7 +9,7 @@ import funcy as fn
 
 from redax.module import Interface, CompositeInterface
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover
-from redax.synthesis import ReachGame, ControlPre, DecompCPre, CompConstrainedPre
+from redax.synthesis import ReachGame, ControlPre, PruningCPre, DecompCPre, CompConstrainedPre
 from redax.visualizer import plot3D, plot3D_QT, pixel2D, scatter2D
 from redax.utils.overapprox import maxmincos, maxminsin, shiftbox, bloatbox
 from redax.predicates.dd import BDD
@@ -20,8 +20,13 @@ from redax.ops import coarsen
 Specify dynamics and overapproximations
 """
 
+### Dynamics Parameters
 L= 1.4
 vmax = .5
+# vmax = .3
+angturn = 1.5
+# angturn = 1.0
+
 def dynamics(x, y, theta, v, omega):
     return x + v*np.cos(theta), y + v*np.sin(theta), theta + (1/L) * v * np.sin(omega)
 
@@ -92,7 +97,7 @@ def setup():
     anglespace  = DynamicCover(-np.pi, np.pi, periodic=True)
     # Declare discrete control spaces
     vspace      = EmbeddedGrid(2, vmax/2, vmax)
-    angaccspace = EmbeddedGrid(3, -1.5, 1.5)
+    angaccspace = EmbeddedGrid(3, -angturn, angturn)
 
     """
     Declare interfaces
@@ -106,8 +111,16 @@ def setup():
 
     return mgr, dubins_x, dubins_y, dubins_theta
 
-def coarse_abstract(f: Interface, concrete):
-    bits = 6
+def coarse_abstract(f: Interface, concrete, bits=6):
+    r"""
+    Constructs an abstraction of interface f with two passes with
+    overlapping input sets.
+
+    First pass with 2^bits bins along each dimension.
+    Second pass with same granuarity but shifted by .5.
+
+    The abstraction is saved with 2^(bits+1) bins along each dimension.
+    """
     iter_precision = {'x': bits, 'y':bits, 'theta': bits,
                  'xnext': bits, 'ynext': bits, 'thetanext': bits}
     save_precision = {k: v+1 for k,v in iter_precision.items()}
@@ -210,7 +223,9 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
     elif cpretype is "monolithic":
 
         # Synthesize using a monolithic model that is the parallel composition of components
+        starttime = time.time()
         dubins = composite.children[0] * composite.children[1] * composite.children[2]
+        print("Monolithic merge time: {}s".format(time.time()-starttime))
         cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
         game = ReachGame(cpre, targetmod)
         starttime = time.time()
@@ -219,7 +234,7 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
 
     elif cpretype is "compconstr":
 
-        maxnodes = 5000
+        maxnodes = 7000
 
         def condition(iface: Interface) ->  bool:
             """
@@ -286,7 +301,8 @@ def plots(mgr, basin, composite):
     anglespace = composite['theta']
 
     # # Plot reachable winning set
-    plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, 60)
+    # plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, opacity=44, fname="dubins_nodes{}".format(len(basin.pred)))
+    # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, opacity=44)
 
     # # Plot x transition relation for v = .5
     # xdyn = mgr.exist(['v_0'],(composite.children[0].pred) & mgr.var('v_0'))
@@ -294,11 +310,12 @@ def plots(mgr, basin, composite):
 
     # # Plot y transition relation for v = .5
     # ydyn = mgr.exist(['v_0'],(composite.children[1].pred) & mgr.var('v_0'))
-    # plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, opacity=128, raisebiterror=False)
+    # plot3D(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, opacity=128, raisebiterror=False)
 
     # Plot theta component
     # thetadyn = mgr.exist(['v_0', 'omega_0', 'omega_1'],(composite.children[2].pred) & mgr.var('v_0') & mgr.var('omega_0') & ~mgr.var('omega_1') )
     # scatter2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn)
+    # pixel2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn)
 
 
 def simulate(controller):
@@ -327,22 +344,27 @@ def simulate(controller):
 if __name__ is "__main__":
     mgr, dubins_x, dubins_y, dubins_theta = setup()
 
-    # composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
-    # composite = rand_abstract_composite(composite, samples=30000)
-
-    dubins_x = coarse_abstract(dubins_x, xwindow)
-    dubins_y = coarse_abstract(dubins_y, ywindow)
-    dubins_theta = coarse_abstract(dubins_theta, thetawindow)
     composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
+    composite = rand_abstract_composite(composite, samples=30000)
+
+    # bits = 6
+    # dubins_x = coarse_abstract(dubins_x, xwindow, bits=bits)
+    # dubins_y = coarse_abstract(dubins_y, ywindow, bits=bits)
+    # dubins_theta = coarse_abstract(dubins_theta, thetawindow, bits=bits)
+    # composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
 
     # Heuristic used to reduce the size or "compress" the abstraction representation.
     # Higher significant bits first
     mgr.reorder(order_heuristic(mgr))
     mgr.configure(reordering=False)
 
-    targetmod = make_target(mgr, composite)
+    starttime = time.time()
+    # composite = CompositeInterface([composite.children[0] * composite.children[2], composite.children[1]])
+    print("Decomp Intermed merge time: {}s".format(time.time()-starttime))
 
-    basin, controller = run_reach(targetmod, composite)
+    target = make_target(mgr, composite)
+
+    basin, controller = run_reach(target, composite, steps=20, cpretype="decomp")
 
     plots(mgr, basin, composite)
     simulate(controller)

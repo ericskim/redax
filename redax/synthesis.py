@@ -5,7 +5,7 @@ from typing import Optional, Union, Sequence, Callable
 from bidict import bidict
 
 from redax.controllers import MemorylessController
-from redax.utils.bv import flatten, bv_var_name
+from redax.utils.bv import flatten, bv_var_name, bv_var_idx
 from redax.module import Interface, CompositeInterface
 from redax.ops import compose, ihide, sinkprepend, coarsen, rename
 
@@ -72,7 +72,7 @@ class ControlPre():
         return self.mgr.exist(elimbits, pred_in_space)
 
 
-    def __call__(self, Z: Interface, no_inputs:bool=False, verbose=False) -> Interface:
+    def __call__(self, Z: Interface, verbose=False) -> Interface:
         """One step control predecessor"""
         assert Z.is_sink()
 
@@ -85,11 +85,8 @@ class ControlPre():
         # Compute robust state-input pairs
         xu = sinkprepend(self.sys, Z)
 
-        # Return state-input pairs or only states
-        if no_inputs:
-            return ihide(xu, self.control)
-        else:
-            return xu
+        # Return state-input pairs
+        return xu
 
 class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
 
@@ -97,10 +94,10 @@ class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
                  mod: CompositeInterface,
                  states,
                  control,
-                 elim_order: Sequence = None) -> None:
+                 elim_order: Optional[Sequence] = None) -> None:
 
         # Check if all modules aren't just a parallel composition
-        if len(mod.sorted_mods()) > 2:
+        if not mod.is_parallel():
             raise NotImplementedError("Only implemented for parallel composed modules.")
 
         ControlPre.__init__(self, mod, states, control)
@@ -113,43 +110,31 @@ class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
         return self.sys.children[0].mgr
 
 
-    def __call__(self, Z: Interface, no_inputs=False, verbose=False) -> Interface:
+    def __call__(self, Z: Interface, verbose=False) -> Interface:
         """One step control predecessor"""
         assert Z.is_sink()
 
-        Z = rename(Z, self.pre_to_post)
+        Z = rename(Z, names=self.pre_to_post)
 
         # See if the user has provided a pre-determined order to compose interfaces.
         if self.elimorder is not None:
             to_elim_post = list(self.elimorder)
         else:
-            to_elim_post = list(self.poststate)
+            to_elim_post = list(self.sys.children)
 
-        # Eliminate each interface output
-        # FIXME: This code assumes that each module only has a single output.
-        # Should instead iterate over modules. Find a better way to specify the
-        # module to be outputted. Can't hash them unfortunately.
-        # Also doesn't take into account arbitrary DAG topologies and control inputs.
+        # Eliminate each interface
         while(len(to_elim_post) > 0):
-            var = to_elim_post.pop()
+            mod = to_elim_post.pop()
+            if verbose:
+                print("Prepending {}".format(set(mod.outputs.keys())))
 
-            # Partition into modules that do/don't depend on var
-            dep_mods = tuple(mod for mod in self.sys.children if var in mod.outputs)
+            # Find Z bit precisions to preemptively coarsen to identical precision
+            commonvars = set(mod.outputs) & set(Z.inputs)
+            precisions = {var: Z.pred_precision[var] for var in commonvars}
 
-            if len(dep_mods) == 0:
-                continue
+            Z = sinkprepend(coarsen(mod, **precisions), Z)
 
-            # Find Z bit precision.
-            Z_var_bits = len([b for b in Z.assum.support if bv_var_name(b) == var])
-            assert Z_var_bits == len(Z.pred_bitvars[var])
-
-            for mod in dep_mods:
-                Z = sinkprepend(coarsen(mod, **{var: Z_var_bits}), Z)
-
-        if no_inputs:
-            return ihide(Z, self.control)
-        else:
-            return Z
+        return Z
 
 
 class CompConstrainedPre(DecompCPre):
@@ -162,8 +147,11 @@ class CompConstrainedPre(DecompCPre):
                  control,
                  condition:Optional[Callable] = None,
                  heuristic:Optional[Callable] = None,
-                 elim_order: Sequence = None,) -> None:
+                 elim_order: Sequence = None) -> None:
         ControlPre.__init__(self, mod, states, control)
+
+        if not mod.is_parallel():
+            raise NotImplementedError("Only implemented for parallel composed modules.")
 
         # Default condition never triggers heuristic
         self.condition = condition if condition else lambda x: False
@@ -174,50 +162,83 @@ class CompConstrainedPre(DecompCPre):
         self.elimorder = elim_order
 
 
-    def __call__(self, Z: Interface, no_inputs=False, verbose=False) -> Interface:
+    def __call__(self, Z: Interface, verbose=False) -> Interface:
         """
         One step decomposed control predecessor
         Coarsens Z interface whenever its complexity grows too large.
         """
         assert Z.is_sink()
 
-        Z = rename(Z, self.pre_to_post)
+        Z = rename(Z, names=self.pre_to_post)
 
         # See if the user has provided a pre-determined order to compose interfaces.
         if self.elimorder is not None:
             to_elim_post = list(self.elimorder)
         else:
-            to_elim_post = list(self.poststate)
-
-        # Eliminate each interface output
-        # FIXME: This code assumes that each module only has a single output.
-        # Should instead iterate over modules. Find a better way to specify the
-        # module to be outputted. Can't hash them unfortunately.
-        # Also doesn't take into account arbitrary DAG topologies and control inputs.
-        while(len(to_elim_post) > 0):
-            var = to_elim_post.pop()
-
-            # Partition into modules that do/don't depend on var
-            dep_mods = tuple(mod for mod in self.sys.children if var in mod.outputs)
-
-            if len(dep_mods) == 0:
-                continue
-
-            # Find Z bit precision.
-            Z_var_bits = len([b for b in Z.assum.support if bv_var_name(b) == var])
-            assert Z_var_bits == len(Z.pred_bitvars[var])
-
-            for mod in dep_mods:
-                Z = sinkprepend(coarsen(mod, **{var: Z_var_bits}), Z)
+            to_elim_post = list(self.sys.children)
 
         if self.condition(Z):
             Z = self.heuristic(Z)
 
-        if no_inputs:
-            return ihide(Z, self.control)
-        else:
-            return Z
+        # Eliminate each interface
+        while(len(to_elim_post) > 0):
+            mod = to_elim_post.pop()
+            if verbose:
+                print("Eliminating {} and current interface has {} nodes".format(var, len(Z.pred)))
 
+            # Find Z bit precisions to preemptively coarsen to identical precision
+            commonvars = set(mod.outputs) & set(Z.inputs)
+            precisions = {var: Z.pred_precision[var] for var in commonvars}
+
+            Z = sinkprepend(coarsen(mod, **precisions), Z)
+
+        return Z
+
+
+class PruningCPre(DecompCPre):
+    def __init__(self,
+                 mod: CompositeInterface,
+                 states,
+                 control,
+                 elim_order: Sequence = None) -> None:
+
+        # Check if all modules aren't just a parallel composition
+        if not mod.is_parallel():
+            raise NotImplementedError("Only implemented for parallel composed modules.")
+
+        ControlPre.__init__(self, mod, states, control)
+
+        self.elimorder = elim_order
+
+    def __call__(self, Z: Interface, verbose=False) -> Interface:
+        """One step control predecessor"""
+        assert Z.is_sink()
+
+        Z = rename(Z, names=self.pre_to_post)
+
+        # See if the user has provided a pre-determined order to compose interfaces.
+        if self.elimorder is not None:
+            to_elim_post = list(self.elimorder)
+        else:
+            to_elim_post = list(self.sys.children)
+
+        # Eliminate each interface
+        while(len(to_elim_post) > 0):
+            mod = to_elim_post.pop()
+            if verbose:
+                print("Eliminating {}".format(mod.outputs))
+
+            # Find Z bit precisions to preemptively coarsen to identical precision
+            commonvars = set(mod.outputs) & set(Z.inputs)
+            precisions = {var: Z.pred_precision[var] for var in commonvars}
+
+            # Simplify mod by reducing input domain, but retain enough to compute new Z
+            Zproj = ihide(Z, set(Z.inputs) - set(mod.outputs))
+            mod = sinkprepend(mod, Zproj) * mod
+
+            Z = sinkprepend(coarsen(mod, **precisions), Z)
+
+        return Z
 
 class SafetyGame():
     """
@@ -293,12 +314,16 @@ class SafetyGame():
             i = i + 1
 
             if verbose:
-                print("Step #: ", i,
-                      "Step Time (s): {0:.3f}".format(time.time() - step_start),
-                      "Winning Size:", self.cpre.mgr.count(z.assum, len(z.assum.support)),
+                bits = len(z.assum.support)
+                print("\nStep #: ", i,
+                      "Step Time (s): ", time.time() - step_start,
+                      "Size: {}".format(self.cpre.mgr.count(z.assum, bits)),
+                      "Bits: {}".format(bits),
                       "Winning nodes:", len(z.assum))
 
+
         return z, i, MemorylessController(self.cpre, C)
+
 
 class ReachGame():
     """
@@ -322,7 +347,8 @@ class ReachGame():
     def run(self,
             steps: Optional[int]=None,
             winning: Optional[Interface]=None,
-            verbose:bool=False):
+            verbose:bool=False,
+            winningonly:bool=False):
         """
         Run a reachability game until reaching a fixed point or a maximum number of steps.
 
@@ -364,18 +390,24 @@ class ReachGame():
             step_start = time.time()
             z = self.cpre(zz, verbose=verbose) # state-input pairs
             # TODO: Change this to shared refinement?
-            C._assum = C.assum | (z.assum & ~self.cpre.elimcontrol(C.assum))  # Add new state-input pairs to controller
+            if not winningonly:
+                C._assum = C.assum | (z.assum & ~self.cpre.elimcontrol(C.assum))  # Add new state-input pairs to controller
+
             if verbose:
                 print("Eliminating control")
             z = ihide(z, self.cpre.control)
+
             z = z + self.target
 
             i += 1
             if verbose:
-                print("Step #: ", i,
+                bits = len(z.assum.support)
+                print("\nStep #: ", i,
                       "Step Time (s): ", time.time() - step_start,
-                      "Size: ", self.cpre.mgr.count(z.assum, len(z.assum.support)),
+                      "Size: {}".format(self.cpre.mgr.count(z.assum, bits)),
+                      "Bits: {}".format(bits),
                       "Winning nodes:", len(z.assum))
+
 
         return z, i, MemorylessController(self.cpre, C)
 
@@ -412,7 +444,8 @@ class ReachAvoidGame():
     def run(self,
             steps: Optional[int]=None,
             winning: Optional[Interface]=None,
-            verbose:bool=False):
+            verbose:bool=False,
+            winningonly:bool=False):
         """
         Run a reach-avoid game until reaching a fixed point or a maximum number of steps.
 
@@ -422,6 +455,8 @@ class ReachAvoidGame():
         ----------
         steps: int
             Maximum number of game steps to run
+        winningonly:
+            If true, only outputs the winning region and not the controller
 
         Returns
         -------
@@ -456,8 +491,9 @@ class ReachAvoidGame():
             z = self.cpre(zz, verbose=verbose) # state-input pairs
             # z = (self.cpre(zz, verbose=verbose) * self.safe) + self.target  # state-input pairs
             # C = C | (z.assum & ~self.cpre.elimcontrol(C))  # Add new state-input pairs to controller
-            C._assum = C.assum | (z.assum & ~self.cpre.elimcontrol(C.assum))  # Add new state-input pairs to controller
-            C._assum &= self.safe.assum
+            if not winningonly:
+                C._assum = C.assum | (z.assum & ~self.cpre.elimcontrol(C.assum))  # Add new state-input pairs to controller
+                C._assum &= self.safe.assum
 
             if verbose:
                 print("Eliminating control")
@@ -467,9 +503,11 @@ class ReachAvoidGame():
 
             i += 1
             if verbose:
-                print("Step #: ", i,
+                bits = len(z.assum.support)
+                print("\nStep #: ", i,
                       "Step Time (s): ", time.time() - step_start,
-                      "Size: ", self.cpre.mgr.count(z.assum, len(z.assum.support)),
+                      "Size: {}".format(self.cpre.mgr.count(z.assum, bits)),
+                      "Bits: {}".format(bits),
                       "Winning nodes:", len(z.assum))
 
 
