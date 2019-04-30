@@ -94,7 +94,9 @@ class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
                  mod: CompositeInterface,
                  states,
                  control,
-                 elim_order: Optional[Sequence] = None) -> None:
+                 elim_order: Optional[Sequence]=None,
+                 pre_process: Optional[Callable]=None,
+                 post_process: Optional[Callable]=None) -> None:
 
         # Check if all modules aren't just a parallel composition
         if not mod.is_parallel():
@@ -104,6 +106,8 @@ class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
 
         self.elimorder = elim_order
 
+        self.pre_process = pre_process if pre_process else lambda x: x
+        self.post_process = post_process if post_process else lambda x: x
 
     @property
     def mgr(self):
@@ -122,6 +126,8 @@ class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
         else:
             to_elim_post = list(self.sys.children)
 
+        Z = self.pre_process(Z)
+
         # Eliminate each interface
         while(len(to_elim_post) > 0):
             mod = to_elim_post.pop()
@@ -134,65 +140,10 @@ class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
 
             Z = sinkprepend(coarsen(mod, **precisions), Z)
 
-        return Z
-
-
-class CompConstrainedPre(DecompCPre):
-    """
-    Identical to decomppre but calls a heuristic to reduce the size of the output.
-    """
-    def __init__(self,
-                 mod: CompositeInterface,
-                 states,
-                 control,
-                 condition:Optional[Callable] = None,
-                 heuristic:Optional[Callable] = None,
-                 elim_order: Sequence = None) -> None:
-        ControlPre.__init__(self, mod, states, control)
-
-        if not mod.is_parallel():
-            raise NotImplementedError("Only implemented for parallel composed modules.")
-
-        # Default condition never triggers heuristic
-        self.condition = condition if condition else lambda x: False
-
-        # Default heuristic does nothing and is identity function
-        self.heuristic = heuristic if heuristic else lambda x: x
-
-        self.elimorder = elim_order
-
-
-    def __call__(self, Z: Interface, verbose=False) -> Interface:
-        """
-        One step decomposed control predecessor
-        Coarsens Z interface whenever its complexity grows too large.
-        """
-        assert Z.is_sink()
-
-        Z = rename(Z, names=self.pre_to_post)
-
-        # See if the user has provided a pre-determined order to compose interfaces.
-        if self.elimorder is not None:
-            to_elim_post = list(self.elimorder)
-        else:
-            to_elim_post = list(self.sys.children)
-
-        if self.condition(Z):
-            Z = self.heuristic(Z)
-
-        # Eliminate each interface
-        while(len(to_elim_post) > 0):
-            mod = to_elim_post.pop()
-            if verbose:
-                print("Eliminating {} and current interface has {} nodes".format(var, len(Z.pred)))
-
-            # Find Z bit precisions to preemptively coarsen to identical precision
-            commonvars = set(mod.outputs) & set(Z.inputs)
-            precisions = {var: Z.pred_precision[var] for var in commonvars}
-
-            Z = sinkprepend(coarsen(mod, **precisions), Z)
+        Z = self.post_process(Z)
 
         return Z
+
 
 
 class PruningCPre(DecompCPre):
@@ -232,7 +183,7 @@ class PruningCPre(DecompCPre):
             commonvars = set(mod.outputs) & set(Z.inputs)
             precisions = {var: Z.pred_precision[var] for var in commonvars}
 
-            # Simplify mod by reducing input domain, but retain enough to compute new Z
+            # Simplify mod by reducing input domain, but retain enough to yield identical Z result
             Zproj = ihide(Z, set(Z.inputs) - set(mod.outputs))
             mod = sinkprepend(mod, Zproj) * mod
 
@@ -254,7 +205,7 @@ class SafetyGame():
     """
 
     def __init__(self,
-                 cpre: Union[ControlPre, DecompCPre, CompConstrainedPre],
+                 cpre: Union[ControlPre, DecompCPre],
                  safeset: Interface) -> None:
         self.cpre = cpre
         self.safe = safeset  # TODO: Check if a subset of the state space
@@ -339,7 +290,7 @@ class ReachGame():
     """
 
     def __init__(self,
-                 cpre: Union[ControlPre, DecompCPre, CompConstrainedPre],
+                 cpre: Union[ControlPre, DecompCPre],
                  target: Interface) -> None:
         self.cpre: Interface = cpre
         self.target: Interface = target  # TODO: Check if a subset of the state space
@@ -430,7 +381,7 @@ class ReachAvoidGame():
     """
 
     def __init__(self,
-                 cpre: Union[ControlPre, DecompCPre, CompConstrainedPre],
+                 cpre: Union[ControlPre, DecompCPre],
                  safe: Interface,
                  target: Interface) -> None:
 

@@ -2,6 +2,7 @@ r"""
 Dubins vehicle example script
 """
 
+import sys
 import time
 
 import numpy as np
@@ -9,7 +10,7 @@ import funcy as fn
 
 from redax.module import Interface, CompositeInterface
 from redax.spaces import DynamicCover, EmbeddedGrid, FixedCover
-from redax.synthesis import ReachGame, ControlPre, PruningCPre, DecompCPre, CompConstrainedPre
+from redax.synthesis import ReachGame, ControlPre, PruningCPre, DecompCPre
 from redax.visualizer import plot3D, plot3D_QT, pixel2D, scatter2D
 from redax.utils.overapprox import maxmincos, maxminsin, shiftbox, bloatbox
 from redax.predicates.dd import BDD
@@ -126,6 +127,7 @@ def coarse_abstract(f: Interface, concrete, bits=6):
     save_precision = {k: v+1 for k,v in iter_precision.items()}
     outvar = fn.first(f.outputs)
 
+
     for shift in [0.0, 0.5]:
         iter = f.input_iter(precision=iter_precision)
         for iobox in iter:
@@ -138,6 +140,7 @@ def coarse_abstract(f: Interface, concrete, bits=6):
             iobox[outvar] = concrete(**iobox)
 
             f = f.io_refined(iobox, nbits=save_precision)
+
 
     return f
 
@@ -210,7 +213,10 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
 
     assert cpretype in ["decomp", "monolithic", "compconstr"]
 
-    if cpretype is  "decomp":
+    basinsizehist = []
+    basinnodehist = []
+
+    if cpretype ==  "decomp":
 
         # Synthesize using a decomposed model that never recombines multiple components together.
         # Typically more efficient than the monolithic case
@@ -220,7 +226,7 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
         basin, steps, controller = dgame.run(verbose=False, steps=steps)
         print("Decomp Solve Time:", time.time() - dstarttime)
 
-    elif cpretype is "monolithic":
+    elif cpretype == "monolithic":
 
         # Synthesize using a monolithic model that is the parallel composition of components
         starttime = time.time()
@@ -232,19 +238,9 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
         basin, steps, controller = game.run(verbose=False, steps=steps)
         print("Monolithic Solve Time:", time.time() - starttime)
 
-    elif cpretype is "compconstr":
+    elif cpretype == "compconstr":
 
-        maxnodes = 7000
-
-        def condition(iface: Interface) ->  bool:
-            """
-            Checks for interface BDD complexity.
-            Returns true if above threshold
-            """
-            if len(iface.pred) > maxnodes:
-                print("Interface # nodes {} exceeds maximum {}".format(len(iface.pred), maxnodes))
-                return True
-            return False
+        maxnodes = 1000
 
         def heuristic(iface: Interface) -> Interface:
             """
@@ -252,9 +248,9 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
             least until a certain size met.
             """
 
-            assert iface.is_sink()
-
             while (len(iface.pred) > maxnodes):
+                assert iface.is_sink()
+                # print("Interface # nodes {} exceeds maximum {}".format(len(iface.pred), maxnodes))
                 granularity = {k: len(v) for k, v in iface.pred_bitvars.items()
                                     if k in ['x', 'y', 'theta', 'xnext', 'ynext', 'thetanext']
                             }
@@ -270,25 +266,29 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
                 # print("Coarsening along dimension {}".format(best_var))
                 iface = coarsen(iface, bits={best_var: granularity[best_var]-1})
 
+            basinnodehist.append(len(iface.pred))
+            basinsizehist.append(iface.count_nb(7*3))
+
             return iface
-
-
-        cpre = CompConstrainedPre(composite,
-                                (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')),
-                                ('v', 'omega'),
-                                condition,
-                                heuristic)
+        cpre = DecompCPre(composite,
+                            (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')),
+                            ('v', 'omega'),
+                            pre_process=heuristic
+                        )
         game = ReachGame(cpre, targetmod)
         starttime = time.time()
         basin, steps, controller = game.run(steps=steps, verbose=False)
         print("Comp Constrained Solve Time:", time.time() - starttime)
-
+    else:
+        import pdb; pdb.set_trace()
 
     # Print statistics about reachability basin
     print("Reach Size:", basin.count_nb( len(basin.pred.support | targetmod.pred.support)))
     print("Reach BDD nodes:", len(basin.pred))
     print("Target Size:", targetmod.count_nb(len(basin.pred.support | targetmod.pred.support)))
     print("Game Steps:", steps)
+    print("Basin Size Hist:", basinsizehist)
+    print("# Node hist:", basinnodehist)
 
     return basin, controller
 
@@ -302,7 +302,7 @@ def plots(mgr, basin, composite):
 
     # # Plot reachable winning set
     # plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, opacity=44, fname="dubins_nodes{}".format(len(basin.pred)))
-    # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, opacity=44)
+    plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, opacity=44)
 
     # # Plot x transition relation for v = .5
     # xdyn = mgr.exist(['v_0'],(composite.children[0].pred) & mgr.var('v_0'))
@@ -316,6 +316,30 @@ def plots(mgr, basin, composite):
     # thetadyn = mgr.exist(['v_0', 'omega_0', 'omega_1'],(composite.children[2].pred) & mgr.var('v_0') & mgr.var('omega_0') & ~mgr.var('omega_1') )
     # scatter2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn)
     # pixel2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn)
+
+
+    # # Plot reachable winning set
+    # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, 60)
+    # plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, view=(30, -144), fname="finedubinbasin")
+
+    # # Plot x transition relation for v = .5
+    # xdyn = mgr.exist(['v_0'],(composite.children[0].pred) & mgr.var('v_0'))
+    # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
+
+    # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
+
+    # for i in [3,4,5,6,7]:
+    #     xdyn = mgr.exist(['v_0'],(composite.children[0].coarsened(x=i, theta=i, xnext=i).pred) & mgr.var('v_0'))
+    #     plot3D(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, view=(30, -144), fname="xcomp{}.png".format(i))
+
+    # # Plot y transition relation for v = .5
+    # ydyn = mgr.exist(['v_0'],(composite.children[1].pred) & mgr.var('v_0'))
+    # plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
+
+    # # Plot theta component
+    # thetadyn = mgr.exist(['v_0', 'omega_0', 'omega_1'],(composite.children[2].pred) & mgr.var('v_0') & mgr.var('omega_0') & ~mgr.var('omega_1') )
+    # pixel2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn, 128)
+
 
 
 def simulate(controller):
@@ -341,30 +365,70 @@ def simulate(controller):
                 'theta': nextstate[2]}
 
 
-if __name__ is "__main__":
+if __name__ == "__main__":
+
+    print(sys.argv)
     mgr, dubins_x, dubins_y, dubins_theta = setup()
 
-    composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
-    composite = rand_abstract_composite(composite, samples=30000)
+    if '-samp' in sys.argv:
+        idx = sys.argv.index('-samp') + 1
+        samples = int(sys.argv[idx])
 
-    # bits = 6
-    # dubins_x = coarse_abstract(dubins_x, xwindow, bits=bits)
-    # dubins_y = coarse_abstract(dubins_y, ywindow, bits=bits)
-    # dubins_theta = coarse_abstract(dubins_theta, thetawindow, bits=bits)
-    # composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
+        composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
+        composite = rand_abstract_composite(composite, samples=samples)
+    else:
+        bits = 6
+        abs_starttime = time.time()
+        dubins_x = coarse_abstract(dubins_x, xwindow, bits=bits)
+        dubins_y = coarse_abstract(dubins_y, ywindow, bits=bits)
+        dubins_theta = coarse_abstract(dubins_theta, thetawindow, bits=bits)
+        composite = CompositeInterface([dubins_x, dubins_y, dubins_theta])
+        print("Abstraction Time: ", time.time() - abs_starttime)
 
     # Heuristic used to reduce the size or "compress" the abstraction representation.
     # Higher significant bits first
     mgr.reorder(order_heuristic(mgr))
     mgr.configure(reordering=False)
 
-    starttime = time.time()
-    # composite = CompositeInterface([composite.children[0] * composite.children[2], composite.children[1]])
-    print("Decomp Intermed merge time: {}s".format(time.time()-starttime))
+    if "-merge" in sys.argv:
+        idx = sys.argv.index('-merge') + 1
+        mergetype = int(sys.argv[idx])
+
+        starttime = time.time()
+        if mergetype == 0: # x y theta
+            pass
+        elif mergetype == 1: # xy theta
+            composite = CompositeInterface([composite.children[0] * composite.children[1], composite.children[2]])
+        elif mergetype == 2: # xtheta y
+            composite = CompositeInterface([composite.children[0] * composite.children[2], composite.children[1]])
+        elif mergetype == 3: # ytheta x
+            composite = CompositeInterface([composite.children[1] * composite.children[2], composite.children[0]])
+        elif mergetype == 4: # xytheta
+            composite = CompositeInterface([composite.children[0] * composite.children[1] * composite.children[2]])
+        else:
+            raise ValueError("Invalid option")
+
+        print("Abstraction merge time: {}s".format(time.time()-starttime))
 
     target = make_target(mgr, composite)
 
-    basin, controller = run_reach(target, composite, steps=20, cpretype="decomp")
+    if "-cpre" in sys.argv:
+        idx = sys.argv.index('-cpre') + 1
+        cpretype = sys.argv[idx]
+    else:
+        cpretype = "decomp"
 
-    plots(mgr, basin, composite)
-    simulate(controller)
+    if "-steps" in sys.argv:
+        idx = sys.argv.index('-steps') + 1
+        steps = int(sys.argv[idx])
+    else:
+        steps = None
+
+    basin, controller = run_reach(target, composite, steps=steps, cpretype=cpretype)
+
+
+    if "-p" in sys.argv:
+        plots(mgr, basin, composite)
+    if "-sim" in sys.argv:
+        simulate(controller)
+    print("\n")

@@ -154,7 +154,7 @@ def plot_basin(mgr, composite, basin):
     # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),    ihide(controller.C, {'v','v2','omega','omega2','x2', 'y2', 'theta2'}).pred, 60)
     # plot3D_QT(mgr, ('x2', pspace), ('y2', pspace), ('theta2', anglespace), ihide(controller.C, {'v','v2','omega','omega2','x', 'y', 'theta'}).pred, 60)
 
-if __name__ is "__main__":
+if __name__ == "__main__":
 
     mgr, dubins_x, dubins_y, dubins_theta = setup()
 

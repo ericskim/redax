@@ -340,7 +340,7 @@ def order_heuristic(mgr, var_priority = None):
 
     return {var: idx for idx, var in enumerate(order_seed)}
 
-if __name__ is "__main__":
+if __name__ == "__main__":
 
     # Run setup only on startup or if user sets cleanse option.
     init = True
