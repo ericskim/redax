@@ -88,7 +88,7 @@ class ControlPre():
         # Return state-input pairs
         return xu
 
-class DecompCPre(ControlPre):     # TODO: Get rid of inheritance??
+class DecompCPre(ControlPre):   # TODO: Get rid of inheritance??
 
     def __init__(self,
                  mod: CompositeInterface,
@@ -208,7 +208,7 @@ class SafetyGame():
                  cpre: Union[ControlPre, DecompCPre],
                  safeset: Interface) -> None:
         self.cpre = cpre
-        self.safe = safeset  # TODO: Check if a subset of the state space
+        self.safe = safeset
 
     def run(self, steps: Optional[int]=None, winning: Optional[Interface]=None, verbose=False, winningonly=False):
         """
@@ -293,7 +293,7 @@ class ReachGame():
                  cpre: Union[ControlPre, DecompCPre],
                  target: Interface) -> None:
         self.cpre: Interface = cpre
-        self.target: Interface = target  # TODO: Check if a subset of the state space
+        self.target: Interface = target
 
     def run(self,
             steps: Optional[int]=None,
@@ -340,7 +340,6 @@ class ReachGame():
             zz = z
             step_start = time.time()
             z = self.cpre(zz, verbose=verbose) # state-input pairs
-            # TODO: Change this to shared refinement?
             if not winningonly:
                 C._assum = C.assum | (z.assum & ~self.cpre.elimcontrol(C.assum))  # Add new state-input pairs to controller
 
@@ -386,7 +385,7 @@ class ReachAvoidGame():
                  target: Interface) -> None:
 
         self.cpre = cpre
-        self.target = target  # TODO: Check if a subset of the state space
+        self.target = target
         self.safe = safe
 
         assert set(cpre.prestate.keys()) == set(target.inputs.keys())
