@@ -89,6 +89,9 @@ class ControlPre():
         return xu
 
 class DecompCPre(ControlPre):   # TODO: Get rid of inheritance??
+    r"""
+    Controlled Predecessor that takes a decomposed system representation
+    """
 
     def __init__(self,
                  mod: CompositeInterface,
@@ -96,6 +99,7 @@ class DecompCPre(ControlPre):   # TODO: Get rid of inheritance??
                  control,
                  elim_order: Optional[Sequence]=None,
                  pre_process: Optional[Callable]=None,
+                 intermed_process: Optional[Callable]=None,
                  post_process: Optional[Callable]=None) -> None:
 
         # Check if all modules aren't just a parallel composition
@@ -107,7 +111,9 @@ class DecompCPre(ControlPre):   # TODO: Get rid of inheritance??
         self.elimorder = elim_order
 
         self.pre_process = pre_process if pre_process else lambda x: x
+        self.intermed_process = intermed_process if intermed_process else lambda x: x
         self.post_process = post_process if post_process else lambda x: x
+
 
     @property
     def mgr(self):
@@ -118,6 +124,8 @@ class DecompCPre(ControlPre):   # TODO: Get rid of inheritance??
         """One step control predecessor"""
         assert Z.is_sink()
 
+        Z = self.pre_process(Z)
+
         Z = rename(Z, names=self.pre_to_post)
 
         # See if the user has provided a pre-determined order to compose interfaces.
@@ -126,13 +134,13 @@ class DecompCPre(ControlPre):   # TODO: Get rid of inheritance??
         else:
             to_elim_post = list(self.sys.children)
 
-        Z = self.pre_process(Z)
-
         # Eliminate each interface
         while(len(to_elim_post) > 0):
             mod = to_elim_post.pop()
             if verbose:
                 print("Prepending {}".format(set(mod.outputs.keys())))
+
+            Z = self.intermed_process(Z)
 
             # Find Z bit precisions to preemptively coarsen to identical precision
             commonvars = set(mod.outputs) & set(Z.inputs)
@@ -207,6 +215,9 @@ class SafetyGame():
     def __init__(self,
                  cpre: Union[ControlPre, DecompCPre],
                  safeset: Interface) -> None:
+
+        assert safeset.is_sink()
+
         self.cpre = cpre
         self.safe = safeset
 

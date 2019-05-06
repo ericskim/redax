@@ -141,7 +141,6 @@ def coarse_abstract(f: Interface, concrete, bits=6):
 
             f = f.io_refined(iobox, nbits=save_precision)
 
-
     return f
 
 def generate_random_io(pspace, anglespace):
@@ -175,12 +174,16 @@ def rand_abstract_composite(composite: CompositeInterface, samples = 10000):
                 'xnext': bits, 'ynext': bits, 'thetanext': bits}
     abs_starttime = time.time()
     np.random.seed(1337)
-    for _ in range(samples):
+    for i in range(samples):
 
         iobox = generate_random_io(pspace, anglespace)
 
         # Refine abstraction with granularity specified in the precision variable
         composite = composite.io_refined(iobox, nbits=precision)
+
+        if i % 500 == 499:
+            xdyn = mgr.exist(['v_0'],(composite.children[0].coarsened(x=6, theta=6, xnext=6).pred) & mgr.var('v_0'))
+            plot3D(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, view=(30, -144), fname="xcompsamp{}".format(i+1), opacity=80)
 
     print("Abstraction Time: ", time.time() - abs_starttime)
     composite.check()
@@ -302,7 +305,7 @@ def plots(mgr, basin, composite):
 
     # # Plot reachable winning set
     # plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, opacity=44, fname="dubins_nodes{}".format(len(basin.pred)))
-    plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, opacity=44)
+    # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, opacity=44)
 
     # # Plot x transition relation for v = .5
     # xdyn = mgr.exist(['v_0'],(composite.children[0].pred) & mgr.var('v_0'))
@@ -328,9 +331,15 @@ def plots(mgr, basin, composite):
 
     # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
 
-    # for i in [3,4,5,6,7]:
+    # Coarsen x dynamics
+    # for i in [4,5,6,7]:
     #     xdyn = mgr.exist(['v_0'],(composite.children[0].coarsened(x=i, theta=i, xnext=i).pred) & mgr.var('v_0'))
-    #     plot3D(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, view=(30, -144), fname="xcomp{}.png".format(i))
+    #     plot3D(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, view=(30, -144), fname="xcomp{}".format(i), opacity=80)
+        # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
+
+    # Plot coarsened reachable winning set
+    # for i in [4,5,6,7]:
+    #     plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), coarsen(basin, x=i, y=i, theta=i).pred, view=(30, -144), fname="basin{}".format(i), opacity=80)
 
     # # Plot y transition relation for v = .5
     # ydyn = mgr.exist(['v_0'],(composite.children[1].pred) & mgr.var('v_0'))

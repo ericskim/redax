@@ -120,6 +120,7 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
         ax.set_title(title)
     if fname is not None:
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+
         fig.savefig(str(fname)+'.png', dpi=400, bbox_inches=extent.expanded(1.1, 1.2))
     else:
         plt.show()
@@ -153,8 +154,8 @@ def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None, fig = None, ax 
     yname, ygrid = yspace
 
     support = pred.support
-    xbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == xname]) + 1
-    ybits = max([int(bv_var_idx(bit))for bit in support if bv_var_name(bit) == yname]) + 1
+    xbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == xname], default=-1) + 1
+    ybits = max([int(bv_var_idx(bit))for bit in support if bv_var_name(bit) == yname], default=-1) + 1
 
     xpts = []
     ypts = []
@@ -289,6 +290,8 @@ def plot3D(mgr, xspace, yspace, zspace, pred, raisebiterror=True,
     ax.set_xlabel(xname)
     ax.set_ylabel(yname)
     ax.set_zlabel(zname)
+    ax.patch.set_facecolor('black')
+
     if view:
         ax.view_init(view[0], view[1])
     if title:
@@ -394,6 +397,7 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255, raisebiterror=True
     g = gl.GLGridItem()
     g.scale(xbins//10, ybins//10, zbins//10)
     w.addItem(g)
+    g.rotate(90, 0, 0, 1)
 
     ax = gl.GLAxisItem()
     w.addItem(ax)

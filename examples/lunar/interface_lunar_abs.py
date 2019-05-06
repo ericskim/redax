@@ -319,7 +319,7 @@ if __name__ == "__main__":
         target &= f['vy'].conc2pred(mgr, 'vy', (-.8, .1), 6, innerapprox=True)
         target &= f['theta'].conc2pred(mgr, 'theta', (-.15, .15), 5, innerapprox=True)
         # target &= f['y'].conc2pred(mgr, 'y', (.05, .15), 7, innerapprox=False)
-        # target &= f['vy'].conc2pred(mgr, 'vy', (-.2, .3), 6, innerapprox=True)
+        # target &= f['vy'].conc2pred(mgr, 'vy', (-.1, .3), 6, innerapprox=True)
 
         print("Target Size:", mgr.count(target, statebits))
         target = Interface(mgr,
@@ -337,7 +337,7 @@ if __name__ == "__main__":
                       assum=mgr.false)
 
         iterreach_start = time.time()
-        for gameiter in range(1):
+        for gameiter in range(0,7):
 
             print("\nStep:", gameiter)
 
@@ -351,13 +351,13 @@ if __name__ == "__main__":
                          ('y', subsys['y']['y']),
                          pwin.pred,
                          70,
-                         fname=directory+"/figs/lunarbasin_{0}".format(gameiter)
+                         fname=directory+"/figs/lunarbasin_withxycoarsen_{0}".format(gameiter)
                     )
             del pwin
 
             # Decrease complexity of winning set by eliminating a least significant bit.
-            while (len(w.pred) > (gameiter*.35+3)*10**5):
-                coarsenbits = {k: max([_idx(n)  for n in w.pred.support if _name(n) == k], default=None) for k in states if k not in ['x','y']}
+            while (len(w.pred) > (gameiter*.4+4)*10**5):
+                coarsenbits = {k: max([_idx(n)  for n in w.pred.support if _name(n) == k], default=None) for k in states}# if k not in ['x','y']}
                 coarsenbits = [k + "_" + v for k, v in coarsenbits.items() if v is not None]
                 coarsenbits.sort(key=lambda x: mgr.count(mgr.forall([x], w.pred), statebits), reverse=True) # Want to shrink the least, while simplifying
                 print("Coarsening with", coarsenbits[0])
@@ -366,25 +366,26 @@ if __name__ == "__main__":
                 print("After elim", coarsenbits[0], "num states", mgr.count(w.pred, statebits), "node complexity", len(w.pred))
                 c._assum &= w.assum
 
-            # elimvars = [v for v in w.pred.support if _name(v) not in ['x', 'y']]
-            # pwin = mgr.exist(elimvars, w.pred)
             pwin = ihide(w, ['theta', 'vx', 'vy', 'omega'])
-            print("XY Proj states after coarsening:", mgr.count(pwin.pred, precision['x'] + precision['y']))
+            print("XY Proj states after coarsening:",pwin.count_nb(precision['x'] + precision['y']))
             del pwin
+
 
             del controller
             controller, steps = synthesize_reach(f, w + target, steps=1)
             c._assum = c.assum | (controller.C.assum & (~controller.cpre.elimcontrol(c.assum)))  # Add new inputs
 
-            w = ihide(c, ['s','t'])
+            w = ihide(controller.C, ['s','t'])
             print("Controller nodes: {0}".format(len(c.pred)))
             print("Basin nodes: {0}".format(len(w.pred)))
 
         controller.C = c
+
+
         print("Iter Reach Time: {}".format(time.time() - iterreach_start))
 
         exclude = f['x'].conc2pred(mgr, 'x', (-.13, .13), 7, innerapprox=True)
-        exclude = exclude & f['y'].conc2pred(mgr, 'y', (.85,1.3), 7, innerapprox=False)
+        exclude = exclude & f['y'].conc2pred(mgr, 'y', (.9,1.29), 7, innerapprox=False)
         exclude = Interface(mgr,
                            {k:v for k,v in f.inputs.items() if k in states},
                            {},

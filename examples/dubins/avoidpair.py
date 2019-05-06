@@ -8,11 +8,14 @@ import numpy as np
 
 from redax.module import Interface, CompositeInterface
 from redax.ops import rename, coarsen, ihide
-from redax.synthesis import DecompCPre, ReachAvoidGame, ReachGame, CompConstrainedPre
+from redax.synthesis import DecompCPre, ReachAvoidGame, ReachGame
 from redax.visualizer import pixel2D, scatter2D, plot3D_QT, plot3D
 from redax.utils.heuristics import order_heuristic, order_heuristic_vars
 
 from dubins import setup, rand_abstract_composite, xwindow, ywindow, thetawindow, coarse_abstract
+
+bits = 6
+statebits = 6*(bits+1)
 
 def get_safe(composite: CompositeInterface):
     mgr = composite.mgr
@@ -56,13 +59,13 @@ def get_target(composite: CompositeInterface):
     pspace = composite['x']
     anglespace = composite['theta']
 
-    target1 =  pspace.conc2pred(mgr, 'x', [-1.5,-.5], 6, innerapprox=False)
-    target1 &= pspace.conc2pred(mgr, 'y', [-1.5,-.5], 6, innerapprox=False)
+    target1 =  pspace.conc2pred(mgr, 'x', [-1.9,-.9], 6, innerapprox=False)
+    target1 &= pspace.conc2pred(mgr, 'y', [-1.9,-.9], 6, innerapprox=False)
 
     # scatter2D(mgr, ('x', pspace), ('y', pspace), target1)
 
-    target2 =  pspace.conc2pred(mgr, 'x2', [.5,1.5], 6, innerapprox=False)
-    target2 &= pspace.conc2pred(mgr, 'y2', [.5,1.5], 6, innerapprox=False)
+    target2 =  pspace.conc2pred(mgr, 'x2', [.9,1.9], 6, innerapprox=False)
+    target2 &= pspace.conc2pred(mgr, 'y2', [.9,1.9], 6, innerapprox=False)
 
     # scatter2D(mgr, ('x2', pspace), ('y2', pspace), target2)
 
@@ -75,20 +78,19 @@ def get_target(composite: CompositeInterface):
 
     return target
 
-def run_reachavoid(safe, target, composite, verbose=False, steps=None, winningonly=True):
+def run_reachavoid(safe, target, composite, verbose=False, steps=None, winningonly=True, maxnodes=100000):
 
-    maxnodes = 50000
 
-    def condition(iface: Interface) ->  bool:
-        """
-        Checks for interface BDD complexity.
-        Returns true if above threshold
-        """
-        if len(iface.pred) > maxnodes:
-            if verbose:
-                print("Basin predicate # nodes {}".format(len(iface.pred)))
-            return True
-        return False
+    # def condition(iface: Interface) ->  bool:
+    #     """
+    #     Checks for interface BDD complexity.
+    #     Returns true if above threshold
+    #     """
+    #     if len(iface.pred) > maxnodes:
+    #         if verbose:
+    #             print("Basin predicate # nodes {}".format(len(iface.pred)))
+    #         return True
+    #     return False
 
     def heuristic(iface: Interface) -> Interface:
         """
@@ -123,22 +125,21 @@ def run_reachavoid(safe, target, composite, verbose=False, steps=None, winningon
 
         return iface
 
-    cpre = CompConstrainedPre(composite,
+    cpre = DecompCPre(composite,
                               (('x', 'xnext'), ('x2', 'x2next'),
                               ('y', 'ynext'), ('y2', 'y2next'),
                               ('theta', 'thetanext'), ('theta2', 'theta2next')),
                               ('v', 'v2', 'omega', 'omega2'),
-                              condition,
-                              heuristic)
+                              intermed_process=heuristic)
     game = ReachAvoidGame(cpre, safe, target)
     starttime = time.time()
     basin, steps, controller = game.run(steps=steps, verbose=verbose, winningonly=winningonly)
     print("Comp Constrained Solve Time:", time.time() - starttime)
 
     # Print statistics about reachability basin
-    print("Reach Size:", basin.count_nb( len(basin.pred.support | target.pred.support)))
+    print("Reach Size:", basin.count_nb(statebits))
     print("Reach BDD nodes:", len(basin.pred))
-    print("Target Size:", target.count_nb(len(basin.pred.support | target.pred.support)))
+    print("Target Size:", target.count_nb(statebits))
     print("Game Steps:", steps)
 
     return basin, controller
@@ -179,7 +180,7 @@ if __name__ == "__main__":
     mgr.configure(reordering=False)
 
     # # Set up collision region and reach target
-    composite = CompositeInterface([dubins_theta, dubins_theta2, dubins_x, dubins_y, dubins_x2, dubins_y2])
+    composite = CompositeInterface([dubins_x, dubins_x2, dubins_y, dubins_y2, dubins_theta, dubins_theta2])
     target = get_target(composite)
     safe   = get_safe(composite)
     # safe._assum = mgr.true # OVERRIDE SO ANYTHING IS ALLOWED. NO COLLISIONS AT ALL
@@ -191,7 +192,8 @@ if __name__ == "__main__":
                                        target,
                                        composite,
                                        verbose=True,
-                                       steps=5,
-                                       winningonly=True)
+                                       steps=10,
+                                       winningonly=True,
+                                       maxnodes=200000)
 
     # plot_basin(mgr, composite, basin)

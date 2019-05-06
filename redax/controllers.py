@@ -90,14 +90,15 @@ class MemorylessController():
 
         """
 
-        assert (state.keys() == self.cpre.prestate.keys())
+        assert (set(state.keys()) == set(self.cpre.prestate.keys()))
 
         # Convert concrete state to BDD
         pt_bdd = self.cpre.mgr.true
         for k, v in state.items():
-            nbits = len(self.cpre.sys.pred_bitvars[k])
             try:
-                pt_bdd &= self.cpre.prestate[k].pt2bdd(self.cpre.mgr, k, v, nbits)
+                # FIXME: Hard coded for continuous, dynamic grids
+                nbits = max(int(bv_var_idx(i)) for i in self.C.pred_bitvars[k]) + 1
+                pt_bdd &= self.C[k].pt2bdd(self.cpre.mgr, k, v, nbits)
             except OutOfDomainError:
                 print(k, v)
                 raise
