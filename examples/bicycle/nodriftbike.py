@@ -274,15 +274,11 @@ if __name__ == "__main__":
     target = make_target(mgr, F)
     # pixel2D(mgr, ('x', F['x']), ('y', F['y']), target.pred)
 
-    # Combine
-    # Fxy = Fx * Fy * ihide(safe, ['v', 'theta']) # Combine position dynamics with the safety region constraint
-    # F = CompositeInterface([Fxy, Fv, Ftheta])
-
     # Subroutine to print intermediate results
     def print_xy_proj(Z: Interface):
         print_xy_proj.counter += 1
         pixel2D(mgr, ('x', F['x']), ('y', F['y']), ihide(Z, ['theta', 'v']).pred,
-                  fname="{}/figs/xyslowernocomp_{}".format(directory, print_xy_proj.counter)
+                  fname="{}/figs/xyreachsmall_{}".format(directory, print_xy_proj.counter)
                  )
         return Z
     print_xy_proj.counter = 0
@@ -296,9 +292,8 @@ if __name__ == "__main__":
 
     starttime = time.time()
     game = ReachAvoidGame(cpre, safe, target)
-    basin, steps, controller = game.run(verbose=True)
-    # controller.C._assum = mgr.load("{0}/contr_assum.dddmp".format(directory))
+    basin, steps, controller = game.run(verbose=True, winningonly=True)
 
     print("Game Solve Time: ", time.time() - starttime)
-    simulate(controller, steps=20)
+    # simulate(controller, steps=20)
 

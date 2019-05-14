@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/ericskim/redax.svg?branch=master)](https://travis-ci.org/ericskim/redax)
 
-# REDAX: Control Synthesizer in Python with (Dynamic|Declarative|Robust) Abstractions
+# **REDAX: Robust Control Synthesis with Finite Abstractions**
 
 REDAX is a controller synthesis tool that constructs finite state machines that mimic continuous dynamics. We call the finite state machines *abstractions* because they abstract out low level state information.
 

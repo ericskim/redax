@@ -216,16 +216,18 @@ def plot3D(mgr, xspace, yspace, zspace, pred, raisebiterror=True,
            opacity=40, view=None, title=None, fname=None, **kwargs):
     """Matplotlib based plotter with voxels"""
     voxelcolors = '#7A88CC' + format(opacity, "02x")
-    edgecolors = '#000000' + format(opacity // 3, "02x")
+    # voxelcolors = '#FFFFFF' + format(opacity, "02x")
+    # voxelcolors = '#000000' + format(opacity, "02x")
+    edgecolors =  '#000000' + format(opacity // 3, "02x")
     xname, xgrid = xspace
     yname, ygrid = yspace
     zname, zgrid = zspace
 
     # Construct spaces
     support = pred.support
-    xbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == xname]) + 1
-    ybits = max([int(bv_var_idx(bit))for bit in support if bv_var_name(bit) == yname]) + 1
-    zbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == zname]) + 1
+    xbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == xname], default=-1) + 1
+    ybits = max([int(bv_var_idx(bit))for bit in support if bv_var_name(bit) == yname], default=-1) + 1
+    zbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == zname], default=-1) + 1
     xbins = 2**xbits
     ybins = 2**ybits
     zbins = 2**zbits
@@ -290,7 +292,7 @@ def plot3D(mgr, xspace, yspace, zspace, pred, raisebiterror=True,
     ax.set_xlabel(xname)
     ax.set_ylabel(yname)
     ax.set_zlabel(zname)
-    ax.patch.set_facecolor('black')
+    # ax.patch.set_facecolor('black')
 
     if view:
         ax.view_init(view[0], view[1])
@@ -305,7 +307,7 @@ def plot3D(mgr, xspace, yspace, zspace, pred, raisebiterror=True,
     # return fig, ax
 
 
-def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255, raisebiterror=True):
+def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255, fname=None, raisebiterror=True):
     """Somewhat buggy pyqtgraph plotting"""
     from pyqtgraph.Qt import QtCore, QtGui
     import pyqtgraph.opengl as gl
@@ -393,11 +395,12 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255, raisebiterror=True
                 -ybins//2,
                 -zbins//2)
     w.addItem(v)
+    v.rotate(180,0,0,1)
 
     g = gl.GLGridItem()
     g.scale(xbins//10, ybins//10, zbins//10)
     w.addItem(g)
-    g.rotate(90, 0, 0, 1)
+    # g.rotate(90, 1, 0, 1)
 
     ax = gl.GLAxisItem()
     w.addItem(ax)

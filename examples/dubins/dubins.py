@@ -4,6 +4,8 @@ Dubins vehicle example script
 
 import sys
 import time
+import os
+directory = os.path.dirname(os.path.abspath(__file__))
 
 import numpy as np
 import funcy as fn
@@ -16,6 +18,7 @@ from redax.utils.overapprox import maxmincos, maxminsin, shiftbox, bloatbox
 from redax.predicates.dd import BDD
 from redax.utils.heuristics import order_heuristic
 from redax.ops import coarsen
+
 
 """
 Specify dynamics and overapproximations
@@ -181,9 +184,9 @@ def rand_abstract_composite(composite: CompositeInterface, samples = 10000):
         # Refine abstraction with granularity specified in the precision variable
         composite = composite.io_refined(iobox, nbits=precision)
 
-        if i % 500 == 499:
-            xdyn = mgr.exist(['v_0'],(composite.children[0].coarsened(x=6, theta=6, xnext=6).pred) & mgr.var('v_0'))
-            plot3D(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, view=(30, -144), fname="xcompsamp{}".format(i+1), opacity=80)
+        # if i % 500 == 499:
+        #     xdyn = mgr.exist(['v_0'],(composite.children[0].coarsened(x=6, theta=6, xnext=6).pred) & mgr.var('v_0'))
+        #     plot3D(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, view=(30, -144), fname="xcompsamp{}".format(i+1), opacity=80)
 
     print("Abstraction Time: ", time.time() - abs_starttime)
     composite.check()
@@ -216,10 +219,21 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
 
     assert cpretype in ["decomp", "monolithic", "compconstr"]
 
+    prebasinsizehist = []
+    prebasinnodehist = []
     basinsizehist = []
     basinnodehist = []
 
     if cpretype ==  "decomp":
+
+
+        # def printreach(Z: Interface):
+        #     printreach.counter += 1
+        #     plot3D(mgr, ('x', composite['x']), ('y', composite['y']), ('theta', composite['theta']), coarsen(Z, x=6,y=6,theta=6).pred,
+        #             fname="{}/dubinsreach_{}".format(directory, printreach.counter)
+        #             )
+        #     return Z
+        # printreach.counter = 0
 
         # Synthesize using a decomposed model that never recombines multiple components together.
         # Typically more efficient than the monolithic case
@@ -243,13 +257,16 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
 
     elif cpretype == "compconstr":
 
-        maxnodes = 1000
+        maxnodes =3000
 
         def heuristic(iface: Interface) -> Interface:
             """
             Coarsens sink interface along the dimension that shrinks the set the
             least until a certain size met.
             """
+
+            prebasinsizehist.append(iface.count_nb(7*3))
+            prebasinnodehist.append(len(iface.pred))
 
             while (len(iface.pred) > maxnodes):
                 assert iface.is_sink()
@@ -282,6 +299,43 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
         starttime = time.time()
         basin, steps, controller = game.run(steps=steps, verbose=False)
         print("Comp Constrained Solve Time:", time.time() - starttime)
+        print("Pre Basin Size Hist:", prebasinsizehist)
+        print("Basin Size Hist:    ", basinsizehist)
+        print("Pre # Node hist:", prebasinnodehist)
+        print("# Node hist:    ", basinnodehist)
+
+        import matplotlib.pyplot as plt
+        # plt.plot(basinsizehist)
+        # plt.plot(prebasinsizehist)
+        # plt.plot(prebasinnodehist)
+        # plt.plot(basinnodehist)
+
+        color = 'tab:red'
+        textopts = dict(fontweight='bold', fontsize='x-large')
+        fig, ax1 = plt.subplots()
+        ax1.set_xlabel('Reach Game Iteration', **textopts)
+        ax1.set_ylabel('# BDD Nodes', color=color, **textopts)
+        ax1.plot(basinnodehist, color=color)
+        # ax1.plot([17, 1335, 3212, 5440, 6332, 6768, 6905, 6914, 6924, 6968, 6972, 6972], color=color) # maxnodes = 10000
+        # ax1.plot([17, 1335, 2201, 2834, 2252, 2395, 2320, 2379, 2334, 2346, 2352], linestyle='dashed', color=color) # maxnodes = 3000
+        ax1.set_ylim(0,8000)
+        ax1.set_xlim(0,11)
+        ax1.tick_params(axis='y', labelcolor=color)
+
+
+        color = 'tab:blue'
+        ax2 = ax1.twinx()
+        ax2.set_ylabel("Basin # States", color=color, **textopts)
+        ax2.plot(basinsizehist, color=color)
+        # ax2.plot([131072.0, 197720.0, 291608.0, 428480.0, 551872.0, 611288.0, 625640.0, 629376.0, 630784.0, 631144.0, 631240.0, 631272.0], color=color) # maxnodes = 10000
+        # ax2.plot([131072.0, 197720.0, 287272.0, 410032.0, 504512.0, 533024.0, 527552.0, 520640.0, 518432.0, 517760.0, 517504.0], linestyle='dashed', color=color) # maxnodes = 3000
+        ax2.set_ylim(0,650000)
+        ax2.tick_params(axis='y', labelcolor=color)
+        extent = ax2.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        ax1.legend()
+        fig.savefig('maxnodes{}.png'.format(maxnodes), dpi=400, bbox_inches=extent.expanded(1.4, 1.25))
+
+
     else:
         import pdb; pdb.set_trace()
 
@@ -290,8 +344,8 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
     print("Reach BDD nodes:", len(basin.pred))
     print("Target Size:", targetmod.count_nb(len(basin.pred.support | targetmod.pred.support)))
     print("Game Steps:", steps)
-    print("Basin Size Hist:", basinsizehist)
-    print("# Node hist:", basinnodehist)
+
+
 
     return basin, controller
 
@@ -325,21 +379,17 @@ def plots(mgr, basin, composite):
     # plot3D_QT(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, 60)
     # plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, view=(30, -144), fname="finedubinbasin")
 
-    # # Plot x transition relation for v = .5
-    # xdyn = mgr.exist(['v_0'],(composite.children[0].pred) & mgr.var('v_0'))
-    # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
-
-    # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
-
-    # Coarsen x dynamics
+    # # Coarsen x dynamics
     # for i in [4,5,6,7]:
     #     xdyn = mgr.exist(['v_0'],(composite.children[0].coarsened(x=i, theta=i, xnext=i).pred) & mgr.var('v_0'))
     #     plot3D(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, view=(30, -144), fname="xcomp{}".format(i), opacity=80)
-        # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, 128)
+    #     print("Xdyn Nodes:", len(composite.children[0].coarsened(x=i, theta=i, xnext=i).pred))
 
     # Plot coarsened reachable winning set
     # for i in [4,5,6,7]:
     #     plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), coarsen(basin, x=i, y=i, theta=i).pred, view=(30, -144), fname="basin{}".format(i), opacity=80)
+    #     print("Basin Nodes:", len(coarsen(basin, x=i, y=i, theta=i).pred))
+    #     print("Basin IO:", coarsen(basin, x=i, y=i, theta=i).count_nb(21))
 
     # # Plot y transition relation for v = .5
     # ydyn = mgr.exist(['v_0'],(composite.children[1].pred) & mgr.var('v_0'))
@@ -441,3 +491,14 @@ if __name__ == "__main__":
     if "-sim" in sys.argv:
         simulate(controller)
     print("\n")
+
+
+    # TEMPORARY STUFF FOR GENERATING VISUALIZATION
+    # pspace = composite['x']
+    # anglespace = composite['theta']
+    # xdyn = mgr.exist(['v_0'], composite.children[0].pred & mgr.var('v_0'))
+    # xdyn = mgr.exist(['v_0'],(composite.children[0].coarsened(x=6, theta=6, xnext=6).pred) & mgr.var('v_0'))
+    # plot3D(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, view=(30, -144), fname="xcomp_samp{}".format(samples), opacity=60)
+    # plot3D_QT(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, opacity=60, fname="asdf.png")
+
+    # plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  coarsen(basin, x=6,y=6,theta=6).pred, view=(30, -144), fname="dubinbasin_samp{}".format(samples), opacity=60)
