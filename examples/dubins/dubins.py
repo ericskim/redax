@@ -212,6 +212,7 @@ def make_target(mgr, composite: CompositeInterface):
     return targetmod
 
 
+
 def run_reach(targetmod, composite, cpretype="decomp", steps=None):
     # Three choices for the controlled predecessor used for synthesizing the controller
     # Options: decomp, monolithic, compconstr
@@ -346,7 +347,6 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
     print("Game Steps:", steps)
 
 
-
     return basin, controller
 
 def plots(mgr, basin, composite):
@@ -387,18 +387,13 @@ def plots(mgr, basin, composite):
 
     # Plot coarsened reachable winning set
     # for i in [4,5,6,7]:
-    #     plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), coarsen(basin, x=i, y=i, theta=i).pred, view=(30, -144), fname="basin{}".format(i), opacity=80)
+    #     plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),
+    #                 coarsen(basin, x=i, y=i, theta=i).pred, view=(30, -144),
+    #                 fname="basin{}".format(i),
+    #                 opacity=80
+    #           )
     #     print("Basin Nodes:", len(coarsen(basin, x=i, y=i, theta=i).pred))
     #     print("Basin IO:", coarsen(basin, x=i, y=i, theta=i).count_nb(21))
-
-    # # Plot y transition relation for v = .5
-    # ydyn = mgr.exist(['v_0'],(composite.children[1].pred) & mgr.var('v_0'))
-    # plot3D_QT(mgr, ('y', pspace),('theta', anglespace), ('ynext', pspace), ydyn, 128)
-
-    # # Plot theta component
-    # thetadyn = mgr.exist(['v_0', 'omega_0', 'omega_1'],(composite.children[2].pred) & mgr.var('v_0') & mgr.var('omega_0') & ~mgr.var('omega_1') )
-    # pixel2D(mgr, ('theta', anglespace), ('thetanext', anglespace), thetadyn, 128)
-
 
 
 def simulate(controller):
@@ -483,6 +478,7 @@ if __name__ == "__main__":
     else:
         steps = None
 
+    # Run reach game
     basin, controller = run_reach(target, composite, steps=steps, cpretype=cpretype)
 
 

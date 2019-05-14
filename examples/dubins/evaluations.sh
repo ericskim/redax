@@ -1,9 +1,9 @@
-## Different kinds of preemtive merges
-# python dubins.py -merge 0
-# python dubins.py -merge 1
-# python dubins.py -merge 2
-# python dubins.py -merge 3
-# python dubins.py -merge 4
+## Different kinds of preemtive merges. Does exhaustive abstraction
+python dubins.py -merge 0
+python dubins.py -merge 1
+python dubins.py -merge 2
+python dubins.py -merge 3
+python dubins.py -merge 4
 
 ## Random Samples
 python dubins.py -samp 500
