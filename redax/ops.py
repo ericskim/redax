@@ -1,3 +1,4 @@
+r"""Interface manipulation operators."""
 
 from typing import Dict, Collection, Set
 
@@ -10,13 +11,12 @@ def shared_refine(ifaces: Collection, safecheck=True):
     r"""
     Compute shared refinement of a collection of interfaces.
 
-
     Returns
     -------
     Interface:
         Shared refinement interface
-    """
 
+    """
     # Managers must be identical
     mgr = fn.first(iface.mgr for iface in ifaces)
     if any(mgr != iface.mgr for iface in ifaces):
@@ -98,7 +98,9 @@ def rename(mod: Interface, names: Dict = None, **kwargs) -> Interface:
     **kwargs:
         Same dictionary format as names.
 
-    FIXME: Issues arise when swapping names or renaming to an existing variable.
+    FIXME: Bug when swapping names or renaming to an existing variable.
+
+
     """
     names = dict([]) if names is None else names
     names.update(kwargs)
@@ -152,7 +154,6 @@ def ohide(mod: Interface, elim_vars: Collection) -> Interface:
         Another abstract interface with the removed outputs
 
     """
-
     if any(var not in mod._out for var in elim_vars):
         raise ValueError("Can only hide output variables")
 
@@ -267,7 +268,6 @@ def sinkprepend(iface: Interface, sink: Interface) -> Interface:
         Sink interface obtained by composing and hiding the shared variables.
 
     """
-
     if not sink.is_sink():
         raise ValueError("Sink module is not actually a sink.")
 

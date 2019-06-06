@@ -22,28 +22,29 @@ from redax.utils.bv import bv2pred, bvwindow, bvwindowgray, BitVector, int2bv, b
 
 class OutOfDomainError(Exception):
     """
-    Exception raisen whenever a concrete value assumes a value that has no
+    Out of domain error.
+
+    Exception raised whenever a concrete value assumes a value that has no
     corresponding discrete encoding
 
     For example, a continuous interval [0,1] partitioned into two discrete bins
     and encoded with a single bit cannot encode the points -1.4 or 3.
 
     """
+
     pass
-
-
-# TODO: Composite spaces combined through + and *.
-
 
 
 @dataclass(frozen=True)
 class SymbolicSet(object):
     """Abstract class for representing a concrete underlying space and handling translation to symbolic encodings."""
+
     pass
 
 @dataclass(frozen=True)
 class DiscreteSet(SymbolicSet):
     r"""Discrete set abstract class."""
+
     num_vals : int
 
     @property
@@ -98,9 +99,7 @@ class DiscreteSet(SymbolicSet):
         return bv2pred(mgr, name, bv)
 
     def bv2conc(self, bv: BitVector) -> int:
-        """
-        Converts a bitvector into a concrete grid point
-        """
+        r"""Convert a bitvector into a concrete grid point."""
         return bv2int(bv)
 
     def conc_iter(self):
@@ -171,6 +170,8 @@ class EmbeddedGrid(DiscreteSet):
 
     def pt2index(self, pt: float, snap=False) -> int:
         """
+        Translate concrete point into a discrete integer index.
+
         Parameters
         ----------
         pt : float
@@ -210,19 +211,17 @@ class EmbeddedGrid(DiscreteSet):
         return bv2pred(mgr, name, bv)
 
     def conc_iter(self) -> Iterable:
-        """Iterable of points."""
+        r"""Iterate over points."""
         return self.pts
 
     def bv2conc(self, bv: BitVector) -> float:
-        """Converts a bitvector into a concrete grid point."""
+        r"""Convert a bitvector into a concrete grid point."""
         return self.pts[bv2int(bv)]
 
 
 @dataclass(frozen=True)
 class ContinuousCover(SymbolicSet):
-    """
-    Continuous Interval
-    """
+    r"""Continuous interval cover base class."""
 
     lb: float
     ub: float
@@ -244,6 +243,8 @@ class ContinuousCover(SymbolicSet):
 @dataclass(frozen=True)
 class DynamicCover(ContinuousCover):
     """
+    Variable precision continuous interval cover.
+
     Dynamically covers the space with a variable number of bits.
     Number of covers is always a power of two.
 
@@ -252,22 +253,19 @@ class DynamicCover(ContinuousCover):
     periodic: bool = False
 
     def _wrap(self, point: float):
-        """Helper function for periodic intervals."""
-
+        r"""Helper function for periodic intervals."""
         if point == self.ub:
             return point
         width = self.ub - self.lb
         return ((point - self.lb) % width) + self.lb
 
     def abs_space(self, mgr, name:str):
-        """
-        Returns the predicate of the abstract space
-        """
+        r"""Returns the predicate of the abstract space."""
         return mgr.true
 
     def pt2bv(self, point: float, nbits: int, tol=0.0):
         """
-        Continuous point to a bitvector
+        Convert continuous point to a bitvector.
 
         Parameters
         ----------
@@ -295,7 +293,7 @@ class DynamicCover(ContinuousCover):
         return int2bv(index, nbits)
 
     def pt2index(self, point: float, nbits: int, alignleft=True, tol=0.0) -> int:
-        """Convert a floating point into an integer index of the cover the point lies in."""
+        r"""Convert a floating point into an integer index of the cover the point lies in."""
         assert isinstance(nbits, int)
 
         if self.periodic:
@@ -341,7 +339,7 @@ class DynamicCover(ContinuousCover):
 
     def box2bvs(self, box, nbits: int, innerapprox=False, tol=.0000001):
         """
-        Returns a list of bitvectors corresponding to a box
+        Return a list of bitvectors corresponding to a box.
 
         Parameters
         ----------
@@ -451,7 +449,7 @@ class DynamicCover(ContinuousCover):
 
     def conc_iter(self, nbits: int):
         """
-        Generator for iterating over the space with fixed precision
+        Generate iterator over the space for a given precision nbits.
 
         Yields
         ------
@@ -468,7 +466,9 @@ class DynamicCover(ContinuousCover):
 @dataclass(frozen=True)
 class FixedCover(ContinuousCover):
     """
-    There are some assignments to bits that are not valid for this set
+    Variable precision continuous interval cover.
+
+    There may be some assignments to bits that are not valid for this set
     Fixed number of "bins"
 
     Parameters
@@ -486,6 +486,7 @@ class FixedCover(ContinuousCover):
     --------
     FixedCover(2, 10, 4, False) corresponds to the four bins
         [2, 4] [4,6] [6,8] [8,10]
+
     """
 
     bins: int
@@ -496,7 +497,6 @@ class FixedCover(ContinuousCover):
 
     def _wrap(self, point: float):
         """Helper function for periodic intervals."""
-
         if point == self.ub:
             return point
         width = self.ub - self.lb
@@ -531,9 +531,7 @@ class FixedCover(ContinuousCover):
         return self.bv2conc(self.pt2bv(point))
 
     def pt2bv(self, point: float, tol=0.0):
-        """
-        Map a point to bitvector corresponding to the bin that contains it.
-        """
+        """Map a point to bitvector corresponding to the bin that contains it."""
         index = self.pt2index(point, tol)
         return int2bv(index, self.num_bits)
 

@@ -3,7 +3,6 @@
 
 Interface container
 
-
 """
 
 from typing import Dict, Generator, List, Union, Collection, Tuple, Set, Sequence
@@ -51,7 +50,7 @@ class Interface(object):
         if any(var.isalnum() is False for var in self.vars):
             raise ValueError("Non-alphanumeric variable name")
 
-        # FIXME: Check bdd supports and make sure these align with the spaces!!! Especially for the guarantee.
+        #TODO: Check bdd supports and make sure these align with the spaces!!! Especially for the guarantee.
         self._guar = self.mgr.true if guar is None else guar
         self._assum = self.mgr.false if assum is None else assum
 
@@ -70,6 +69,7 @@ class Interface(object):
         return self._in[var] if var in self._in else self._out[var]
 
     def __eq__(self, other) -> bool:
+        r"""Interface equality check."""
         if not isinstance(other, Interface):
             return False
         if self.mgr != other.mgr:
@@ -400,15 +400,20 @@ class Interface(object):
 
         """
         numin = len(self.inputs)
-        names = [k for k, v in self.inputs.items() if isinstance(v, sp.DynamicCover)]
-        names += [k for k, v in self.inputs.items() if not isinstance(v, sp.DynamicCover)]
 
-        iters = [v.conc_iter(precision[k]) for k, v in self.inputs.items()
-                 if isinstance(v, sp.DynamicCover)
-                 ]
-        iters += [v.conc_iter() for k, v in self.inputs.items()
-                  if not isinstance(v, sp.DynamicCover)
-                  ]
+        names = []
+        iters = []
+
+        # Set up iterations and arguments for the product iterator
+        for k, v in self.inputs.items():
+            if isinstance(v, sp.DynamicCover):
+                names += [k]
+                iters += [v.conc_iter(precision[k])]
+            elif not isinstance(v, sp.DynamicCover):
+                names += [k]
+                iters += [v.conc_iter()]
+            else:
+                raise ValueError("Unknown Space being iterated over")
 
         for i in itertools.product(*iters):
             yield {names[j]: i[j] for j in range(numin)}
@@ -495,7 +500,7 @@ class Interface(object):
         return rename(self, names, **kwargs)
 
     def composed_with(self, other: 'Interface') -> 'Interface':
-        """
+        r"""
         Compose two interfaces.
 
         Automatically detects if the composition is parallel or series composition.
@@ -602,7 +607,6 @@ class Interface(object):
             False if there is a type or interface port mismatch
 
         """
-
         # Incomparable
         if not isinstance(other, Interface):
             raise TypeError("<= not supported between instances of {} and {}".format(str(type(self)), str(type(other))))
@@ -637,6 +641,7 @@ class Interface(object):
 
 class CompositeInterface(object):
     r"""Container for a collection of interfaces."""
+
     def __init__(self, modules: Collection['Interface'], checktopo: bool=True) -> None:
 
         if len(modules) < 1:
@@ -755,7 +760,16 @@ class CompositeInterface(object):
 
     def sorted_mods(self) -> Tuple[Tuple[Interface]]:
         """
-        TODO: What order right to left or left to right?
+        Perform topological sort of interfaces.
+
+        Returns
+        -------
+        Tuple[Tuple[Interface]]:
+            First index used to access "layers" of the topological sort.
+            Downstream interfaces have higher indicies.
+            Upstream interfaces have lower indicies.
+
+            Second index used it iterate over interfaces in layer
 
         """
         # Pass to declare dependencies
@@ -773,7 +787,7 @@ class CompositeInterface(object):
                     )
 
     def is_parallel(self):
-        """ Returns True if the interfaces are composed in parallel"""
+        """ Return true if the interfaces are composed in parallel."""
         return True if len(self.sorted_mods()) == 1 else False
 
     def check(self, verbose=False):
@@ -800,7 +814,7 @@ class CompositeInterface(object):
         self.sorted_mods() # Circular dependency detected
 
     def renamed(self, names: Dict=None, **kwargs) -> 'CompositeInterface':
-        """Renames variables for contained interfaces."""
+        """Rename variables for contained interfaces."""
         from redax.ops import rename
         names = dict([]) if names is None else names
         names.update(kwargs)
@@ -910,7 +924,6 @@ class CompositeInterface(object):
     @property
     def pred_bitvars(self) -> Dict[str, List[str]]:
         r"""Get dictionary with variable name keys and BDD bit names as values."""
-
         allocbits: Dict[str, Set[str]] = {v: set([]) for v in self.vars}
         for mod in self.children:
             for k, v in mod.pred_bitvars.items():

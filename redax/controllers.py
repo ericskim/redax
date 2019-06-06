@@ -1,8 +1,4 @@
-"""
-Controller interface classes
-
-
-"""
+r"""Controller interface classes."""
 
 # from redax.synthesis import ControlPre, DecompCPre
 
@@ -36,15 +32,17 @@ class MemorylessController():
         assert allowed_controls.is_sink()
         self.C = allowed_controls
 
-    def isempty(self):
-        return self.C.count_nb == 0
+    def isempty(self) -> bool:
+        """Check if any control values are admissible for some state."""
+        # The 40 below is a dummy variable.
+        return self.C.count_nb(40) == 0
 
-    def winning_set(self):
+    def winning_set(self) -> Interface:
         return ihide(self.C, self.cpre.control.keys())
 
     def winning_states(self, exclude : Optional[Interface]=None):
         r"""
-        Generator for states from the winning set.
+        Return iterator for states from the winning set.
 
         Parameters
         ----------
@@ -89,7 +87,6 @@ class MemorylessController():
             Yields dictionaries with control variable keys and allowed concrete input values
 
         """
-
         assert (set(state.keys()) == set(self.cpre.prestate.keys()))
 
         # Convert concrete state to BDD

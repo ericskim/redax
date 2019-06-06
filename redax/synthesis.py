@@ -1,3 +1,5 @@
+r"""Synthesis Games and Controlled Predecessors."""
+
 import time
 from functools import reduce
 from typing import Optional, Union, Sequence, Callable
@@ -15,7 +17,7 @@ class ControlPre():
 
     def __init__(self, mod, states, control) -> None:
         """
-        Constructor
+        Construct Controlled Predecessor.
 
         Parameters
         ----------
@@ -26,7 +28,6 @@ class ControlPre():
         control: Collection of str
 
         """
-
         try:
             mod.check()
         except:
@@ -55,6 +56,7 @@ class ControlPre():
 
     @property
     def mgr(self):
+        """Access to predicate maanger."""
         return self.sys.mgr
 
     def controlspace(self):
@@ -73,7 +75,7 @@ class ControlPre():
 
 
     def __call__(self, Z: Interface, verbose=False) -> Interface:
-        """One step control predecessor"""
+        """One step control predecessor."""
         assert Z.is_sink()
 
         if len(Z.outputs) > 0:
@@ -89,9 +91,7 @@ class ControlPre():
         return xu
 
 class DecompCPre(ControlPre):   # TODO: Get rid of inheritance??
-    r"""
-    Controlled Predecessor that takes a decomposed system representation
-    """
+    r"""Controlled Predecessor that takes a decomposed system representation."""
 
     def __init__(self,
                  mod: CompositeInterface,
@@ -117,11 +117,12 @@ class DecompCPre(ControlPre):   # TODO: Get rid of inheritance??
 
     @property
     def mgr(self):
+        """Access to predicate maanger."""
         return self.sys.children[0].mgr
 
 
     def __call__(self, Z: Interface, verbose=False) -> Interface:
-        """One step control predecessor"""
+        """One step control predecessor."""
         assert Z.is_sink()
 
         Z = self.pre_process(Z)
@@ -155,6 +156,8 @@ class DecompCPre(ControlPre):   # TODO: Get rid of inheritance??
 
 
 class PruningCPre(DecompCPre):
+    """Controlled predecessor that domain filters each sub-interface I/O."""
+
     def __init__(self,
                  mod: CompositeInterface,
                  states,
@@ -170,7 +173,7 @@ class PruningCPre(DecompCPre):
         self.elimorder = elim_order
 
     def __call__(self, Z: Interface, verbose=False) -> Interface:
-        """One step control predecessor"""
+        """One step control predecessor."""
         assert Z.is_sink()
 
         Z = rename(Z, names=self.pre_to_post)
@@ -429,7 +432,6 @@ class ReachAvoidGame():
             Controller for the reach-avoid game
 
         """
-
         if steps:
             assert steps >= 0
 

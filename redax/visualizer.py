@@ -43,7 +43,6 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     matplotlib axis
 
     """
-
     xname, xgrid = xspace
     yname, ygrid = yspace
 
@@ -214,7 +213,7 @@ def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None, fig = None, ax 
 
 def plot3D(mgr, xspace, yspace, zspace, pred, raisebiterror=True,
            opacity=40, view=None, title=None, fname=None, **kwargs):
-    """Matplotlib based plotter with voxels"""
+    """Matplotlib based plotter with voxels."""
     voxelcolors = '#7A88CC' + format(opacity, "02x")
     # voxelcolors = '#FFFFFF' + format(opacity, "02x")
     # voxelcolors = '#000000' + format(opacity, "02x")
@@ -308,7 +307,16 @@ def plot3D(mgr, xspace, yspace, zspace, pred, raisebiterror=True,
 
 
 def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255, fname=None, raisebiterror=True):
-    """Somewhat buggy pyqtgraph plotting"""
+    """Plot with Pyqtgraph.
+
+    Assumes that bit variables come in the form "{name}_{index}" where indices
+    start from 0.
+
+    FIXME:
+        An ValueError is raised when an index is skipped.
+        This error should be eliminated.
+
+    """
     from pyqtgraph.Qt import QtCore, QtGui
     import pyqtgraph.opengl as gl
 

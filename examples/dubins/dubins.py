@@ -1,6 +1,4 @@
-r"""
-Dubins vehicle example script
-"""
+r"""Dubins vehicle example script."""
 
 import sys
 import time
