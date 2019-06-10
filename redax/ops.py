@@ -157,10 +157,10 @@ def ohide(mod: Interface, elim_vars: Collection) -> Interface:
     if any(var not in mod._out for var in elim_vars):
         raise ValueError("Can only hide output variables")
 
-    elim_bits: Set[str] = []
+    elim_bits: Set[str] = set()
     for k in elim_vars:
-        elim_bits += mod.pred_bitvars[k]
-    elim_bits = set(elim_bits) & mod.guar.support
+        elim_bits.update(mod.pred_bitvars[k])
+    elim_bits = elim_bits & mod.guar.support
 
     newoutputs = {k: v for k, v in mod.outputs.items() if k not in elim_vars}
 
@@ -182,9 +182,9 @@ def ihide(mod: Interface, elim_vars: Collection) -> Interface:
     if len(mod.outputs) > 0:
         raise ValueError("Can only hide inputs on sink modules")
 
-    elim_bits = []
+    elim_bits = set()
     for k in elim_vars:
-        elim_bits += mod.pred_bitvars[k]
+        elim_bits.update(mod.pred_bitvars[k])
 
     newinputs = {k: v for k, v in mod.inputs.items() if k not in elim_vars}
 

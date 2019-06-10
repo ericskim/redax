@@ -5,7 +5,7 @@ Interface container
 
 """
 
-from typing import Dict, Generator, List, Union, Collection, Tuple, Set, Sequence
+from typing import Dict, Generator, List, Union, Collection, Tuple, Set, Sequence, Iterable, Any
 import itertools
 
 from toposort import toposort
@@ -401,8 +401,8 @@ class Interface(object):
         """
         numin = len(self.inputs)
 
-        names = []
-        iters = []
+        names: List[str] = []
+        iters: List[Iterable[Any]] = []
 
         # Set up iterations and arguments for the product iterator
         for k, v in self.inputs.items():
@@ -642,7 +642,7 @@ class Interface(object):
 class CompositeInterface(object):
     r"""Container for a collection of interfaces."""
 
-    def __init__(self, modules: Collection['Interface'], checktopo: bool=True) -> None:
+    def __init__(self, modules: Sequence[Interface], checktopo: bool=True) -> None:
 
         if len(modules) < 1:
             raise ValueError("Empty interface collection")
@@ -650,7 +650,7 @@ class CompositeInterface(object):
         for child in modules:
             assert mgr == child.mgr
 
-        self.children : Tuple['Interface'] = tuple(modules)
+        self.children : Tuple[Interface, ...] = tuple(modules)
 
         if checktopo:
             self.check()
@@ -758,7 +758,7 @@ class CompositeInterface(object):
     def outspace(self):
         raise NotImplementedError
 
-    def sorted_mods(self) -> Tuple[Tuple[Interface]]:
+    def sorted_mods(self) -> Tuple[Tuple[Interface,...],...]:
         """
         Perform topological sort of interfaces.
 
@@ -839,7 +839,7 @@ class CompositeInterface(object):
         newmods = []
 
         # Memoize input/output predicates
-        pred_memo = dict()
+        pred_memo: Dict[Tuple, Any] = dict()
 
         # Refine each interface individually and append to newmods
         for mod in self.children:
@@ -855,6 +855,8 @@ class CompositeInterface(object):
             for var, space in mod.inputs.items():
                 # Input kwargs
                 slice_kwargs = {k: v[var] for k, v in kwargs.items() if var in v}
+
+                # FIXME: Hard coded in type!!!!
                 if isinstance(mod[var], sp.ContinuousCover):
                     slice_kwargs.update({'innerapprox': True})
 
@@ -884,6 +886,8 @@ class CompositeInterface(object):
             for var, space in mod.outputs.items():
                 # Output kwargs
                 slice_kwargs = {k: v[var] for k, v in kwargs.items() if var in v}
+
+                # FIXME: Hard coded in type!!!!
                 if isinstance(mod[var], sp.ContinuousCover):
                     slice_kwargs.update({'innerapprox': False})
 
@@ -924,6 +928,9 @@ class CompositeInterface(object):
     @property
     def pred_bitvars(self) -> Dict[str, List[str]]:
         r"""Get dictionary with variable name keys and BDD bit names as values."""
+
+        # Set used to capture duplicate variables.
+        # One interface can have more bits allocated to a variable than another
         allocbits: Dict[str, Set[str]] = {v: set([]) for v in self.vars}
         for mod in self.children:
             for k, v in mod.pred_bitvars.items():

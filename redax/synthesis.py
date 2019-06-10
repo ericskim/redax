@@ -110,9 +110,9 @@ class DecompCPre(ControlPre):   # TODO: Get rid of inheritance??
 
         self.elimorder = elim_order
 
-        self.pre_process = pre_process if pre_process else lambda x: x
-        self.intermed_process = intermed_process if intermed_process else lambda x: x
-        self.post_process = post_process if post_process else lambda x: x
+        self.pre_process        = pre_process if pre_process else lambda x: x
+        self.intermed_process   = intermed_process if intermed_process else lambda x: x
+        self.post_process       = post_process if post_process else lambda x: x
 
 
     @property
@@ -306,7 +306,7 @@ class ReachGame():
     def __init__(self,
                  cpre: Union[ControlPre, DecompCPre],
                  target: Interface) -> None:
-        self.cpre: Interface = cpre
+        self.cpre = cpre
         self.target: Interface = target
 
     def run(self,

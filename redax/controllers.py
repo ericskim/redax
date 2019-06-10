@@ -27,7 +27,7 @@ class MemorylessController():
 
     """
 
-    def __init__(self, cpre, allowed_controls: Interface):
+    def __init__(self, cpre, allowed_controls: Interface) -> None:
         self.cpre = cpre
         assert allowed_controls.is_sink()
         self.C = allowed_controls

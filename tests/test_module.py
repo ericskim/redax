@@ -268,7 +268,6 @@ def test_sin_sqrt_comp():
     precision = {'sin': 9, 'sout': 9, 'sqrt': 9}
 
     # Learn sin module
-    from redax.visualizer import scatter2D
     for i in range(200):
         iobox = random_input_gen(sinmod, scale = .01)
         out = maxminsin(iobox['sin'][0], iobox['sin'][1])
@@ -296,6 +295,9 @@ def test_sin_sqrt_comp():
     assert sinroot.pred != mgr.false
     sinroot.check()
 
+    assert comp.pred_bitvars['sin'] == sinroot.pred_bitvars['sin']
+
+    # from redax.visualizer import scatter2D
     # scatter2D(mgr, ('sin', sinin), ('sout', sqrtout), comp.children[0].coarsened(sout = 6, sin = 6) .pred)
     # scatter2D(mgr, ('sout', sqrtout), ('sqrt', sqrtout), comp.children[1].pred)
     # scatter2D(mgr, ('sin', sinin), ('sqrt', sqrtout), sinroot.pred)
