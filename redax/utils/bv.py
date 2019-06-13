@@ -13,6 +13,9 @@ def bv_var_name(i: str) -> str:
 def bv_var_idx(i: str) -> str:
     return i.split('_')[1]
 
+def var_name(name: str, idx: int) -> str:
+    return name + '_' + str(idx)
+
 def num_with_name(name: str, x) -> int:
     return len([i for i in x if name in i])
 
