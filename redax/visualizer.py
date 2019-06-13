@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+import funcy as fn
 from redax.spaces import DynamicCover
 from redax.utils.bv import bv2int, graytobin, bv_var_name, bv_var_idx
 
@@ -18,14 +19,42 @@ def centerspace(space):
     return space.lb + (space.ub - space.lb)/2.0
 
 
-def dynamicperiodic(space):
+def dynamicperiodic(space) -> bool:
     if isinstance(space, DynamicCover) and space.periodic is True:
         return True
     return False
 
-def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False, opacity=1.0, raisebiterror=True):
+def partial_assign_complete(partial, missing_bits):
+    """ Generator that takes a partial assignment and yields all satisfying assignments."""
+
+    # Missing bits can't be assigned!
+    assigned_bits = set(partial.keys())
+    assert assigned_bits.isdisjoint(missing_bits)
+
+    if len(missing_bits) == 0:
+        yield partial
+    else:
+
+        # Copies required because recursion mutates the missing_bit set
+        _partial = partial.copy()
+        _missing_bits = missing_bits.copy()
+
+        # Pick an unassigned bit name
+        bitvar = fn.first(_missing_bits)
+        _missing_bits.remove(bitvar)
+
+        # Iterate over bit assignments
+        for val in [True, False]:
+            _partial[bitvar] = val
+            for totalassign in partial_assign_complete(_partial, _missing_bits):
+                yield totalassign
+
+
+def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False, opacity=1.0, raisebiterror=True) -> None:
     """
     Plot a 2D set represented by a predicate as a pixel image.
+
+    TODO: Return handle to matplotlib figure?
 
     Parameters
     ----------
@@ -47,8 +76,10 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     yname, ygrid = yspace
 
     support = pred.support
-    xbits = len([bit for bit in support if bv_var_name(bit) == xname])
-    ybits = len([bit for bit in support if bv_var_name(bit) == yname])
+    # xbits = len([bit for bit in support if bv_var_name(bit) == xname])
+    # ybits = len([bit for bit in support if bv_var_name(bit) == yname])
+    xbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == xname], default=-1) + 1
+    ybits = max([int(bv_var_idx(bit))for bit in support if bv_var_name(bit) == yname], default=-1) + 1
     xbins = 2**xbits
     ybins = 2**ybits
 
