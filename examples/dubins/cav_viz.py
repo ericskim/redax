@@ -1,4 +1,6 @@
-r"""Dubins vehicle example script."""
+r"""
+Variant of the Dubins vehicle example script for CAV 2019 presentation visualizations
+"""
 
 import sys
 import time
@@ -225,115 +227,25 @@ def run_reach(targetmod, composite, cpretype="decomp", steps=None):
 
     if cpretype ==  "decomp":
 
-
-        # def printreach(Z: Interface):
-        #     printreach.counter += 1
-        #     plot3D(mgr, ('x', composite['x']), ('y', composite['y']), ('theta', composite['theta']), coarsen(Z, x=6,y=6,theta=6).pred,
-        #             fname="{}/dubinsreach_{}".format(directory, printreach.counter)
-        #             )
-        #     return Z
-        # printreach.counter = 0
+        def printreach(Z: Interface):
+            i = printreach.counter
+            plot3D(mgr, ('x', composite['x']), ('y', composite['y']), ('theta', composite['theta']),
+                    coarsen(Z, x=6,y=6,theta=6).pred,
+                    fname="{}/rotate_dubinsreach_{}".format(directory, printreach.counter),
+                    view=(35 - i , -40 - i * 4 ),
+                    title = "Z_{}".format(printreach.counter)
+                    )
+            printreach.counter += 1
+            return Z
+        printreach.counter = 0
 
         # Synthesize using a decomposed model that never recombines multiple components together.
         # Typically more efficient than the monolithic case
-        dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
+        dcpre = DecompCPre(composite, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'), pre_process=printreach)
         dgame = ReachGame(dcpre, targetmod)
         dstarttime = time.time()
         basin, steps, controller = dgame.run(verbose=False, steps=steps)
         print("Decomp Solve Time:", time.time() - dstarttime)
-
-    elif cpretype == "monolithic":
-
-        # Synthesize using a monolithic model that is the parallel composition of components
-        starttime = time.time()
-        dubins = composite.children[0] * composite.children[1] * composite.children[2]
-        print("Monolithic merge time: {}s".format(time.time()-starttime))
-        cpre = ControlPre(dubins, (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')), ('v', 'omega'))
-        game = ReachGame(cpre, targetmod)
-        starttime = time.time()
-        basin, steps, controller = game.run(verbose=False, steps=steps)
-        print("Monolithic Solve Time:", time.time() - starttime)
-
-    elif cpretype == "compconstr":
-
-        maxnodes =3000
-
-        def heuristic(iface: Interface) -> Interface:
-            """
-            Coarsens sink interface along the dimension that shrinks the set the
-            least until a certain size met.
-            """
-
-            prebasinsizehist.append(iface.count_nb(7*3))
-            prebasinnodehist.append(len(iface.pred))
-
-            while (len(iface.pred) > maxnodes):
-                assert iface.is_sink()
-                # print("Interface # nodes {} exceeds maximum {}".format(len(iface.pred), maxnodes))
-                granularity = {k: len(v) for k, v in iface.pred_bitvars.items()
-                                    if k in ['x', 'y', 'theta', 'xnext', 'ynext', 'thetanext']
-                            }
-                statebits = len(iface.pred.support)
-
-                # List of (varname, # of coarsened interface nonblock input assignments)
-                coarsened_ifaces = [ (k, coarsen(iface, bits={k: v-1}).count_nb(statebits))
-                                            for k, v in granularity.items()
-                                ]
-                coarsened_ifaces.sort(key = lambda x: x[1], reverse=True)
-                best_var = coarsened_ifaces[0][0]
-                # print(coarsened_ifaces)
-                # print("Coarsening along dimension {}".format(best_var))
-                iface = coarsen(iface, bits={best_var: granularity[best_var]-1})
-
-            basinnodehist.append(len(iface.pred))
-            basinsizehist.append(iface.count_nb(7*3))
-
-            return iface
-        cpre = DecompCPre(composite,
-                            (('x', 'xnext'), ('y', 'ynext'), ('theta', 'thetanext')),
-                            ('v', 'omega'),
-                            pre_process=heuristic
-                        )
-        game = ReachGame(cpre, targetmod)
-        starttime = time.time()
-        basin, steps, controller = game.run(steps=steps, verbose=False)
-        print("Comp Constrained Solve Time:", time.time() - starttime)
-        print("Pre Basin Size Hist:", prebasinsizehist)
-        print("Basin Size Hist:    ", basinsizehist)
-        print("Pre # Node hist:", prebasinnodehist)
-        print("# Node hist:    ", basinnodehist)
-
-        import matplotlib.pyplot as plt
-        # plt.plot(basinsizehist)
-        # plt.plot(prebasinsizehist)
-        # plt.plot(prebasinnodehist)
-        # plt.plot(basinnodehist)
-
-        color = 'tab:red'
-        textopts = dict(fontweight='bold', fontsize='x-large')
-        fig, ax1 = plt.subplots()
-        ax1.set_xlabel('Reach Game Iteration', **textopts)
-        ax1.set_ylabel('# BDD Nodes', color=color, **textopts)
-        ax1.plot(basinnodehist, color=color)
-        # ax1.plot([17, 1335, 3212, 5440, 6332, 6768, 6905, 6914, 6924, 6968, 6972, 6972], color=color) # maxnodes = 10000
-        # ax1.plot([17, 1335, 2201, 2834, 2252, 2395, 2320, 2379, 2334, 2346, 2352], linestyle='dashed', color=color) # maxnodes = 3000
-        ax1.set_ylim(0,8000)
-        ax1.set_xlim(0,11)
-        ax1.tick_params(axis='y', labelcolor=color)
-
-
-        color = 'tab:blue'
-        ax2 = ax1.twinx()
-        ax2.set_ylabel("Basin # States", color=color, **textopts)
-        ax2.plot(basinsizehist, color=color)
-        # ax2.plot([131072.0, 197720.0, 291608.0, 428480.0, 551872.0, 611288.0, 625640.0, 629376.0, 630784.0, 631144.0, 631240.0, 631272.0], color=color) # maxnodes = 10000
-        # ax2.plot([131072.0, 197720.0, 287272.0, 410032.0, 504512.0, 533024.0, 527552.0, 520640.0, 518432.0, 517760.0, 517504.0], linestyle='dashed', color=color) # maxnodes = 3000
-        ax2.set_ylim(0,650000)
-        ax2.tick_params(axis='y', labelcolor=color)
-        extent = ax2.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        ax1.legend()
-        fig.savefig('maxnodes{}.png'.format(maxnodes), dpi=400, bbox_inches=extent.expanded(1.4, 1.25))
-
 
     else:
         import pdb; pdb.set_trace()
@@ -352,8 +264,19 @@ def plots(mgr, basin, composite):
     Plotting and visualization
     """
 
+    def camerapan(N, vert = (30,0), horiz = (-45,-90)):
+        horiz_pan = np.linspace(horiz[0], horiz[1], N)
+        vert_pan = np.linspace(vert[0], vert[1], N)
+        for i in range(N):
+            yield (vert_pan[i], horiz_pan[i])
+
     pspace = composite['x']
     anglespace = composite['theta']
+
+    target = make_target(mgr, composite)
+    # # Pan target visualization
+    for i, view in enumerate(camerapan(15, (89.9,35), (-89.9, -40))):
+        plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace), target.pred, view=view, title="Target Visualization", fname="target{}".format(i))
 
     # # Plot reachable winning set
     # plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, opacity=44, fname="dubins_nodes{}".format(len(basin.pred)))
@@ -378,10 +301,10 @@ def plots(mgr, basin, composite):
     # plot3D(mgr, ('x', pspace), ('y', pspace), ('theta', anglespace),  basin.pred, view=(30, -144), fname="finedubinbasin")
 
     # # Coarsen x dynamics
-    for i in [3]:
-        for j in [3]:
-            xdyn = mgr.exist(['v_0'],(composite.children[0].coarsened(x=i, theta=i, xnext=j).pred) & mgr.var('v_0'))
-            plot3D(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, view=(30, -144), fname="xcomp{}_{}".format(i,j), opacity=80)
+    # for i in [3]:
+    #     for j in [3]:
+    #         xdyn = mgr.exist(['v_0'],(composite.children[0].coarsened(x=i, theta=i, xnext=j).pred) & mgr.var('v_0'))
+    #         plot3D(mgr, ('x', pspace),('theta', anglespace), ('xnext', pspace), xdyn, view=(30, -144), fname="xcomp{}_{}".format(i,j), opacity=80)
         # print("Xdyn Nodes:", len(composite.children[0].coarsened(x=i, theta=i, xnext=i).pred))
 
     # Plot coarsened reachable winning set

@@ -116,4 +116,3 @@ class MemorylessController():
                 bv = [u_assignment[bit] for bit in ubits]
                 uval[uvar] = self.cpre.control[uvar].bv2conc(bv)
             yield uval
-

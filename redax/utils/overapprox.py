@@ -11,8 +11,8 @@ def bloatbox(box, factor = .001):
     return box[0] - factor*(center - box[0]), box[1] + factor*(box[1] - center)
 
 
-def containszero(left, right):
-    """Determine if 0 is contained in a periodic interval [left,right]."""
+def containszero(left: float, right: float) -> True:
+    """Determine if 0 is contained in a periodic interval [left,right] of [-pi,pi]."""
 
     assert left <= right
 
@@ -31,7 +31,7 @@ def containszero(left, right):
 
     return False
 
-def maxmincos(left, right):
+def maxmincos(left:float, right: float):
     """Compute the maximum and minimum values of cos in an interval."""
 
     assert left <= right
@@ -50,6 +50,6 @@ def maxmincos(left, right):
 
     return (minval, maxval)
 
-def maxminsin(left, right):
+def maxminsin(left:float , right:float):
     """Compute the maximum and minimum values of sin in an interval."""
     return maxmincos(left - np.pi/2, right - np.pi/2)

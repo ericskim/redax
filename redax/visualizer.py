@@ -4,11 +4,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+from typing import Generator
+
 import funcy as fn
 from redax.spaces import DynamicCover
 from redax.utils.bv import bv2int, graytobin, bv_var_name, bv_var_idx, var_name
 
-
+#FIXME: Visualizers raise errors for true/false predicates!!!
 
 def center(box):
     l, r = box
@@ -24,7 +26,8 @@ def dynamicperiodic(space) -> bool:
         return True
     return False
 
-def partial_assign_complete(partial, missing_bits):
+
+def partial_assign_complete(partial: dict, missing_bits: set) -> Generator[dict, None, None]:
     """ Generator that takes a partial assignment and yields all satisfying assignments."""
 
     # Missing bits can't be assigned!
@@ -85,7 +88,8 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     ybitvarset = set(var_name(yname, i) for i in range(ybits))
     bitvarset = xbitvarset.union(ybitvarset)
 
-    assignment_bits = set(fn.first(mgr.pick_iter(pred)).keys())
+    assignment = fn.first(mgr.pick_iter(pred))
+    assignment_bits = set(assignment.keys())
     missing_bits = bitvarset.difference(assignment_bits)
     if len(missing_bits) > 0 and raisebiterror:
         raise ValueError("Missing bits: {}".format(missing_bits))
@@ -131,9 +135,9 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
 
     fig, ax = plt.subplots()
     if invertcolor:
-        ax.pcolormesh(mask, edgecolors='w', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)
+        ax.pcolormesh(mask, edgecolors='.45', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)
     else:
-        ax.pcolormesh(mask, edgecolors='k', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)
+        ax.pcolormesh(mask, edgecolors='.65', cmap = plt.cm.bone, vmin=0, vmax = 111, linewidths=.01)
 
     # ax.set_xlim(xgrid.lb, xgrid.ub)
     ax.set_xlabel(xname)
@@ -145,7 +149,7 @@ def pixel2D(mgr, xspace, yspace, pred, title=None, fname=None, invertcolor=False
     if fname is not None:
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
 
-        fig.savefig(str(fname)+'.png', dpi=400, bbox_inches=extent.expanded(1.1, 1.2))
+        fig.savefig(str(fname)+'.png', dpi=400, bbox_inches=extent.expanded(1.0, 1.0))
     else:
         plt.show()
 
@@ -234,7 +238,7 @@ def scatter2D(mgr, xspace, yspace, pred, title=None, fname=None, fig = None, ax 
     else:
         plt.show()
 
-    return fig, ax
+    # return fig, ax
 
 
 def plot3D(mgr, xspace, yspace, zspace, pred, raisebiterror=False,
@@ -262,6 +266,7 @@ def plot3D(mgr, xspace, yspace, zspace, pred, raisebiterror=False,
     zbitvarset = set(var_name(zname, i) for i in range(zbits))
     bitvarset = xbitvarset.union(ybitvarset).union(zbitvarset)
 
+    # FIXME: Raises error for false interface!!!
     assignment_bits = set(fn.first(mgr.pick_iter(pred)).keys())
     missing_bits = bitvarset.difference(assignment_bits)
     if len(missing_bits) > 0 and raisebiterror:
@@ -359,9 +364,9 @@ def plot3D_QT(mgr, xspace, yspace, zspace, pred, opacity=255, fname=None, raiseb
 
     # Construct spaces
     support = pred.support
-    xbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == xname]) + 1
-    ybits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == yname]) + 1
-    zbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == zname]) + 1
+    xbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == xname], default=-1) + 1
+    ybits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == yname], default=-1) + 1
+    zbits = max([int(bv_var_idx(bit)) for bit in support if bv_var_name(bit) == zname], default=-1) + 1
     xbins = 2**xbits
     ybins = 2**ybits
     zbins = 2**zbits
